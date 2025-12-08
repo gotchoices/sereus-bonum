@@ -10,11 +10,12 @@ CREATE TABLE IF NOT EXISTS unit (
   display_divisor INTEGER NOT NULL DEFAULT 100
 );
 
--- Account Groups (shared classification)
+-- Account Groups (shared classification, hierarchical)
 CREATE TABLE IF NOT EXISTS account_group (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   account_type TEXT NOT NULL CHECK (account_type IN ('ASSET', 'LIABILITY', 'EQUITY', 'INCOME', 'EXPENSE')),
+  parent_id TEXT REFERENCES account_group(id),
   description TEXT,
   display_order INTEGER
 );

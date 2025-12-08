@@ -2,6 +2,8 @@
   import { page } from '$app/stores';
   import { browser } from '$app/environment';
   import { initializeEntities } from '$lib/stores/entities';
+  import { loadAccountGroups } from '$lib/stores/accounts';
+  import { t } from '$lib/i18n';
   import { log } from '$lib/logger';
   import '../app.css';
   
@@ -17,7 +19,10 @@
       initStarted = true;
       console.log('[Layout] $effect running, starting init...');
       
-      initializeEntities()
+      Promise.all([
+        initializeEntities(),
+        loadAccountGroups()
+      ])
         .then(() => {
           initialized = true;
           console.log('[Layout] Initialization complete');
@@ -41,32 +46,32 @@
     <nav class="global-nav">
       <div class="nav-brand">
         <span class="brand-icon">📊</span>
-        <span class="brand-name">Bonum</span>
+        <span class="brand-name">{$t('app.name')}</span>
       </div>
       
       <ul class="nav-links">
         <li>
           <a href="/" class:active={$page.url.pathname === '/'}>
             <span class="nav-icon">🏠</span>
-            Home
+            {$t('nav.home')}
           </a>
         </li>
         <li>
           <a href="/catalog" class:active={$page.url.pathname === '/catalog'}>
             <span class="nav-icon">📁</span>
-            Account Catalog
+            {$t('nav.catalog')}
           </a>
         </li>
         <li>
           <a href="/import" class:active={$page.url.pathname === '/import'}>
             <span class="nav-icon">📥</span>
-            Import Books
+            {$t('nav.import')}
           </a>
         </li>
         <li>
           <a href="/settings" class:active={$page.url.pathname === '/settings'}>
             <span class="nav-icon">⚙️</span>
-            Settings
+            {$t('nav.settings')}
           </a>
         </li>
       </ul>

@@ -19,33 +19,44 @@ const UNITS = [
 // Standard Account Groups
 // =============================================================================
 
+// Hierarchical account groups
+// parentId creates nesting: parent groups contain child groups
 const ACCOUNT_GROUPS = [
-  // Assets
-  { id: 'grp-cash', name: 'Cash & Bank', accountType: 'ASSET', displayOrder: 100 },
-  { id: 'grp-receivables', name: 'Receivables', accountType: 'ASSET', displayOrder: 110 },
-  { id: 'grp-investments', name: 'Investments', accountType: 'ASSET', displayOrder: 120 },
-  { id: 'grp-property', name: 'Property & Equipment', accountType: 'ASSET', displayOrder: 130 },
-  { id: 'grp-other-assets', name: 'Other Assets', accountType: 'ASSET', displayOrder: 190 },
+  // Assets - parent groups first, then children
+  { id: 'grp-current-assets', name: 'Current Assets', accountType: 'ASSET', parentId: null, displayOrder: 100 },
+  { id: 'grp-cash', name: 'Cash & Bank', accountType: 'ASSET', parentId: 'grp-current-assets', displayOrder: 101 },
+  { id: 'grp-receivables', name: 'Receivables', accountType: 'ASSET', parentId: 'grp-current-assets', displayOrder: 102 },
   
-  // Liabilities
-  { id: 'grp-credit', name: 'Credit Cards', accountType: 'LIABILITY', displayOrder: 200 },
-  { id: 'grp-payables', name: 'Payables', accountType: 'LIABILITY', displayOrder: 210 },
-  { id: 'grp-loans', name: 'Loans & Mortgages', accountType: 'LIABILITY', displayOrder: 220 },
-  { id: 'grp-other-liab', name: 'Other Liabilities', accountType: 'LIABILITY', displayOrder: 290 },
+  { id: 'grp-fixed-assets', name: 'Fixed Assets', accountType: 'ASSET', parentId: null, displayOrder: 110 },
+  { id: 'grp-property', name: 'Property & Equipment', accountType: 'ASSET', parentId: 'grp-fixed-assets', displayOrder: 111 },
+  { id: 'grp-vehicles', name: 'Vehicles', accountType: 'ASSET', parentId: 'grp-fixed-assets', displayOrder: 112 },
   
-  // Equity
-  { id: 'grp-capital', name: 'Owner Capital', accountType: 'EQUITY', displayOrder: 300 },
-  { id: 'grp-retained', name: 'Retained Earnings', accountType: 'EQUITY', displayOrder: 310 },
+  { id: 'grp-investments', name: 'Investments', accountType: 'ASSET', parentId: null, displayOrder: 120 },
+  { id: 'grp-other-assets', name: 'Other Assets', accountType: 'ASSET', parentId: null, displayOrder: 190 },
   
-  // Income
-  { id: 'grp-income', name: 'Income', accountType: 'INCOME', displayOrder: 400 },
-  { id: 'grp-other-income', name: 'Other Income', accountType: 'INCOME', displayOrder: 410 },
+  // Liabilities - with hierarchy
+  { id: 'grp-current-liab', name: 'Current Liabilities', accountType: 'LIABILITY', parentId: null, displayOrder: 200 },
+  { id: 'grp-credit', name: 'Credit Cards', accountType: 'LIABILITY', parentId: 'grp-current-liab', displayOrder: 201 },
+  { id: 'grp-payables', name: 'Payables', accountType: 'LIABILITY', parentId: 'grp-current-liab', displayOrder: 202 },
   
-  // Expenses
-  { id: 'grp-living', name: 'Living Expenses', accountType: 'EXPENSE', displayOrder: 500 },
-  { id: 'grp-operating', name: 'Operating Expenses', accountType: 'EXPENSE', displayOrder: 510 },
-  { id: 'grp-cogs', name: 'Cost of Goods Sold', accountType: 'EXPENSE', displayOrder: 520 },
-  { id: 'grp-taxes', name: 'Taxes', accountType: 'EXPENSE', displayOrder: 590 },
+  { id: 'grp-longterm-liab', name: 'Long-term Debt', accountType: 'LIABILITY', parentId: null, displayOrder: 210 },
+  { id: 'grp-loans', name: 'Loans & Mortgages', accountType: 'LIABILITY', parentId: 'grp-longterm-liab', displayOrder: 211 },
+  
+  { id: 'grp-other-liab', name: 'Other Liabilities', accountType: 'LIABILITY', parentId: null, displayOrder: 290 },
+  
+  // Equity - flat (no children)
+  { id: 'grp-capital', name: 'Owner Capital', accountType: 'EQUITY', parentId: null, displayOrder: 300 },
+  { id: 'grp-retained', name: 'Retained Earnings', accountType: 'EQUITY', parentId: null, displayOrder: 310 },
+  
+  // Income - flat
+  { id: 'grp-income', name: 'Operating Income', accountType: 'INCOME', parentId: null, displayOrder: 400 },
+  { id: 'grp-other-income', name: 'Other Income', accountType: 'INCOME', parentId: null, displayOrder: 410 },
+  
+  // Expenses - flat
+  { id: 'grp-living', name: 'Living Expenses', accountType: 'EXPENSE', parentId: null, displayOrder: 500 },
+  { id: 'grp-operating', name: 'Operating Expenses', accountType: 'EXPENSE', parentId: null, displayOrder: 510 },
+  { id: 'grp-cogs', name: 'Cost of Goods Sold', accountType: 'EXPENSE', parentId: null, displayOrder: 520 },
+  { id: 'grp-taxes', name: 'Taxes', accountType: 'EXPENSE', parentId: null, displayOrder: 590 },
 ];
 
 // =============================================================================
@@ -265,12 +276,12 @@ export function seedDemoData(db: Database): void {
     );
   }
   
-  // Insert account groups
+  // Insert account groups (parent groups first due to FK constraint)
   for (const g of ACCOUNT_GROUPS) {
     db.run(
-      `INSERT OR IGNORE INTO account_group (id, name, account_type, display_order)
-       VALUES (?, ?, ?, ?)`,
-      [g.id, g.name, g.accountType, g.displayOrder]
+      `INSERT OR IGNORE INTO account_group (id, name, account_type, parent_id, display_order)
+       VALUES (?, ?, ?, ?, ?)`,
+      [g.id, g.name, g.accountType, g.parentId, g.displayOrder]
     );
   }
   

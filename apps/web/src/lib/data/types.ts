@@ -38,6 +38,7 @@ export interface AccountGroup {
   id: string;
   name: string;
   accountType: AccountType;
+  parentId?: string;           // FK → AccountGroup (for hierarchy)
   description?: string;
   displayOrder?: number;
 }

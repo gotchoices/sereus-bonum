@@ -120,7 +120,7 @@ class SqliteDataService implements DataService {
   
   async getAccountGroups(): Promise<AccountGroup[]> {
     const rows = this.getDb().exec(`
-      SELECT id, name, account_type, description, display_order
+      SELECT id, name, account_type, parent_id, description, display_order
       FROM account_group ORDER BY display_order, name
     `);
     if (!rows.length) return [];
@@ -129,7 +129,7 @@ class SqliteDataService implements DataService {
   
   async getAccountGroup(id: string): Promise<AccountGroup | null> {
     const rows = this.getDb().exec(`
-      SELECT id, name, account_type, description, display_order
+      SELECT id, name, account_type, parent_id, description, display_order
       FROM account_group WHERE id = ?
     `, [id]);
     if (!rows.length || !rows[0].values.length) return null;
@@ -139,9 +139,9 @@ class SqliteDataService implements DataService {
   async createAccountGroup(data: AccountGroupInput): Promise<AccountGroup> {
     const id = uuid();
     this.getDb().run(`
-      INSERT INTO account_group (id, name, account_type, description, display_order)
-      VALUES (?, ?, ?, ?, ?)
-    `, [id, data.name, data.accountType, data.description ?? null, data.displayOrder ?? null]);
+      INSERT INTO account_group (id, name, account_type, parent_id, description, display_order)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `, [id, data.name, data.accountType, data.parentId ?? null, data.description ?? null, data.displayOrder ?? null]);
     this.save();
     return (await this.getAccountGroup(id))!;
   }
@@ -152,6 +152,7 @@ class SqliteDataService implements DataService {
     
     if (data.name !== undefined) { updates.push('name = ?'); values.push(data.name); }
     if (data.accountType !== undefined) { updates.push('account_type = ?'); values.push(data.accountType); }
+    if (data.parentId !== undefined) { updates.push('parent_id = ?'); values.push(data.parentId ?? null); }
     if (data.description !== undefined) { updates.push('description = ?'); values.push(data.description ?? null); }
     if (data.displayOrder !== undefined) { updates.push('display_order = ?'); values.push(data.displayOrder ?? null); }
     
@@ -171,8 +172,9 @@ class SqliteDataService implements DataService {
       id: row[0] as string,
       name: row[1] as string,
       accountType: row[2] as AccountType,
-      description: row[3] as string | undefined,
-      displayOrder: row[4] as number | undefined,
+      parentId: row[3] as string | undefined,
+      description: row[4] as string | undefined,
+      displayOrder: row[5] as number | undefined,
     };
   }
   

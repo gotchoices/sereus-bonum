@@ -20,8 +20,12 @@
   --accent-hover: #4fa3dd;
   
   --success: #68d391;
+  --success-bg: rgba(104, 211, 145, 0.15);
   --warning: #f6ad55;
   --danger: #fc8181;
+  
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --radius-full: 9999px;
   
   /* Balance sheet colors */
   --asset-color: hsl(220, 80%, 55%);

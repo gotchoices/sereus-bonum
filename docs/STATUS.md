@@ -30,6 +30,19 @@ Create navigation structure in `design/generated/web/navigation.md` based on sto
 - Launch in new window that is reactive to source (linked views)
 - When/how reactive linking is valid
 
+### ⬜ Refine Visual Balance Sheet
+
+Current VBS implementation is a basic proof-of-concept. Needs refinement:
+- Improve proportions and visual accuracy
+- Better color schemes and contrast
+- Hover states with detailed tooltips
+- Click-through to account details
+- Handle edge cases (zero balances, negative equity, single-account groups)
+- Consider adding optional Ring 3 (individual accounts)
+- Process scroll events to zoom in/out
+
+See: `design/specs/visual-balance-sheet.md`
+
 ---
 
 ## Documentation
