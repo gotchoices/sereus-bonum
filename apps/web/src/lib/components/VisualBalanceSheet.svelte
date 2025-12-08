@@ -3,8 +3,8 @@
 <!-- See: design/specs/visual-balance-sheet.md -->
 
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { getDataService, type BalanceSheetData, type AccountType } from '$lib/data';
+  import { t } from '$lib/i18n';
   
   export let entityId: string;
   export let size: number = 300;
@@ -151,9 +151,9 @@
   
   // Reactive calculations based on loaded data
   $: ring1Items = data ? [
-    { value: data.totalAssets, color: 'var(--asset-color)', label: 'Assets' },
-    { value: data.totalLiabilities, color: 'var(--liability-color)', label: 'Liabilities' },
-    { value: data.totalEquity, color: 'var(--equity-color)', label: 'Equity' },
+    { value: data.totalAssets, color: 'var(--asset-color)', label: $t('balance_sheet.assets') },
+    { value: data.totalLiabilities, color: 'var(--liability-color)', label: $t('balance_sheet.liabilities') },
+    { value: data.totalEquity, color: 'var(--equity-color)', label: $t('balance_sheet.equity') },
   ].filter(item => item.value > 0) : [];
   
   $: ring2Items = data ? data.groupBalances
@@ -176,7 +176,7 @@
 
 {#if loading}
   <div class="loading" style="width: {size}px; height: {size}px">
-    <span>Loading...</span>
+    <span>{$t('common.loading')}</span>
   </div>
 {:else if error}
   <div class="error" style="width: {size}px; height: {size}px">
@@ -184,8 +184,8 @@
   </div>
 {:else if !data || ring1Items.length === 0}
   <div class="empty" style="width: {size}px; height: {size}px">
-    <span>No data</span>
-    <small>Add transactions to see your balance sheet</small>
+    <span>{$t('balance_sheet.no_data')}</span>
+    <small>{$t('balance_sheet.add_transactions')}</small>
   </div>
 {:else}
   <svg 
@@ -225,11 +225,11 @@
       fill={nwColor}
       class="net-worth-circle"
     >
-      <title>Net Worth: ${formatCurrency(data.netWorth)}</title>
+      <title>{$t('balance_sheet.net_worth')}: ${formatCurrency(data.netWorth)}</title>
     </circle>
     
     <!-- Center label -->
-    <text class="center-label" y="-3">Net Worth</text>
+    <text class="center-label" y="-3">{$t('balance_sheet.net_worth')}</text>
     <text class="center-value" y="8">${formatCurrency(data.netWorth)}</text>
     
     <!-- Ring 1 labels -->
@@ -302,7 +302,7 @@
   }
   
   .error {
-    color: var(--error-color, #e53935);
+    color: var(--danger);
   }
   
   .empty small {

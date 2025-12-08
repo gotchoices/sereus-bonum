@@ -3,6 +3,7 @@
 
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import { t } from '$lib/i18n';
   
   const dispatch = createEventDispatcher<{ dismiss: void }>();
   
@@ -18,58 +19,37 @@
 
 <div class="welcome-panel">
   <div class="welcome-header">
-    <h2>Welcome to Bonum</h2>
-    <button class="btn-close" on:click={handleDismiss} title="Close">
+    <h2>{$t('welcome.title')}</h2>
+    <button class="btn-close" on:click={handleDismiss} title={$t('common.close')}>
       ✕
     </button>
   </div>
   
   <div class="welcome-content">
-    <p>
-      <strong>Bonum</strong> helps you manage personal and business finances 
-      with proper double-entry accounting.
-    </p>
+    <p>{$t('welcome.intro')}</p>
     
-    <h3>Getting Started</h3>
+    <h3>{$t('welcome.getting_started')}</h3>
     <ul>
-      <li>
-        <strong>Select an entity</strong> from the list to view its balance sheet
-      </li>
-      <li>
-        <strong>Import existing books</strong> from GnuCash or QuickBooks using 
-        <em>Import Books</em> in the menu
-      </li>
-      <li>
-        <strong>Create a new entity</strong> using the + button, or use a template 
-        as a starting point
-      </li>
+      <li>{$t('welcome.select_entity')}</li>
+      <li>{$t('welcome.import_books')}</li>
+      <li>{$t('welcome.create_entity')}</li>
     </ul>
     
-    <h3>Navigation Tips</h3>
+    <h3>{$t('welcome.nav_tips')}</h3>
     <ul>
-      <li>
-        <strong>Click</strong> any hyperlink to navigate in the current view
-      </li>
-      <li>
-        <strong>Ctrl/Cmd + Click</strong> to open in a new window
-      </li>
-      <li>
-        <strong>Right-click</strong> entities for quick actions
-      </li>
+      <li>{$t('welcome.click_navigate')}</li>
+      <li>{$t('welcome.ctrl_click')}</li>
+      <li>{$t('welcome.right_click')}</li>
     </ul>
-    
-    <p class="text-muted">
-      Your data is stored locally and synced via Sereus Fabric.
-    </p>
   </div>
   
   <div class="welcome-footer">
     <label class="checkbox-label">
       <input type="checkbox" bind:checked={dontShowAgain} />
-      Don't show this again
+      {$t('welcome.dont_show_again')}
     </label>
     <button class="btn btn-primary" on:click={handleDismiss}>
-      Get Started
+      {$t('welcome.get_started')}
     </button>
   </div>
 </div>
@@ -167,4 +147,3 @@
     height: 1rem;
   }
 </style>
-

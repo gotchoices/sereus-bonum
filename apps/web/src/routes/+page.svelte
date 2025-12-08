@@ -3,6 +3,7 @@
   import WelcomePanel from '$lib/components/WelcomePanel.svelte';
   import VisualBalanceSheet from '$lib/components/VisualBalanceSheet.svelte';
   import { entities, selectedEntityId } from '$lib/stores/entities';
+  import { t } from '$lib/i18n';
   
   $: selectedEntity = $entities.find(e => e.id === $selectedEntityId);
   
@@ -17,8 +18,8 @@
 <div class="home-layout">
   <section class="entities-panel">
     <div class="panel-header">
-      <h2>Entities</h2>
-      <button class="btn-icon" title="Add Entity">
+      <h2>{$t('entities.title')}</h2>
+      <button class="btn-icon" title={$t('entities.add')}>
         <span>➕</span>
       </button>
     </div>
@@ -31,7 +32,7 @@
     {:else if selectedEntity}
       <div class="entity-dashboard">
         <h2>{selectedEntity.name}</h2>
-        <p class="text-secondary">{selectedEntity.description || 'No description'}</p>
+        <p class="text-secondary">{selectedEntity.description || ''}</p>
         
         <div class="balance-sheet-container">
           <VisualBalanceSheet entityId={selectedEntity.id} />
@@ -39,16 +40,16 @@
         
         <div class="quick-actions">
           <a href="/entities/{selectedEntity.id}" class="btn btn-primary">
-            View Accounts
+            {$t('accounts.view')}
           </a>
           <button class="btn btn-secondary">
-            Import Transactions
+            {$t('accounts.import_transactions')}
           </button>
         </div>
       </div>
     {:else}
       <div class="empty-state">
-        <p class="text-muted">Select an entity to view its balance sheet</p>
+        <p class="text-muted">{$t('welcome.select_entity')}</p>
       </div>
     {/if}
   </section>

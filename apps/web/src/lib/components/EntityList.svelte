@@ -2,6 +2,7 @@
 <!-- Displays the list of entities with selection and context menu -->
 
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import { 
     entities, 
     selectedEntityId, 
@@ -29,7 +30,7 @@
   }
   
   async function handleDelete(id: string) {
-    if (confirm('Are you sure you want to delete this entity?')) {
+    if (confirm($t('entities.delete_confirm'))) {
       await deleteEntity(id);
     }
     closeContextMenu();
@@ -47,17 +48,17 @@
   {#if $entitiesLoading}
     <div class="loading-state">
       <span class="spinner"></span>
-      <span>Loading entities...</span>
+      <span>{$t('common.loading')}</span>
     </div>
   {:else if $entitiesError}
     <div class="error-state">
-      <p>Failed to load entities</p>
+      <p>{$t('common.error')}</p>
       <p class="text-muted">{$entitiesError}</p>
     </div>
   {:else if $entities.length === 0}
     <div class="empty-state">
-      <p>No entities yet</p>
-      <p class="text-muted">Create one to get started</p>
+      <p>{$t('entities.no_entities')}</p>
+      <p class="text-muted">{$t('entities.create_prompt')}</p>
     </div>
   {:else}
     {#each $entities as entity (entity.id)}
@@ -92,20 +93,17 @@
     on:click|stopPropagation
   >
     <a href="/entities/{contextMenuEntityId}" class="menu-item">
-      <span>📝</span> Edit
+      <span>📝</span> {$t('common.edit')}
     </a>
     <a href="/entities/{contextMenuEntityId}" class="menu-item">
-      <span>📊</span> Accounts
+      <span>📊</span> {$t('accounts.title')}
     </a>
     <button class="menu-item" on:click={() => {}}>
-      <span>📥</span> Import
-    </button>
-    <button class="menu-item" on:click={() => {}}>
-      <span>📋</span> Boilerplate
+      <span>📥</span> {$t('nav.import')}
     </button>
     <hr />
     <button class="menu-item danger" on:click={() => handleDelete(contextMenuEntityId!)}>
-      <span>🗑️</span> Delete
+      <span>🗑️</span> {$t('common.delete')}
     </button>
   </div>
 {/if}

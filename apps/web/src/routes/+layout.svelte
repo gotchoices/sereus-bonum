@@ -77,7 +77,7 @@
       </ul>
       
       {#if !initialized}
-        <div class="nav-loading">Loading...</div>
+        <div class="nav-loading">{$t('common.loading')}</div>
       {/if}
     </nav>
     
