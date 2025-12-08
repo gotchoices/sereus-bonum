@@ -2,7 +2,14 @@
 <!-- Displays the list of entities with selection and context menu -->
 
 <script lang="ts">
-  import { entities, selectedEntityId, selectEntity, deleteEntity } from '$lib/stores/entities';
+  import { 
+    entities, 
+    selectedEntityId, 
+    entitiesLoading, 
+    entitiesError,
+    selectEntity, 
+    deleteEntity 
+  } from '$lib/stores/entities';
   
   let contextMenuEntityId: string | null = null;
   let contextMenuPosition = { x: 0, y: 0 };
@@ -21,9 +28,9 @@
     contextMenuEntityId = null;
   }
   
-  function handleDelete(id: string) {
+  async function handleDelete(id: string) {
     if (confirm('Are you sure you want to delete this entity?')) {
-      deleteEntity(id);
+      await deleteEntity(id);
     }
     closeContextMenu();
   }
@@ -37,33 +44,43 @@
 <svelte:window on:click={handleWindowClick} />
 
 <div class="entity-list">
-  {#each $entities as entity (entity.id)}
-    <div 
-      class="entity-item"
-      class:selected={$selectedEntityId === entity.id}
-      on:click={() => handleSelect(entity.id)}
-      on:contextmenu={(e) => handleContextMenu(e, entity.id)}
-      on:keydown={(e) => e.key === 'Enter' && handleSelect(entity.id)}
-      role="button"
-      tabindex="0"
-    >
-      <div class="entity-info">
-        <a href="/entities/{entity.id}" class="entity-name" on:click|stopPropagation>
-          {entity.name}
-        </a>
-        {#if entity.description}
-          <span class="entity-description">{entity.description}</span>
-        {/if}
-      </div>
-      <span class="entity-unit">{entity.baseUnit}</span>
+  {#if $entitiesLoading}
+    <div class="loading-state">
+      <span class="spinner"></span>
+      <span>Loading entities...</span>
     </div>
-  {/each}
-  
-  {#if $entities.length === 0}
+  {:else if $entitiesError}
+    <div class="error-state">
+      <p>Failed to load entities</p>
+      <p class="text-muted">{$entitiesError}</p>
+    </div>
+  {:else if $entities.length === 0}
     <div class="empty-state">
       <p>No entities yet</p>
       <p class="text-muted">Create one to get started</p>
     </div>
+  {:else}
+    {#each $entities as entity (entity.id)}
+      <div 
+        class="entity-item"
+        class:selected={$selectedEntityId === entity.id}
+        on:click={() => handleSelect(entity.id)}
+        on:contextmenu={(e) => handleContextMenu(e, entity.id)}
+        on:keydown={(e) => e.key === 'Enter' && handleSelect(entity.id)}
+        role="button"
+        tabindex="0"
+      >
+        <div class="entity-info">
+          <a href="/entities/{entity.id}" class="entity-name" on:click|stopPropagation>
+            {entity.name}
+          </a>
+          {#if entity.description}
+            <span class="entity-description">{entity.description}</span>
+          {/if}
+        </div>
+        <span class="entity-unit">{entity.baseUnit}</span>
+      </div>
+    {/each}
   {/if}
 </div>
 
@@ -152,9 +169,34 @@
     font-family: var(--font-mono);
   }
   
-  .empty-state {
+  .empty-state, .loading-state, .error-state {
     padding: var(--space-xl);
     text-align: center;
+  }
+  
+  .loading-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    color: var(--text-muted);
+  }
+  
+  .spinner {
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--accent-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+  
+  .error-state {
+    color: var(--danger);
   }
   
   .context-menu {
@@ -197,4 +239,3 @@
     margin: var(--space-xs) 0;
   }
 </style>
-

@@ -3,8 +3,12 @@
 <!-- See: design/specs/visual-balance-sheet.md -->
 
 <script lang="ts">
+  import { onMount } from 'svelte';
+  import { getDataService, type BalanceSheetData, type AccountType } from '$lib/data';
+  
   export let entityId: string;
   export let size: number = 300;
+  export let asOf: string | undefined = undefined;
   
   // Ring radii (relative to 100-unit viewBox)
   const RING_RADII = [
@@ -13,24 +17,31 @@
     { inner: 47, outer: 80 },   // Ring 2: Account Groups
   ];
   
-  // Demo data - will be replaced by DataService
-  const demoData = {
-    netWorth: 45000,
-    assets: 120000,
-    liabilities: 65000,
-    equity: -10000, // Negative equity is normal (owner's draw > contributions)
-    groups: [
-      { name: 'Cash', type: 'asset', balance: 15000 },
-      { name: 'Investments', type: 'asset', balance: 50000 },
-      { name: 'Property', type: 'asset', balance: 45000 },
-      { name: 'Receivables', type: 'asset', balance: 10000 },
-      { name: 'Credit Cards', type: 'liability', balance: 5000 },
-      { name: 'Mortgage', type: 'liability', balance: 40000 },
-      { name: 'Loans', type: 'liability', balance: 20000 },
-      { name: 'Capital', type: 'equity', balance: 30000 },
-      { name: 'Retained', type: 'equity', balance: -40000 },
-    ]
-  };
+  // State
+  let data: BalanceSheetData | null = null;
+  let loading = true;
+  let error: string | null = null;
+  
+  // Load balance sheet data
+  async function loadData() {
+    loading = true;
+    error = null;
+    
+    try {
+      const ds = await getDataService();
+      data = await ds.getBalanceSheet(entityId, asOf);
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Failed to load balance sheet';
+      console.error('[VBS] Load error:', e);
+    } finally {
+      loading = false;
+    }
+  }
+  
+  // Reload when entityId changes
+  $: if (entityId) {
+    loadData();
+  }
   
   interface Arc {
     startAngle: number;
@@ -106,16 +117,16 @@
   
   // Color for net worth (gradient based on magnitude)
   function netWorthColor(value: number, maxValue: number): string {
-    const ratio = Math.min(1, Math.abs(value) / maxValue);
+    const ratio = Math.min(1, Math.abs(value) / Math.max(maxValue, 1));
     const hue = value >= 0 ? 220 : 350;
     const lightness = 60 - ratio * 20;
     return `hsl(${hue}, 75%, ${lightness}%)`;
   }
   
   // Group color based on type and position
-  function groupColor(type: string, index: number, total: number): string {
-    const baseHue = type === 'asset' ? 220 : type === 'liability' ? 350 : 280;
-    const lightness = 45 + (index / total) * 25;
+  function groupColor(type: AccountType, index: number, total: number): string {
+    const baseHue = type === 'ASSET' ? 220 : type === 'LIABILITY' ? 350 : 280;
+    const lightness = 45 + (index / Math.max(total, 1)) * 25;
     return `hsl(${baseHue}, 70%, ${lightness}%)`;
   }
   
@@ -126,99 +137,118 @@
   }
   
   // Format currency
-  function formatCurrency(value: number): string {
-    const absValue = Math.abs(value);
+  function formatCurrency(value: number, divisor: number = 100): string {
+    const displayValue = value / divisor;
+    const absValue = Math.abs(displayValue);
     if (absValue >= 1000000) {
-      return (value / 1000000).toFixed(1) + 'M';
+      return (displayValue / 1000000).toFixed(1) + 'M';
     }
     if (absValue >= 1000) {
-      return (value / 1000).toFixed(0) + 'K';
+      return (displayValue / 1000).toFixed(0) + 'K';
     }
-    return value.toFixed(0);
+    return displayValue.toFixed(0);
   }
   
-  // Reactive calculations
-  $: ring1Items = [
-    { value: demoData.assets, color: 'var(--asset-color)', label: 'Assets' },
-    { value: demoData.liabilities, color: 'var(--liability-color)', label: 'Liabilities' },
-    { value: Math.abs(demoData.equity), color: 'var(--equity-color)', label: 'Equity' },
-  ].filter(item => item.value > 0);
+  // Reactive calculations based on loaded data
+  $: ring1Items = data ? [
+    { value: data.totalAssets, color: 'var(--asset-color)', label: 'Assets' },
+    { value: data.totalLiabilities, color: 'var(--liability-color)', label: 'Liabilities' },
+    { value: data.totalEquity, color: 'var(--equity-color)', label: 'Equity' },
+  ].filter(item => item.value > 0) : [];
   
-  $: ring2Items = demoData.groups.map((g, i, arr) => {
-    const typeGroups = arr.filter(x => x.type === g.type);
-    const typeIndex = typeGroups.indexOf(g);
-    return {
-      value: Math.abs(g.balance),
-      color: groupColor(g.type, typeIndex, typeGroups.length),
-      label: g.name
-    };
-  }).filter(item => item.value > 0);
+  $: ring2Items = data ? data.groupBalances
+    .filter(g => g.accountType === 'ASSET' || g.accountType === 'LIABILITY' || g.accountType === 'EQUITY')
+    .map((g, i, arr) => {
+      const typeGroups = arr.filter(x => x.accountType === g.accountType);
+      const typeIndex = typeGroups.findIndex(x => x.groupId === g.groupId);
+      return {
+        value: Math.abs(g.balance),
+        color: groupColor(g.accountType, typeIndex, typeGroups.length),
+        label: g.groupName
+      };
+    })
+    .filter(item => item.value > 0) : [];
   
   $: ring1Arcs = calculateArcs(ring1Items);
   $: ring2Arcs = calculateArcs(ring2Items);
-  $: nwColor = netWorthColor(demoData.netWorth, demoData.assets);
+  $: nwColor = data ? netWorthColor(data.netWorth, data.totalAssets) : 'var(--bg-secondary)';
 </script>
 
-<svg 
-  viewBox="-100 -100 200 200" 
-  width={size} 
-  height={size}
-  class="visual-balance-sheet"
->
-  <!-- Background circle -->
-  <circle r="82" fill="var(--bg-secondary)" opacity="0.5" />
-  
-  <!-- Ring 2: Account Groups -->
-  {#each ring2Arcs as arc, i}
-    <path 
-      d={arcPath(RING_RADII[2].inner, RING_RADII[2].outer, arc.startAngle, arc.endAngle)} 
-      fill={arc.color}
-      class="ring-segment"
-    >
-      <title>{arc.label}: ${formatCurrency(arc.value)}</title>
-    </path>
-  {/each}
-  
-  <!-- Ring 1: Assets / Liabilities / Equity -->
-  {#each ring1Arcs as arc}
-    <path 
-      d={arcPath(RING_RADII[1].inner, RING_RADII[1].outer, arc.startAngle, arc.endAngle)} 
-      fill={arc.color}
-      class="ring-segment"
-    >
-      <title>{arc.label}: ${formatCurrency(arc.value)}</title>
-    </path>
-  {/each}
-  
-  <!-- Ring 0: Net Worth (center circle) -->
-  <circle 
-    r={RING_RADII[0].outer} 
-    fill={nwColor}
-    class="net-worth-circle"
+{#if loading}
+  <div class="loading" style="width: {size}px; height: {size}px">
+    <span>Loading...</span>
+  </div>
+{:else if error}
+  <div class="error" style="width: {size}px; height: {size}px">
+    <span>{error}</span>
+  </div>
+{:else if !data || ring1Items.length === 0}
+  <div class="empty" style="width: {size}px; height: {size}px">
+    <span>No data</span>
+    <small>Add transactions to see your balance sheet</small>
+  </div>
+{:else}
+  <svg 
+    viewBox="-100 -100 200 200" 
+    width={size} 
+    height={size}
+    class="visual-balance-sheet"
   >
-    <title>Net Worth: ${formatCurrency(demoData.netWorth)}</title>
-  </circle>
-  
-  <!-- Center label -->
-  <text class="center-label" y="-3">Net Worth</text>
-  <text class="center-value" y="8">${formatCurrency(demoData.netWorth)}</text>
-  
-  <!-- Ring 1 labels -->
-  {#each ring1Arcs as arc}
-    {#if arc.endAngle - arc.startAngle > 0.5}
-      {@const pos = labelPosition(arc, (RING_RADII[1].inner + RING_RADII[1].outer) / 2)}
-      <text 
-        x={pos.x} 
-        y={pos.y} 
-        class="ring-label"
-        dominant-baseline="middle"
-        text-anchor="middle"
+    <!-- Background circle -->
+    <circle r="82" fill="var(--bg-secondary)" opacity="0.5" />
+    
+    <!-- Ring 2: Account Groups -->
+    {#each ring2Arcs as arc}
+      <path 
+        d={arcPath(RING_RADII[2].inner, RING_RADII[2].outer, arc.startAngle, arc.endAngle)} 
+        fill={arc.color}
+        class="ring-segment"
       >
-        {formatCurrency(arc.value)}
-      </text>
-    {/if}
-  {/each}
-</svg>
+        <title>{arc.label}: ${formatCurrency(arc.value)}</title>
+      </path>
+    {/each}
+    
+    <!-- Ring 1: Assets / Liabilities / Equity -->
+    {#each ring1Arcs as arc}
+      <path 
+        d={arcPath(RING_RADII[1].inner, RING_RADII[1].outer, arc.startAngle, arc.endAngle)} 
+        fill={arc.color}
+        class="ring-segment"
+      >
+        <title>{arc.label}: ${formatCurrency(arc.value)}</title>
+      </path>
+    {/each}
+    
+    <!-- Ring 0: Net Worth (center circle) -->
+    <circle 
+      r={RING_RADII[0].outer} 
+      fill={nwColor}
+      class="net-worth-circle"
+    >
+      <title>Net Worth: ${formatCurrency(data.netWorth)}</title>
+    </circle>
+    
+    <!-- Center label -->
+    <text class="center-label" y="-3">Net Worth</text>
+    <text class="center-value" y="8">${formatCurrency(data.netWorth)}</text>
+    
+    <!-- Ring 1 labels -->
+    {#each ring1Arcs as arc}
+      {#if arc.endAngle - arc.startAngle > 0.5}
+        {@const pos = labelPosition(arc, (RING_RADII[1].inner + RING_RADII[1].outer) / 2)}
+        <text 
+          x={pos.x} 
+          y={pos.y} 
+          class="ring-label"
+          dominant-baseline="middle"
+          text-anchor="middle"
+        >
+          {formatCurrency(arc.value)}
+        </text>
+      {/if}
+    {/each}
+  </svg>
+{/if}
 
 <style>
   .visual-balance-sheet {
@@ -261,5 +291,22 @@
     font-weight: 600;
     pointer-events: none;
   }
+  
+  .loading, .error, .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    gap: 0.5rem;
+  }
+  
+  .error {
+    color: var(--error-color, #e53935);
+  }
+  
+  .empty small {
+    font-size: 0.85rem;
+    opacity: 0.7;
+  }
 </style>
-
