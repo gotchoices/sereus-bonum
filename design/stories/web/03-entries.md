@@ -7,16 +7,16 @@ Context: Susan has imported her books using a process similar to [Gnucash import
 
 ## Sequence
 1. Susan is at the home screen.  She selects the new entity she just created with the import.
-2. Now she is looking at the hierarchical trial balance sheet.  The only account groups she can see are those that actually have accounts under them.  Those not used by this entity are not shown.
+2. Now she is looking at the Accounts View.  The only account groups she can see are those that actually have accounts under them.  Those not used by this entity are not shown.
 3. The ones used are shown as a single line with a way to expand them.  She expands Assets -> Current Assets.
-4. Now she sees several bank accounts.  She hyperlinks into the one for her checking account, using the method that opens a new window.  This leaves the trial balance sheet showing in the old window.  She is paying some bills right now and so will enter the transactions concurrently.
+4. Now she sees several bank accounts.  She hyperlinks into the one for her checking account, using the method that opens a new window.  This leaves the Accounts View showing in the old window.  She is paying some bills right now and so will enter the transactions concurrently.
 5. She sees a ledger of all the existing entries.  There is a blank line which she begins putting data into.
 6. This is a simple transaction with a single offset account.  She can't remember the account exactly, but when she moves into the input to enter it, a selection widget appears with all defined accounts in it.  
 7. She begins typing what she remembers about the full account path.  As she does, the list is pared down and she can see several choices.  This helps her remember which account she wanted.  She can tab for completion and use arrows to select the choice she wants.  She can also use the full account path separator character to take her to the next part of the path where she can begin typing account name, number, etc.  She can quickly get the account she needs even though she didn't remember everything about it.
 8. By completing the required fields for the transaction, it is possible to have it entered to the database without needing to move to the mouse and click an OK/Save type button.
 9. Since this transaction has only a single offset account, it was fairly simple and feels like a single entry system.  But internally it is stored as two entries in a single transaction.  She verifies this by selecting a split view for the transaction where she can see both entries.
 10. She makes several more entries in a row, fingers never leaving the keyboard.
-11. She notices that as she makes her entries, the balance in the trial balance screen is getting updated.
+11. She notices that as she makes her entries, the balance in the Accounts View is getting updated.
 
 Alternative Path A: Split Entry
 6.1. She needs to put in a split that credits cash for the whole amount but will debit several expense accounts.
@@ -32,7 +32,3 @@ Alternative Path A: Split Entry
 - [ ] <performance requirement>
 - [ ] <error handling requirement>
 - [ ] <usability requirement>
-
----
-
-Note: Agents will derive screens/specs from stories. Human specs in `design/specs/*` override consolidations.
