@@ -31,7 +31,7 @@ Alternative Path B: Investigate Ledgers
   - Debit
   - Credit
   - Balance
-9.3. Some of the lines show a single account which is the other half of the transaction.
+9.3. Some of the lines show a single account which is the other half of the transaction — the "offset account" (in double-entry, every transaction has at least two sides that balance to zero).
 9.4. Others show that the transaction is a split and contains multiple offset accounts.
 9.5. It is possible to expand the transaction to show all the contained splits.
 9.6. It is also possible to configure the entire ledger to show splits for all transactions.
