@@ -8,6 +8,30 @@
 
 ---
 
+## Immediate Next Steps
+
+### ✅ SQLite Mock Backend for Web
+
+Spec complete: `design/specs/web/global/backend.md`
+
+Uses sql.js with localStorage persistence. Single config switch between mock/production. App code is backend-agnostic via DataService interface.
+
+### ⬜ Generate Screen Index
+
+Derive screen index from the 5 web stories. Create as consolidation in `design/generated/web/screens/index.md`. Human specs will be added in `design/specs/web/screens/` after reviewing first pass.
+
+### ⬜ Generate Navigation Consolidation
+
+Create navigation structure in `design/generated/web/navigation.md` based on story analysis. This is a multi-window desktop paradigm, not hierarchical mobile navigation.
+
+**Navigation concepts to address:**
+- Standard hyperlink following (replaces current view)
+- Launch in new window/panel
+- Launch in new window that is reactive to source (linked views)
+- When/how reactive linking is valid
+
+---
+
 ## Documentation
 
 - ✅ Split original Schema.md into Vision, Requirements, Schema
