@@ -326,8 +326,58 @@ Deferred — UI can handle ad-hoc selection for now.
 
 ---
 
+## Import Implementation
+
+### 🔄 GnuCash Import
+
+**Status:** Parser prototype complete
+
+**Completed:**
+- ✅ Explored GnuCash XML format structure
+- ✅ Created parser test at `test/manual/gnucash-parser.ts`
+- ✅ Successfully parsed sample files (17K+ transactions)
+- ✅ Documented format in `design/specs/import-books.md`
+
+**TODO:**
+- ⬜ Handle scheduled transactions (`gnc:template-transactions`)
+- ⬜ Handle price database for multi-currency/securities
+- ⬜ Handle lots (for cost basis tracking)
+- ⬜ Add GnuCash SQLite format support (same entities, different storage)
+- ⬜ Move parser to production library (`packages/import/`)
+- ⬜ Build account mapping UI logic
+- ⬜ Map GnuCash account types to Bonum account groups
+
+**Account Type Mapping (draft):**
+| GnuCash | Bonum |
+|---------|-------|
+| ROOT | (skip) |
+| ASSET, BANK, STOCK, MUTUAL | Asset |
+| LIABILITY, CREDIT, PAYABLE | Liability |
+| EQUITY | Equity |
+| INCOME | Income |
+| EXPENSE | Expense |
+
+### ⬜ QuickBooks IIF Import
+
+- ⬜ Research IIF format structure
+- ⬜ Create parser
+- ⬜ Document format in `design/specs/import-books.md`
+
+### ⬜ Transaction Import (CSV, QIF, QFX, OFX)
+
+- ⬜ CSV with column mapping
+- ⬜ QIF parser
+- ⬜ OFX/QFX parser
+- ⬜ Duplicate detection
+- ⬜ Auto-categorization rules
+
+See `design/specs/import-transactions.md` for format notes.
+
+---
+
 ## Notes
 
 - Original design document preserved at: `docs/Schema-original.md`
 - UI/UX decisions are deferred to app-specific development
+- Import specs at `design/specs/import-*.md`
 

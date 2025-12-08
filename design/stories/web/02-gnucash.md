@@ -19,7 +19,7 @@ Alternative Path A: Verify New Entity
 6.1. He selects the home option
 6.2. He sees that a third entity has been created with the name he specified
 6.3. He now sees a visual balance sheet appear in the pane where the welcome message first appeared
-6.4. He recognizes this from a prior experience with [MyCHIPs](mychips.org).
+6.4. He recognizes this from a prior experience with [MyCHIPs](https://mychips.org).
 
 Alternative Path B: Investigate Ledgers
 9.1. He follows the hyperlink associated with his checking account.  He is now in a pane that looks familiar from gnucash and other accounting programs he has used.
@@ -33,10 +33,10 @@ Alternative Path B: Investigate Ledgers
   - Balance
 9.3. Some of the lines show a single account which is the other half of the transaction.
 9.4. Others show that the transaction is a split and contains multiple offset accounts.
-9.4. It is possible to expand the transaction to show all the contained splits.
-9.5. It is also possible to configure the entire ledger to show splits for all transactions.
-9.6. He sees that each offset account is a hyperlink which he can follow to jump to similar ledgers for those accounts.
-9.7. Remembering the welcome instructions, he uses the option to open the offset account in a new window.  Now he has two ledger windows open, the one he jumped from and the one he jumped to.
+9.5. It is possible to expand the transaction to show all the contained splits.
+9.6. It is also possible to configure the entire ledger to show splits for all transactions.
+9.7. He sees that each offset account is a hyperlink which he can follow to jump to similar ledgers for those accounts.
+9.8. Remembering the welcome instructions, he uses the option to open the offset account in a new window.  Now he has two ledger windows open, the one he jumped from and the one he jumped to.
 
 ## Acceptance Criteria
 - [ ] <specific, testable criterion>
