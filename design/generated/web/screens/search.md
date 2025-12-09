@@ -21,27 +21,30 @@ Provide a global view of all transactions across all entities. Phase 1 focuses o
 ### Results Area
 
 #### Empty State
-- Message: "Click 'Show All Transactions' to view all entries, or wait for query builder (future feature)."
+- Message: "Click 'Show All Transactions' to view all entries."
 
 #### Results Table (when populated)
-- **Columns:**
-  - Expand icon (if transaction has splits)
-  - Date
-  - Entity (which entity this transaction belongs to)
-  - Account (which account the entry affects)
-  - Ref
-  - Memo
-  - Debit (amount or blank)
-  - Credit (amount or blank)
-  - Running Balance (omitted in cross-account view)
 
-- **Expandable Rows:**
-  - Top-level row shows transaction header
-  - Clicking expand shows all splits as indented rows
-  - Split rows show: account (as hyperlink to ledger), memo, debit/credit
+**Display Format:**
 
-- **Controls:**
-  - "Expand All" / "Collapse All" buttons
+Each transaction is displayed as a group:
+
+1. **Transaction Header Row** (bold, distinct background)
+   - Date
+   - Entity (hyperlink)
+   - Memo
+   - Reference
+
+2. **Split Rows** (indented under header)
+   - Account (hyperlink, full path on hover)
+   - Debit (if amount > 0)
+   - Credit (if amount < 0, absolute value)
+   - Note (if present)
+
+**Key Requirements:**
+- All transactions shown as splits (no "offset account" format)
+- Debit/Credit columns based on amount sign
+- All splits expanded by default
 
 #### Totals Footer
 - **Left side:** Total count of entries

@@ -11,7 +11,8 @@
     "postinstall": "cp node_modules/sql.js/dist/sql-wasm.wasm static/"
   },
   "dependencies": {
-    "sql.js": "^1.11.0"
+    "sql.js": "^1.11.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@sveltejs/adapter-auto": "^3.0.0",

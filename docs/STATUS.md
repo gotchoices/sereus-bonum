@@ -22,18 +22,19 @@
 
 ### High Priority (MVP Blockers)
 
-#### 🔄 Transaction Search (Story 06)
+#### ✅ Transaction Search (Story 06) - Phase 1 Complete
 
-**Phase 1: Transaction Browser** (Complete - Ready to Test)
+**Phase 1: Transaction Browser** (Ready for Imbalance Debugging)
 - ✅ Create consolidation for search screen
 - ✅ Build `TransactionResultsTable.svelte` component (reusable)
 - ✅ Create `/search` route
 - ✅ "Show All Transactions" button
-- ✅ Results with expand/collapse splits
-- ✅ Debit/Credit totals with verification
+- ✅ Transaction grouping (header + split rows)
+- ✅ Debit/Credit columns with proper alignment
+- ✅ Totals row with balance verification
 - ✅ Entity column (cross-entity view)
-- ✅ Account column (which account was affected)
-- ⬜ User testing for imbalance debugging
+- ✅ Account column with hyperlinks
+- ✅ Export to CSV/Excel with proper decimal formatting
 
 **Phase 2: Query Builder** (Future)
 - ⬜ Visual query builder interface
