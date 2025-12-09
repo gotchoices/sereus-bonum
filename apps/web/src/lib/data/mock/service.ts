@@ -16,6 +16,7 @@ import type {
 import { NORMAL_BALANCE } from '../types';
 import { getDb, saveDb, closeDb, uuid, now } from './sqlite';
 import type { Database } from 'sql.js';
+import { log } from '$lib/logger';
 
 class SqliteDataService implements DataService {
   private db: Database | null = null;
@@ -801,6 +802,168 @@ class SqliteDataService implements DataService {
     }
     
     return results;
+  }
+  
+  // ===========================================================================
+  // Transaction Search (Cross-entity)
+  // ===========================================================================
+  
+  async getAllTransactions(): Promise<LedgerEntry[]> {
+    log.data.info('Getting all transactions across all entities');
+    
+    // Get all entries with transaction, account, entity, and group data
+    const sql = `
+      SELECT 
+        e.id as entry_id,
+        t.id as txn_id,
+        t.date,
+        t.reference,
+        t.memo,
+        e.account_id,
+        e.amount,
+        e.note,
+        a.name as account_name,
+        a.entity_id,
+        en.name as entity_name,
+        g.name as group_name,
+        g.account_type,
+        (SELECT COUNT(*) FROM entry WHERE txn_id = t.id) as entry_count
+      FROM entry e
+      JOIN txn t ON t.id = e.txn_id
+      JOIN account a ON a.id = e.account_id
+      JOIN entity en ON en.id = a.entity_id
+      JOIN account_group g ON g.id = a.account_group_id
+      ORDER BY t.date DESC, t.created_at DESC, e.id ASC
+    `;
+    
+    const rows = this.getDb().exec(sql);
+    if (!rows.length) {
+      log.data.info('No transactions found');
+      return [];
+    }
+    
+    const entries: LedgerEntry[] = [];
+    const processedTxns = new Set<string>();
+    
+    for (const row of rows[0].values) {
+      const entryId = row[0] as string;
+      const txnId = row[1] as string;
+      const amount = row[6] as number;
+      const accountId = row[5] as string;
+      const accountName = row[8] as string;
+      const entityId = row[9] as string;
+      const entityName = row[10] as string;
+      const groupName = row[11] as string;
+      const accountType = row[12] as string;
+      const entryCount = row[13] as number;
+      const isSplit = entryCount > 2;
+      
+      // Build full account path
+      const typeName = {
+        'ASSET': 'Assets',
+        'LIABILITY': 'Liabilities',
+        'EQUITY': 'Equity',
+        'INCOME': 'Income',
+        'EXPENSE': 'Expenses',
+      }[accountType] || accountType;
+      const accountPath = `${typeName} : ${groupName} : ${accountName}`;
+      
+      // Get offset account or splits (only once per transaction)
+      let offsetAccountId: string | undefined;
+      let offsetAccountName: string | undefined;
+      let splitEntries: SplitEntry[] | undefined;
+      
+      if (!processedTxns.has(txnId)) {
+        processedTxns.add(txnId);
+        
+        if (isSplit) {
+          // Get all other entries for splits
+          const splitRows = this.getDb().exec(`
+            SELECT e.id, e.account_id, a.name, g.name as group_name, g.account_type, e.amount, e.note
+            FROM entry e
+            JOIN account a ON a.id = e.account_id
+            JOIN account_group g ON g.id = a.account_group_id
+            WHERE e.txn_id = ? AND e.id != ?
+            ORDER BY e.amount DESC
+          `, [txnId, entryId]);
+          
+          if (splitRows.length && splitRows[0].values.length) {
+            splitEntries = splitRows[0].values.map(r => {
+              const splitAccountType = r[4] as string;
+              const splitTypeName = {
+                'ASSET': 'Assets',
+                'LIABILITY': 'Liabilities',
+                'EQUITY': 'Equity',
+                'INCOME': 'Income',
+                'EXPENSE': 'Expenses',
+              }[splitAccountType] || splitAccountType;
+              const splitPath = `${splitTypeName} : ${r[3] as string} : ${r[2] as string}`;
+              
+              return {
+                entryId: r[0] as string,
+                accountId: r[1] as string,
+                accountName: r[2] as string,
+                accountPath: splitPath,
+                amount: r[5] as number,
+                note: r[6] as string | undefined,
+              };
+            });
+          }
+        } else {
+          // Get the single offset account
+          const offsetRows = this.getDb().exec(`
+            SELECT e.account_id, a.name, g.name as group_name, g.account_type
+            FROM entry e
+            JOIN account a ON a.id = e.account_id
+            JOIN account_group g ON g.id = a.account_group_id
+            WHERE e.txn_id = ? AND e.id != ?
+            LIMIT 1
+          `, [txnId, entryId]);
+          
+          if (offsetRows.length && offsetRows[0].values.length) {
+            offsetAccountId = offsetRows[0].values[0][0] as string;
+            const offsetName = offsetRows[0].values[0][1] as string;
+            const offsetGroupName = offsetRows[0].values[0][2] as string;
+            const offsetAccountType = offsetRows[0].values[0][3] as string;
+            const offsetTypeName = {
+              'ASSET': 'Assets',
+              'LIABILITY': 'Liabilities',
+              'EQUITY': 'Equity',
+              'INCOME': 'Income',
+              'EXPENSE': 'Expenses',
+            }[offsetAccountType] || offsetAccountType;
+            offsetAccountName = `${offsetTypeName} : ${offsetGroupName} : ${offsetName}`;
+          }
+        }
+      }
+      
+      entries.push({
+        entryId,
+        transactionId: txnId,
+        date: row[2] as string,
+        reference: row[3] as string | undefined,
+        memo: row[4] as string | undefined,
+        accountId,
+        amount,
+        note: row[7] as string | undefined,
+        runningBalance: 0, // Not applicable in cross-account view
+        offsetAccountId,
+        offsetAccountName,
+        isSplit,
+        splitEntries,
+        // Additional fields for search view (stored in memo/reference for now)
+        // We'll use a type assertion to add these
+      } as LedgerEntry & { entityId?: string; entityName?: string; accountName?: string; accountPath?: string });
+      
+      // Add entity and account info to the entry object
+      (entries[entries.length - 1] as any).entityId = entityId;
+      (entries[entries.length - 1] as any).entityName = entityName;
+      (entries[entries.length - 1] as any).accountName = accountName;
+      (entries[entries.length - 1] as any).accountPath = accountPath;
+    }
+    
+    log.data.info(`Found ${entries.length} entries across all entities`);
+    return entries;
   }
 }
 

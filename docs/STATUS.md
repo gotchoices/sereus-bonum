@@ -11,6 +11,8 @@
 - ✅ Account Catalog (manage account groups)
 - ✅ Accounts View (balance sheet)
 - ✅ Ledger (transaction entry)
+- 🔄 Transaction Search (Phase 1: Browser)
+- ⬜ Transaction Search (Phase 2: Query builder)
 - ⬜ Settings screen
 - ⬜ Import Books (GnuCash)
 
@@ -19,6 +21,31 @@
 ## Backlog (Priority Order)
 
 ### High Priority (MVP Blockers)
+
+#### 🔄 Transaction Search (Story 06)
+
+**Phase 1: Transaction Browser** (Complete - Ready to Test)
+- ✅ Create consolidation for search screen
+- ✅ Build `TransactionResultsTable.svelte` component (reusable)
+- ✅ Create `/search` route
+- ✅ "Show All Transactions" button
+- ✅ Results with expand/collapse splits
+- ✅ Debit/Credit totals with verification
+- ✅ Entity column (cross-entity view)
+- ✅ Account column (which account was affected)
+- ⬜ User testing for imbalance debugging
+
+**Phase 2: Query Builder** (Future)
+- ⬜ Visual query builder interface
+- ⬜ Field selection (entity, account, memo, date, amount, etc.)
+- ⬜ Operators per field type (<, >, =, contains, wildcard, regexp)
+- ⬜ AND/OR logic with grouping (indentation)
+- ⬜ Query preview/validation
+- ⬜ Save/recall named searches
+- ⬜ Edit/duplicate/delete saved searches
+- ⬜ Export results to CSV
+
+**Why Phase 1 first:** Provides immediate debugging tool for imbalance investigation. Phase 2 builds on the results table.
 
 #### ⬜ Fix Balance Sheet Imbalance
 **Issue:** Demo data shows $147,350 imbalance (Assets ≠ L+E)

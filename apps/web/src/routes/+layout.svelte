@@ -63,6 +63,12 @@
           </a>
         </li>
         <li>
+          <a href="/search" class:active={$page.url.pathname === '/search'}>
+            <span class="nav-icon">🔍</span>
+            {$t('nav.search')}
+          </a>
+        </li>
+        <li>
           <a href="/import" class:active={$page.url.pathname === '/import'}>
             <span class="nav-icon">📥</span>
             {$t('nav.import')}

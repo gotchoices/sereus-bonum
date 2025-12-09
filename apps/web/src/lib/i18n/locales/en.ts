@@ -10,6 +10,7 @@ export default {
   nav: {
     home: 'Home',
     catalog: 'Account Groups',
+    search: 'Search',
     import: 'Import Books',
     settings: 'Settings',
   },
@@ -145,6 +146,26 @@ export default {
     remove_split: 'Remove',
     save: 'Save',
     cancel: 'Cancel',
+  },
+  
+  search: {
+    title: 'Transaction Search',
+    show_all: 'Show All Transactions',
+    empty: 'Click "Show All Transactions" to view all entries.',
+    expand_all: 'Expand All',
+    collapse_all: 'Collapse All',
+    entity_col: 'Entity',
+    account_col: 'Account',
+    date_col: 'Date',
+    ref_col: 'Ref',
+    memo_col: 'Memo',
+    debit_col: 'Debit',
+    credit_col: 'Credit',
+    total_entries: '{count} entries',
+    total_debits: 'Total Debits',
+    total_credits: 'Total Credits',
+    balanced: 'Balanced',
+    imbalance: 'Imbalance',
   },
 } as const;
 

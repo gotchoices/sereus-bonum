@@ -270,5 +270,8 @@ export interface DataService {
     path: string;       // "Assets : Current : Checking"
     code?: string;
   }>>;
+  
+  // Transaction search (cross-entity)
+  getAllTransactions(): Promise<LedgerEntry[]>;
 }
 

@@ -196,6 +196,14 @@ class QuereusDataService implements DataService {
   }>> {
     throw new Error(NOT_IMPLEMENTED);
   }
+  
+  // ===========================================================================
+  // Transaction Search
+  // ===========================================================================
+  
+  async getAllTransactions(): Promise<LedgerEntry[]> {
+    throw new Error(NOT_IMPLEMENTED);
+  }
 }
 
 // Export singleton
