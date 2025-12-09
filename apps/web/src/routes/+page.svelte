@@ -9,19 +9,13 @@
   
   let selectedEntity = $derived($entities.find(e => e.id === $selectedEntityId));
   
-  // Welcome panel state - persisted to localStorage
-  // "hidden" = minimized (per story: user shrinks the pane)
-  // "dismissed" = don't show again was checked
-  let welcomeState: 'visible' | 'hidden' | 'dismissed' = $state('visible');
+  // Check if welcome was permanently dismissed
+  let welcomeDismissed = $state(false);
   
-  // Load persisted welcome state
   $effect(() => {
     if (browser) {
-      const stored = localStorage.getItem('bonum-welcome-state');
-      if (stored === 'dismissed') {
-        welcomeState = 'dismissed';
-      }
-      log.ui.debug('Welcome state loaded:', welcomeState);
+      welcomeDismissed = localStorage.getItem('bonum-welcome-dismissed') === 'true';
+      log.ui.debug('Welcome dismissed:', welcomeDismissed);
     }
   });
   
@@ -30,30 +24,8 @@
     log.ui.debug('Selected entity:', selectedEntity?.name ?? 'none');
   });
   
-  function hideWelcome() {
-    // Minimize/shrink - can be restored
-    welcomeState = 'hidden';
-    log.ui.debug('Welcome hidden (minimized)');
-  }
-  
-  function dismissWelcome(dontShowAgain: boolean) {
-    if (dontShowAgain) {
-      welcomeState = 'dismissed';
-      localStorage.setItem('bonum-welcome-state', 'dismissed');
-      log.ui.debug('Welcome dismissed permanently');
-    } else {
-      welcomeState = 'hidden';
-      log.ui.debug('Welcome hidden for session');
-    }
-  }
-  
-  function showWelcome() {
-    welcomeState = 'visible';
-  }
-  
-  // Derived: should we show the welcome panel?
-  let showWelcomePanel = $derived(welcomeState === 'visible' && !selectedEntity);
-  let showWelcomeButton = $derived(welcomeState === 'hidden' && !selectedEntity);
+  // Show welcome if not dismissed AND no entity selected
+  let showWelcomePanel = $derived(!welcomeDismissed && !selectedEntity);
 </script>
 
 <div class="home-layout">
@@ -69,10 +41,7 @@
   
   <section class="dashboard-panel">
     {#if showWelcomePanel}
-      <WelcomePanel 
-        on:dismiss={(e) => dismissWelcome(e.detail?.dontShowAgain ?? false)} 
-        on:hide={hideWelcome}
-      />
+      <WelcomePanel />
     {:else if selectedEntity}
       <div class="entity-dashboard">
         <a href="/entities/{selectedEntity.id}" class="entity-title">
@@ -88,13 +57,7 @@
       </div>
     {:else}
       <div class="empty-state">
-        {#if showWelcomeButton}
-          <button class="btn btn-secondary" on:click={showWelcome}>
-            {$t('welcome.show_again')}
-          </button>
-        {:else}
-          <p class="text-muted">{$t('welcome.select_entity')}</p>
-        {/if}
+        <p class="text-muted">{$t('welcome.select_entity')}</p>
       </div>
     {/if}
   </section>

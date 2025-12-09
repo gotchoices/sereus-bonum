@@ -2,33 +2,23 @@
 <!-- Dismissible welcome message shown to new users -->
 
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { browser } from '$app/environment';
   import { t } from '$lib/i18n';
   
-  const dispatch = createEventDispatcher<{ 
-    dismiss: { dontShowAgain: boolean };
-    hide: void;
-  }>();
+  // Checkbox state - when checked, persists to localStorage
+  let dontShowAgain = $state(false);
   
-  let dontShowAgain = false;
-  
-  function handleDismiss() {
-    // "Get Started" button - dismisses with checkbox state
-    dispatch('dismiss', { dontShowAgain });
-  }
-  
-  function handleHide() {
-    // Minimize icon - just hides (shrinks) the panel
-    dispatch('hide');
-  }
+  // Persist preference when checkbox changes
+  $effect(() => {
+    if (browser && dontShowAgain) {
+      localStorage.setItem('bonum-welcome-dismissed', 'true');
+    }
+  });
 </script>
 
 <div class="welcome-panel">
   <div class="welcome-header">
     <h2>{$t('welcome.title')}</h2>
-    <button class="btn-close" on:click={handleHide} title={$t('common.minimize')}>
-      ─
-    </button>
   </div>
   
   <div class="welcome-content">
@@ -54,9 +44,6 @@
       <input type="checkbox" bind:checked={dontShowAgain} />
       {$t('welcome.dont_show_again')}
     </label>
-    <button class="btn btn-primary" on:click={handleDismiss}>
-      {$t('welcome.get_started')}
-    </button>
   </div>
 </div>
 

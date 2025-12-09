@@ -16,6 +16,10 @@ Spec complete: `design/specs/web/global/backend.md`
 
 Uses sql.js with localStorage persistence. Single config switch between mock/production. App code is backend-agnostic via DataService interface.
 
+### ⬜ Collapsible Global Menu
+
+Add toggle to slide the global navigation menu off-screen (slide left), replaced by a hamburger icon. Clicking hamburger slides it back. This gives more screen real estate when working with data-heavy views.
+
 ### ⬜ Generate Screen Index
 
 Derive screen index from the 5 web stories. Create as consolidation in `design/generated/web/screens/index.md`. Human specs will be added in `design/specs/web/screens/` after reviewing first pass.

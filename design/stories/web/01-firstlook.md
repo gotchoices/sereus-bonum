@@ -7,7 +7,7 @@ Context: The user has discovered Sereus Bonum which has both a web and mobile in
 
 ## Sequence
 1. Sam opens his browser to the appropriate url and port.  He sees several panes.
-One pane contains a welcome message including some advice for basic usage and an option to not show it again, which he checks.  He also sees a familiar icon to shrink that pane, which he does.
+One pane contains a welcome message including some advice for basic usage and an option to not show it again.  He checks the box, then selects an entity from the list.  The welcome message is replaced by a Visual Balance Sheet for the selected entity.
 2. Another pane contains a list of Entities.  This is pre-populated with 2 entities:
   - Home Finance Template
   - Small Business Template
