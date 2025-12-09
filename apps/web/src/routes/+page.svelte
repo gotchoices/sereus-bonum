@@ -5,7 +5,7 @@
   import { entities, selectedEntityId } from '$lib/stores/entities';
   import { t } from '$lib/i18n';
   
-  $: selectedEntity = $entities.find(e => e.id === $selectedEntityId);
+  let selectedEntity = $derived($entities.find(e => e.id === $selectedEntityId));
   
   // Demo: dismiss welcome after first use
   let showWelcome = true;

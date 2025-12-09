@@ -93,6 +93,14 @@ export default {
     title: 'Accounts',
     view: 'View Accounts',
     import_transactions: 'Import Transactions',
+    as_of: 'As of',
+    balance: 'Balance',
+    code: 'Code',
+    name: 'Name',
+    no_accounts: 'No accounts in this entity',
+    create_prompt: 'Create accounts or import from another program',
+    net_worth: 'Net Worth',
+    total: 'Total',
   },
 } as const;
 

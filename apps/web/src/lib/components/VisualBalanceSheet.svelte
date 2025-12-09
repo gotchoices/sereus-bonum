@@ -6,9 +6,13 @@
   import { getDataService, type BalanceSheetData, type AccountType } from '$lib/data';
   import { t } from '$lib/i18n';
   
-  export let entityId: string;
-  export let size: number = 300;
-  export let asOf: string | undefined = undefined;
+  interface Props {
+    entityId: string;
+    size?: number;
+    asOf?: string;
+  }
+  
+  let { entityId, size = 300, asOf = undefined }: Props = $props();
   
   // Ring radii (relative to 100-unit viewBox)
   const RING_RADII = [
@@ -39,9 +43,11 @@
   }
   
   // Reload when entityId changes
-  $: if (entityId) {
-    loadData();
-  }
+  $effect(() => {
+    if (entityId) {
+      loadData();
+    }
+  });
   
   interface Arc {
     startAngle: number;
@@ -150,13 +156,13 @@
   }
   
   // Reactive calculations based on loaded data
-  $: ring1Items = data ? [
+  let ring1Items = $derived(data ? [
     { value: data.totalAssets, color: 'var(--asset-color)', label: $t('balance_sheet.assets') },
     { value: data.totalLiabilities, color: 'var(--liability-color)', label: $t('balance_sheet.liabilities') },
     { value: data.totalEquity, color: 'var(--equity-color)', label: $t('balance_sheet.equity') },
-  ].filter(item => item.value > 0) : [];
+  ].filter(item => item.value > 0) : []);
   
-  $: ring2Items = data ? data.groupBalances
+  let ring2Items = $derived(data ? data.groupBalances
     .filter(g => g.accountType === 'ASSET' || g.accountType === 'LIABILITY' || g.accountType === 'EQUITY')
     .map((g, i, arr) => {
       const typeGroups = arr.filter(x => x.accountType === g.accountType);
@@ -167,11 +173,11 @@
         label: g.groupName
       };
     })
-    .filter(item => item.value > 0) : [];
+    .filter(item => item.value > 0) : []);
   
-  $: ring1Arcs = calculateArcs(ring1Items);
-  $: ring2Arcs = calculateArcs(ring2Items);
-  $: nwColor = data ? netWorthColor(data.netWorth, data.totalAssets) : 'var(--bg-secondary)';
+  let ring1Arcs = $derived(calculateArcs(ring1Items));
+  let ring2Arcs = $derived(calculateArcs(ring2Items));
+  let nwColor = $derived(data ? netWorthColor(data.netWorth, data.totalAssets) : 'var(--bg-secondary)');
 </script>
 
 {#if loading}
