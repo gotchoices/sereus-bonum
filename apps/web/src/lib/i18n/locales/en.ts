@@ -43,9 +43,18 @@ export default {
   catalog: {
     title: 'Account Groups Catalog',
     add_group: 'Add Group',
+    edit_group: 'Edit Group',
+    add_child: 'Add Child Group',
     groups_count: '{{count}} groups',
     no_groups: 'No account groups defined',
     no_children: 'No child groups',
+    delete_confirm: 'Are you sure you want to delete this group?',
+    delete_has_accounts: 'Cannot delete: this group has accounts assigned',
+    name: 'Name',
+    type: 'Type',
+    parent: 'Parent',
+    description: 'Description',
+    none_top_level: 'None (top level)',
   },
   
   account_types: {

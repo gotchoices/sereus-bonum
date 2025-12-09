@@ -37,13 +37,45 @@ This is *not* the Accounts View (which shows an entity's accounts with balances)
 └─────────────────────────────────────────────────────────┘
 ```
 
-## Behavior
+## Interactions
 
-1. **Expand/Collapse**: Click parent group to show/hide children
-2. **No arrow for leaves**: Groups without children have no expand indicator
-3. **Add Group**: Opens modal/drawer to create new group (specify name, type, optional parent)
-4. **Edit Group**: Click group name or use context menu
-5. **Reorder**: Drag to reorder within same parent (future)
+### Add Group (header button)
+- Opens inline modal/popup
+- Fields: Name (required), Account Type (dropdown), Parent Group (optional dropdown, filtered by selected type)
+- On save: Creates group, refreshes list, closes modal
+
+### Context Menu (right-click on any group)
+- **Edit**: Opens edit modal with current values
+- **Add Child**: Opens add modal with parent pre-selected and type locked
+- **Delete**: Confirms, then deletes (prevented if group has accounts assigned)
+
+### Expand/Collapse
+- Click parent group row to toggle children visibility
+- No arrow shown for leaf groups (groups with no children)
+
+### Future: Drag to Reorder
+- Drag groups to reorder within same parent
+- Not implemented in MVP
+
+## Add/Edit Modal
+
+```
+┌─────────────────────────────────────────┐
+│ Add Account Group                    ✕  │
+├─────────────────────────────────────────┤
+│ Name:        [________________________] │
+│ Type:        [Assets            ▼]      │
+│ Parent:      [Current Assets    ▼]      │
+│              (or "None - top level")    │
+│ Description: [________________________] │
+├─────────────────────────────────────────┤
+│                    [Cancel] [Save]      │
+└─────────────────────────────────────────┘
+```
+
+- Type dropdown disabled when adding a child (inherited from parent)
+- Parent dropdown only shows groups of the selected type
+- Parent dropdown disabled when editing (can't move groups between parents)
 
 ## Data Model
 
@@ -84,4 +116,3 @@ Liabilities (type)
 - This screen manages the taxonomy, not the accounts themselves
 - Changes here affect all entities that use these groups
 - Deleting a group with assigned accounts should warn/prevent
-

@@ -7,7 +7,10 @@
     topLevelGroupsByType,
     childGroupsByParent,
     hasChildren,
-    loadAccountGroups 
+    loadAccountGroups,
+    createAccountGroup,
+    updateAccountGroup,
+    deleteAccountGroup
   } from '$lib/stores/accounts';
   import type { AccountType, AccountGroup } from '$lib/data';
   
@@ -58,7 +61,113 @@
   function countGroups(type: AccountType): number {
     return $topLevelGroupsByType.get(type)?.length ?? 0;
   }
+  
+  // ========== Modal State ==========
+  let showModal = $state(false);
+  let modalMode = $state<'add' | 'edit' | 'addChild'>('add');
+  let editingGroup = $state<AccountGroup | null>(null);
+  let parentForChild = $state<AccountGroup | null>(null);
+  
+  // Form fields
+  let formName = $state('');
+  let formType = $state<AccountType>('ASSET');
+  let formParentId = $state<string | null>(null);
+  let formDescription = $state('');
+  let formSaving = $state(false);
+  
+  function openAddModal() {
+    modalMode = 'add';
+    editingGroup = null;
+    parentForChild = null;
+    formName = '';
+    formType = 'ASSET';
+    formParentId = null;
+    formDescription = '';
+    showModal = true;
+  }
+  
+  function openEditModal(group: AccountGroup) {
+    modalMode = 'edit';
+    editingGroup = group;
+    parentForChild = null;
+    formName = group.name;
+    formType = group.accountType;
+    formParentId = group.parentId ?? null;
+    formDescription = group.description ?? '';
+    showModal = true;
+  }
+  
+  function openAddChildModal(parent: AccountGroup) {
+    modalMode = 'addChild';
+    editingGroup = null;
+    parentForChild = parent;
+    formName = '';
+    formType = parent.accountType;
+    formParentId = parent.id;
+    formDescription = '';
+    showModal = true;
+  }
+  
+  function closeModal() {
+    showModal = false;
+  }
+  
+  async function handleSave() {
+    if (!formName.trim()) return;
+    
+    formSaving = true;
+    try {
+      if (modalMode === 'edit' && editingGroup) {
+        await updateAccountGroup(editingGroup.id, {
+          name: formName.trim(),
+          description: formDescription.trim() || undefined,
+        });
+      } else {
+        await createAccountGroup({
+          name: formName.trim(),
+          accountType: formType,
+          parentId: formParentId ?? undefined,
+          description: formDescription.trim() || undefined,
+        });
+      }
+      closeModal();
+    } finally {
+      formSaving = false;
+    }
+  }
+  
+  // Get potential parent groups for dropdown (same type, no circular refs)
+  function getParentOptions(type: AccountType): AccountGroup[] {
+    return $accountGroups.filter(g => g.accountType === type && !g.parentId);
+  }
+  
+  // ========== Context Menu ==========
+  let contextMenu = $state<{ group: AccountGroup; x: number; y: number } | null>(null);
+  
+  function handleContextMenu(e: MouseEvent, group: AccountGroup) {
+    e.preventDefault();
+    e.stopPropagation();
+    contextMenu = { group, x: e.clientX, y: e.clientY };
+  }
+  
+  function closeContextMenu() {
+    contextMenu = null;
+  }
+  
+  async function handleDeleteGroup(group: AccountGroup) {
+    if (confirm($t('catalog.delete_confirm'))) {
+      await deleteAccountGroup(group.id);
+    }
+    closeContextMenu();
+  }
+  
+  // Close context menu on click outside
+  function handleWindowClick() {
+    closeContextMenu();
+  }
 </script>
+
+<svelte:window on:click={handleWindowClick} />
 
 <div class="catalog-page">
   <header class="page-header">
@@ -67,7 +176,7 @@
     <div class="header-actions">
       <button class="btn btn-secondary" onclick={expandAll}>{$t('common.expand_all')}</button>
       <button class="btn btn-secondary" onclick={collapseAll}>{$t('common.collapse_all')}</button>
-      <button class="btn btn-primary">{$t('catalog.add_group')}</button>
+      <button class="btn btn-primary" onclick={openAddModal}>{$t('catalog.add_group')}</button>
     </div>
   </header>
   
@@ -102,6 +211,7 @@
                     class="group-row parent"
                     class:expanded={isExpanded}
                     onclick={() => toggleGroup(group.id)}
+                    oncontextmenu={(e) => handleContextMenu(e, group)}
                   >
                     <span class="expand-icon">{isExpanded ? '▼' : '▶'}</span>
                     <span class="group-name">{group.name}</span>
@@ -111,16 +221,22 @@
                   {#if isExpanded}
                     <div class="children">
                       {#each children as child}
-                        <div class="group-row child">
+                        <button 
+                          class="group-row child"
+                          oncontextmenu={(e) => handleContextMenu(e, child)}
+                        >
                           <span class="group-name">{child.name}</span>
-                        </div>
+                        </button>
                       {/each}
                     </div>
                   {/if}
                 {:else}
-                  <div class="group-row leaf">
+                  <button 
+                    class="group-row leaf"
+                    oncontextmenu={(e) => handleContextMenu(e, group)}
+                  >
                     <span class="group-name">{group.name}</span>
-                  </div>
+                  </button>
                 {/if}
               </div>
             {/each}
@@ -136,6 +252,113 @@
     </div>
   {/if}
 </div>
+
+<!-- Context Menu -->
+{#if contextMenu}
+  <div 
+    class="context-menu"
+    style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
+    onclick={(e) => e.stopPropagation()}
+  >
+    <button class="menu-item" onclick={() => { openEditModal(contextMenu!.group); closeContextMenu(); }}>
+      <span>📝</span> {$t('common.edit')}
+    </button>
+    {#if !contextMenu.group.parentId}
+      <button class="menu-item" onclick={() => { openAddChildModal(contextMenu!.group); closeContextMenu(); }}>
+        <span>➕</span> {$t('catalog.add_child')}
+      </button>
+    {/if}
+    <hr />
+    <button class="menu-item danger" onclick={() => handleDeleteGroup(contextMenu!.group)}>
+      <span>🗑️</span> {$t('common.delete')}
+    </button>
+  </div>
+{/if}
+
+<!-- Add/Edit Modal -->
+{#if showModal}
+  <div class="modal-backdrop" onclick={closeModal}>
+    <div class="modal" onclick={(e) => e.stopPropagation()}>
+      <div class="modal-header">
+        <h3>
+          {#if modalMode === 'edit'}
+            {$t('catalog.edit_group')}
+          {:else if modalMode === 'addChild'}
+            {$t('catalog.add_child')}
+          {:else}
+            {$t('catalog.add_group')}
+          {/if}
+        </h3>
+        <button class="btn-close" onclick={closeModal}>✕</button>
+      </div>
+      
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="group-name">{$t('catalog.name')}</label>
+          <input 
+            id="group-name"
+            type="text" 
+            bind:value={formName}
+            placeholder="e.g., Cash & Bank"
+          />
+        </div>
+        
+        <div class="form-group">
+          <label for="group-type">{$t('catalog.type')}</label>
+          <select 
+            id="group-type"
+            bind:value={formType}
+            disabled={modalMode === 'edit' || modalMode === 'addChild'}
+          >
+            {#each accountTypes as type}
+              <option value={type}>{$t(`account_types.${type}`)}</option>
+            {/each}
+          </select>
+        </div>
+        
+        {#if modalMode === 'add'}
+          <div class="form-group">
+            <label for="group-parent">{$t('catalog.parent')}</label>
+            <select id="group-parent" bind:value={formParentId}>
+              <option value={null}>{$t('catalog.none_top_level')}</option>
+              {#each getParentOptions(formType) as parent}
+                <option value={parent.id}>{parent.name}</option>
+              {/each}
+            </select>
+          </div>
+        {/if}
+        
+        {#if modalMode === 'addChild' && parentForChild}
+          <div class="form-group">
+            <label>{$t('catalog.parent')}</label>
+            <input type="text" value={parentForChild.name} disabled />
+          </div>
+        {/if}
+        
+        <div class="form-group">
+          <label for="group-desc">{$t('catalog.description')}</label>
+          <input 
+            id="group-desc"
+            type="text" 
+            bind:value={formDescription}
+            placeholder="Optional description"
+          />
+        </div>
+      </div>
+      
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick={closeModal}>{$t('common.cancel')}</button>
+        <button 
+          class="btn btn-primary" 
+          onclick={handleSave}
+          disabled={!formName.trim() || formSaving}
+        >
+          {formSaving ? $t('common.loading') : $t('common.save')}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   .catalog-page {
@@ -228,6 +451,7 @@
     color: var(--text-primary);
     text-align: left;
     font-size: 0.9rem;
+    cursor: default;
   }
   
   .group-row.parent {
@@ -235,7 +459,9 @@
     transition: background 0.15s;
   }
   
-  .group-row.parent:hover {
+  .group-row.parent:hover,
+  .group-row.leaf:hover,
+  .group-row.child:hover {
     background: var(--bg-hover);
   }
   
@@ -276,5 +502,144 @@
   .empty-type {
     padding: var(--space-md) var(--space-lg);
     font-size: 0.875rem;
+  }
+  
+  /* Context Menu */
+  .context-menu {
+    position: fixed;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    min-width: 160px;
+    z-index: 1000;
+    padding: var(--space-xs) 0;
+  }
+  
+  .menu-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: var(--space-sm) var(--space-md);
+    border: none;
+    background: none;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    cursor: pointer;
+    text-align: left;
+  }
+  
+  .menu-item:hover {
+    background: var(--bg-hover);
+  }
+  
+  .menu-item.danger {
+    color: var(--danger);
+  }
+  
+  .context-menu hr {
+    border: none;
+    border-top: 1px solid var(--border-color);
+    margin: var(--space-xs) 0;
+  }
+  
+  /* Modal */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  
+  .modal {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    width: 100%;
+    max-width: 400px;
+    box-shadow: var(--shadow-lg);
+  }
+  
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-md) var(--space-lg);
+    border-bottom: 1px solid var(--border-color);
+  }
+  
+  .modal-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+  }
+  
+  .btn-close {
+    background: none;
+    border: none;
+    font-size: 1.25rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0.25rem;
+    line-height: 1;
+  }
+  
+  .btn-close:hover {
+    color: var(--text-primary);
+  }
+  
+  .modal-body {
+    padding: var(--space-lg);
+  }
+  
+  .form-group {
+    margin-bottom: var(--space-md);
+  }
+  
+  .form-group:last-child {
+    margin-bottom: 0;
+  }
+  
+  .form-group label {
+    display: block;
+    margin-bottom: var(--space-xs);
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+  }
+  
+  .form-group input,
+  .form-group select {
+    width: 100%;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+  }
+  
+  .form-group input:disabled,
+  .form-group select:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  
+  .form-group input:focus,
+  .form-group select:focus {
+    outline: none;
+    border-color: var(--accent-color);
+  }
+  
+  .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-sm);
+    padding: var(--space-md) var(--space-lg);
+    border-top: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
   }
 </style>
