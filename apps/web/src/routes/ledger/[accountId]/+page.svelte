@@ -285,7 +285,9 @@
                   <td></td>
                   <td></td>
                   <td class="split-note">{split.note ?? ''}</td>
-                  <td class="split-account">↳ {split.accountName}</td>
+                  <td class="split-account">
+                    ↳ <a href="/ledger/{split.accountId}" class="split-account-link">{split.accountName}</a>
+                  </td>
                   <td class="col-debit amount">
                     {split.amount > 0 ? formatAmount(split.amount) : ''}
                   </td>
@@ -492,6 +494,16 @@
   .split-account {
     color: var(--text-secondary);
     padding-left: var(--space-lg) !important;
+  }
+  
+  .split-account-link {
+    color: var(--text-secondary);
+    text-decoration: none;
+  }
+  
+  .split-account-link:hover {
+    color: var(--accent-color);
+    text-decoration: underline;
   }
   
   .split-note {

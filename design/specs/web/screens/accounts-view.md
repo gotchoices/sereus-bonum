@@ -86,6 +86,28 @@ Implementation:
 
 ---
 
+## Account Hyperlinks
+
+**From stories:** Story 02 (step 9.7), Story 03 (step 4)
+
+All account names displayed in the Accounts View should be hyperlinks to that account's ledger:
+
+| Location | Link Target |
+|----------|-------------|
+| Individual accounts in expanded groups | `/ledger/{accountId}` |
+| Child accounts in hierarchical groups | `/ledger/{accountId}` |
+| Income accounts (when RE expanded, Trial Balance) | `/ledger/{accountId}` |
+| Expense accounts (when RE expanded, Trial Balance) | `/ledger/{accountId}` |
+
+**Behavior:**
+- Click account name → Navigate to ledger in current window
+- Future enhancement: Ctrl/Cmd+Click → Open ledger in new window
+- Account code (if present) is not clickable, only the account name
+
+**Visual indicator:** Account names should appear as links (underline on hover, pointer cursor)
+
+---
+
 ## Date Selection
 
 ### Balance Sheet Mode (single date)
