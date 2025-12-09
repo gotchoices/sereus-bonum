@@ -10,7 +10,8 @@ import type {
   Transaction, TransactionInput,
   Entry, EntryInput,
   Unit, UnitInput,
-  BalanceSheetData
+  BalanceSheetData,
+  LedgerEntry
 } from '../types';
 
 const NOT_IMPLEMENTED = 'Quereus backend not yet implemented';
@@ -172,6 +173,27 @@ class QuereusDataService implements DataService {
   }
   
   async getBalanceSheet(_entityId: string, _asOf?: string): Promise<BalanceSheetData> {
+    throw new Error(NOT_IMPLEMENTED);
+  }
+  
+  // ===========================================================================
+  // Ledger View
+  // ===========================================================================
+  
+  async getLedgerEntries(_accountId: string, _options?: {
+    startDate?: string;
+    endDate?: string;
+    limit?: number;
+  }): Promise<LedgerEntry[]> {
+    throw new Error(NOT_IMPLEMENTED);
+  }
+  
+  async searchAccounts(_entityId: string, _query: string): Promise<Array<{
+    id: string;
+    name: string;
+    path: string;
+    code?: string;
+  }>> {
     throw new Error(NOT_IMPLEMENTED);
   }
 }

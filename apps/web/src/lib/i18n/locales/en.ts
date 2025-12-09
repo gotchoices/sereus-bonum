@@ -3,7 +3,7 @@
 
 export default {
   app: {
-    name: 'Bonum',
+    name: 'Sereus Bonum',
     tagline: 'Personal and business finance management',
   },
   
@@ -105,6 +105,29 @@ export default {
     create_prompt: 'Create accounts or import from another program',
     net_worth: 'Net Worth',
     total: 'Total',
+  },
+  
+  ledger: {
+    title: 'Ledger',
+    back_to_accounts: 'Back to Accounts View',
+    running_balance: 'Balance',
+    date: 'Date',
+    ref: 'Ref',
+    memo: 'Memo',
+    offset: 'Offset Account',
+    debit: 'Debit',
+    credit: 'Credit',
+    note: 'Note',
+    split: 'Split',
+    new_entry: 'New entry',
+    no_transactions: 'No transactions yet',
+    enter_first: 'Enter your first transaction below',
+    search_accounts: 'Search accounts...',
+    amount_to_balance: 'Amount to balance',
+    add_split: 'Add split',
+    remove_split: 'Remove',
+    save: 'Save',
+    cancel: 'Cancel',
   },
 } as const;
 

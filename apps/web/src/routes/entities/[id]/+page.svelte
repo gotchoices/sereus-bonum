@@ -189,7 +189,7 @@
                       {#each groupAccounts as account}
                         <div class="account-row">
                           <span class="account-code">{account.code || ''}</span>
-                          <a href="/accounts/{account.id}" class="account-name">{account.name}</a>
+                          <a href="/ledger/{account.id}" class="account-name">{account.name}</a>
                           <span class="account-balance">{formatCurrency(getAccountBalance(account.id), account.unit)}</span>
                         </div>
                       {/each}
@@ -208,7 +208,7 @@
                             {#each childAccounts as account}
                               <div class="account-row child">
                                 <span class="account-code">{account.code || ''}</span>
-                                <a href="/accounts/{account.id}" class="account-name">{account.name}</a>
+                                <a href="/ledger/{account.id}" class="account-name">{account.name}</a>
                                 <span class="account-balance">{formatCurrency(getAccountBalance(account.id), account.unit)}</span>
                               </div>
                             {/each}

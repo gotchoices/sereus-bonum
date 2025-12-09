@@ -165,6 +165,38 @@ export interface GroupBalance {
 }
 
 // =============================================================================
+// Ledger view types
+// =============================================================================
+
+/** Entry with transaction data joined, for ledger display */
+export interface LedgerEntry {
+  entryId: string;
+  transactionId: string;
+  date: string;
+  reference?: string;
+  memo?: string;
+  accountId: string;
+  amount: number;           // Positive = debit, negative = credit
+  note?: string;
+  runningBalance: number;   // Calculated running balance
+  // Offset account info (for simple transactions)
+  offsetAccountId?: string;
+  offsetAccountName?: string;
+  // Split info
+  isSplit: boolean;
+  splitEntries?: SplitEntry[];
+}
+
+export interface SplitEntry {
+  entryId: string;
+  accountId: string;
+  accountName: string;
+  accountPath: string;      // Full path for display: "Expenses : Utilities"
+  amount: number;
+  note?: string;
+}
+
+// =============================================================================
 // DataService interface
 // =============================================================================
 
@@ -223,5 +255,20 @@ export interface DataService {
   // Balance calculations
   getAccountBalance(accountId: string, asOf?: string): Promise<number>;
   getBalanceSheet(entityId: string, asOf?: string): Promise<BalanceSheetData>;
+  
+  // Ledger view
+  getLedgerEntries(accountId: string, options?: {
+    startDate?: string;
+    endDate?: string;
+    limit?: number;
+  }): Promise<LedgerEntry[]>;
+  
+  // Account search (for autocomplete)
+  searchAccounts(entityId: string, query: string): Promise<Array<{
+    id: string;
+    name: string;
+    path: string;       // "Assets : Current : Checking"
+    code?: string;
+  }>>;
 }
 

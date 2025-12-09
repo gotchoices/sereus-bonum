@@ -10,6 +10,7 @@ import type {
   Entry, EntryInput,
   Unit, UnitInput,
   BalanceSheetData, GroupBalance, AccountBalance,
+  LedgerEntry, SplitEntry,
   AccountType
 } from '../types';
 import { NORMAL_BALANCE } from '../types';
@@ -624,6 +625,182 @@ class SqliteDataService implements DataService {
       groupBalances: Array.from(groupTotals.values()),
       accountBalances,
     };
+  }
+  
+  // ===========================================================================
+  // Ledger View
+  // ===========================================================================
+  
+  async getLedgerEntries(accountId: string, options?: {
+    startDate?: string;
+    endDate?: string;
+    limit?: number;
+  }): Promise<LedgerEntry[]> {
+    // Get all entries for this account with transaction data
+    let sql = `
+      SELECT 
+        e.id as entry_id,
+        t.id as txn_id,
+        t.date,
+        t.reference,
+        t.memo,
+        e.amount,
+        e.note,
+        (SELECT COUNT(*) FROM entry WHERE txn_id = t.id) as entry_count
+      FROM entry e
+      JOIN txn t ON t.id = e.txn_id
+      WHERE e.account_id = ?
+    `;
+    const params: (string | number)[] = [accountId];
+    
+    if (options?.startDate) {
+      sql += ' AND t.date >= ?';
+      params.push(options.startDate);
+    }
+    if (options?.endDate) {
+      sql += ' AND t.date <= ?';
+      params.push(options.endDate);
+    }
+    
+    sql += ' ORDER BY t.date ASC, t.created_at ASC';
+    
+    if (options?.limit) {
+      sql += ' LIMIT ?';
+      params.push(options.limit);
+    }
+    
+    const rows = this.getDb().exec(sql, params);
+    if (!rows.length) return [];
+    
+    const entries: LedgerEntry[] = [];
+    let runningBalance = 0;
+    
+    for (const row of rows[0].values) {
+      const entryId = row[0] as string;
+      const txnId = row[1] as string;
+      const amount = row[5] as number;
+      const entryCount = row[7] as number;
+      const isSplit = entryCount > 2;
+      
+      runningBalance += amount;
+      
+      // Get offset account (for simple transactions)
+      let offsetAccountId: string | undefined;
+      let offsetAccountName: string | undefined;
+      let splitEntries: SplitEntry[] | undefined;
+      
+      if (isSplit) {
+        // Get all other entries for splits
+        const splitRows = this.getDb().exec(`
+          SELECT e.id, e.account_id, a.name, e.amount, e.note
+          FROM entry e
+          JOIN account a ON a.id = e.account_id
+          WHERE e.txn_id = ? AND e.id != ?
+          ORDER BY e.amount DESC
+        `, [txnId, entryId]);
+        
+        if (splitRows.length && splitRows[0].values.length) {
+          splitEntries = splitRows[0].values.map(r => ({
+            entryId: r[0] as string,
+            accountId: r[1] as string,
+            accountName: r[2] as string,
+            accountPath: r[2] as string, // TODO: Build full path
+            amount: r[3] as number,
+            note: r[4] as string | undefined,
+          }));
+        }
+      } else {
+        // Get the single offset account
+        const offsetRows = this.getDb().exec(`
+          SELECT e.account_id, a.name
+          FROM entry e
+          JOIN account a ON a.id = e.account_id
+          WHERE e.txn_id = ? AND e.id != ?
+          LIMIT 1
+        `, [txnId, entryId]);
+        
+        if (offsetRows.length && offsetRows[0].values.length) {
+          offsetAccountId = offsetRows[0].values[0][0] as string;
+          offsetAccountName = offsetRows[0].values[0][1] as string;
+        }
+      }
+      
+      entries.push({
+        entryId,
+        transactionId: txnId,
+        date: row[2] as string,
+        reference: row[3] as string | undefined,
+        memo: row[4] as string | undefined,
+        accountId,
+        amount,
+        note: row[6] as string | undefined,
+        runningBalance,
+        offsetAccountId,
+        offsetAccountName,
+        isSplit,
+        splitEntries,
+      });
+    }
+    
+    return entries;
+  }
+  
+  async searchAccounts(entityId: string, query: string): Promise<Array<{
+    id: string;
+    name: string;
+    path: string;
+    code?: string;
+  }>> {
+    const lowerQuery = query.toLowerCase();
+    
+    // Get all accounts for this entity with group info
+    const rows = this.getDb().exec(`
+      SELECT a.id, a.name, a.code, g.name as group_name, g.account_type
+      FROM account a
+      JOIN account_group g ON g.id = a.account_group_id
+      WHERE a.entity_id = ? AND a.is_active = 1
+      ORDER BY g.display_order, a.code, a.name
+    `, [entityId]);
+    
+    if (!rows.length) return [];
+    
+    const results: Array<{
+      id: string;
+      name: string;
+      path: string;
+      code?: string;
+    }> = [];
+    
+    for (const row of rows[0].values) {
+      const id = row[0] as string;
+      const name = row[1] as string;
+      const code = row[2] as string | undefined;
+      const groupName = row[3] as string;
+      const accountType = row[4] as string;
+      
+      // Build path: Type : Group : Account
+      const typeName = {
+        'ASSET': 'Assets',
+        'LIABILITY': 'Liabilities',
+        'EQUITY': 'Equity',
+        'INCOME': 'Income',
+        'EXPENSE': 'Expenses',
+      }[accountType] || accountType;
+      
+      const path = `${typeName} : ${groupName} : ${name}`;
+      
+      // Check if query matches any part
+      if (
+        name.toLowerCase().includes(lowerQuery) ||
+        groupName.toLowerCase().includes(lowerQuery) ||
+        path.toLowerCase().includes(lowerQuery) ||
+        (code && code.toLowerCase().includes(lowerQuery))
+      ) {
+        results.push({ id, name, path, code });
+      }
+    }
+    
+    return results;
   }
 }
 
