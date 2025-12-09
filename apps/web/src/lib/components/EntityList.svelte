@@ -92,14 +92,17 @@
     style="left: {contextMenuPosition.x}px; top: {contextMenuPosition.y}px;"
     on:click|stopPropagation
   >
-    <a href="/entities/{contextMenuEntityId}" class="menu-item">
-      <span>📝</span> {$t('common.edit')}
-    </a>
-    <a href="/entities/{contextMenuEntityId}" class="menu-item">
+    <button class="menu-item" on:click={() => { /* TODO: edit modal */ closeContextMenu(); }}>
+      <span>📝</span> {$t('entities.edit')}
+    </button>
+    <a href="/entities/{contextMenuEntityId}" class="menu-item" on:click={closeContextMenu}>
       <span>📊</span> {$t('accounts.title')}
     </a>
-    <button class="menu-item" on:click={() => {}}>
-      <span>📥</span> {$t('nav.import')}
+    <button class="menu-item" on:click={() => { /* TODO: import transactions */ closeContextMenu(); }}>
+      <span>📥</span> {$t('entities.import_transactions')}
+    </button>
+    <button class="menu-item" on:click={() => { /* TODO: boilerplate */ closeContextMenu(); }}>
+      <span>📋</span> {$t('entities.boilerplate')}
     </button>
     <hr />
     <button class="menu-item danger" on:click={() => handleDelete(contextMenuEntityId!)}>

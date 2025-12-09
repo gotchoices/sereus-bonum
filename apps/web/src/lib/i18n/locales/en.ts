@@ -20,6 +20,7 @@ export default {
     delete: 'Delete',
     edit: 'Edit',
     close: 'Close',
+    minimize: 'Minimize',
     confirm: 'Confirm',
     add: 'Add',
     loading: 'Loading...',
@@ -38,6 +39,8 @@ export default {
     create_prompt: 'Create one to get started',
     select: 'Select entity...',
     none_selected: 'No entity selected',
+    boilerplate: 'Use as Template',
+    import_transactions: 'Import Transactions',
   },
   
   catalog: {
@@ -78,6 +81,7 @@ export default {
     right_click: 'Right-click entities for quick actions',
     dont_show_again: "Don't show this again",
     get_started: 'Get Started',
+    show_again: 'Show Welcome',
   },
   
   balance_sheet: {

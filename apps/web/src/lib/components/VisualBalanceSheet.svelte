@@ -21,24 +21,28 @@
     { inner: 47, outer: 80 },   // Ring 2: Account Groups
   ];
   
-  // State
-  let data: BalanceSheetData | null = null;
-  let loading = true;
-  let error: string | null = null;
+  // State (must use $state for Svelte 5 reactivity)
+  let data: BalanceSheetData | null = $state(null);
+  let loading = $state(true);
+  let error: string | null = $state(null);
   
   // Load balance sheet data
   async function loadData() {
+    console.log('[VBS] loadData called for entity:', entityId);
     loading = true;
     error = null;
     
     try {
       const ds = await getDataService();
+      console.log('[VBS] Got DataService, fetching balance sheet...');
       data = await ds.getBalanceSheet(entityId, asOf);
+      console.log('[VBS] Balance sheet loaded:', data);
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load balance sheet';
       console.error('[VBS] Load error:', e);
     } finally {
       loading = false;
+      console.log('[VBS] Loading complete, loading:', loading);
     }
   }
   

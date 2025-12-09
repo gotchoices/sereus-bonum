@@ -5,23 +5,29 @@
   import { createEventDispatcher } from 'svelte';
   import { t } from '$lib/i18n';
   
-  const dispatch = createEventDispatcher<{ dismiss: void }>();
+  const dispatch = createEventDispatcher<{ 
+    dismiss: { dontShowAgain: boolean };
+    hide: void;
+  }>();
   
   let dontShowAgain = false;
   
   function handleDismiss() {
-    if (dontShowAgain) {
-      localStorage.setItem('bonum-welcome-dismissed', 'true');
-    }
-    dispatch('dismiss');
+    // "Get Started" button - dismisses with checkbox state
+    dispatch('dismiss', { dontShowAgain });
+  }
+  
+  function handleHide() {
+    // Minimize icon - just hides (shrinks) the panel
+    dispatch('hide');
   }
 </script>
 
 <div class="welcome-panel">
   <div class="welcome-header">
     <h2>{$t('welcome.title')}</h2>
-    <button class="btn-close" on:click={handleDismiss} title={$t('common.close')}>
-      ✕
+    <button class="btn-close" on:click={handleHide} title={$t('common.minimize')}>
+      ─
     </button>
   </div>
   

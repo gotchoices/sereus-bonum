@@ -42,6 +42,11 @@
     try {
       console.log('[EntityAccounts] Getting DataService...');
       const ds = await getDataService();
+      
+      // Load accounts for this entity (in case we navigated directly)
+      console.log('[EntityAccounts] Loading accounts...');
+      await loadAccounts(entityId);
+      
       console.log('[EntityAccounts] Fetching balance sheet...');
       balanceData = await ds.getBalanceSheet(entityId);
       console.log('[EntityAccounts] Balance sheet loaded:', balanceData);

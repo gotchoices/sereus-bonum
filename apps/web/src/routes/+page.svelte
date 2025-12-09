@@ -1,18 +1,59 @@
 <script lang="ts">
+  import { browser } from '$app/environment';
   import EntityList from '$lib/components/EntityList.svelte';
   import WelcomePanel from '$lib/components/WelcomePanel.svelte';
   import VisualBalanceSheet from '$lib/components/VisualBalanceSheet.svelte';
   import { entities, selectedEntityId } from '$lib/stores/entities';
   import { t } from '$lib/i18n';
+  import { log } from '$lib/logger';
   
   let selectedEntity = $derived($entities.find(e => e.id === $selectedEntityId));
   
-  // Demo: dismiss welcome after first use
-  let showWelcome = true;
+  // Welcome panel state - persisted to localStorage
+  // "hidden" = minimized (per story: user shrinks the pane)
+  // "dismissed" = don't show again was checked
+  let welcomeState: 'visible' | 'hidden' | 'dismissed' = $state('visible');
   
-  function dismissWelcome() {
-    showWelcome = false;
+  // Load persisted welcome state
+  $effect(() => {
+    if (browser) {
+      const stored = localStorage.getItem('bonum-welcome-state');
+      if (stored === 'dismissed') {
+        welcomeState = 'dismissed';
+      }
+      log.ui.debug('Welcome state loaded:', welcomeState);
+    }
+  });
+  
+  // Debug: log when selected entity changes
+  $effect(() => {
+    log.ui.debug('Selected entity:', selectedEntity?.name ?? 'none');
+  });
+  
+  function hideWelcome() {
+    // Minimize/shrink - can be restored
+    welcomeState = 'hidden';
+    log.ui.debug('Welcome hidden (minimized)');
   }
+  
+  function dismissWelcome(dontShowAgain: boolean) {
+    if (dontShowAgain) {
+      welcomeState = 'dismissed';
+      localStorage.setItem('bonum-welcome-state', 'dismissed');
+      log.ui.debug('Welcome dismissed permanently');
+    } else {
+      welcomeState = 'hidden';
+      log.ui.debug('Welcome hidden for session');
+    }
+  }
+  
+  function showWelcome() {
+    welcomeState = 'visible';
+  }
+  
+  // Derived: should we show the welcome panel?
+  let showWelcomePanel = $derived(welcomeState === 'visible' && !selectedEntity);
+  let showWelcomeButton = $derived(welcomeState === 'hidden' && !selectedEntity);
 </script>
 
 <div class="home-layout">
@@ -27,29 +68,33 @@
   </section>
   
   <section class="dashboard-panel">
-    {#if showWelcome && !selectedEntity}
-      <WelcomePanel on:dismiss={dismissWelcome} />
+    {#if showWelcomePanel}
+      <WelcomePanel 
+        on:dismiss={(e) => dismissWelcome(e.detail?.dontShowAgain ?? false)} 
+        on:hide={hideWelcome}
+      />
     {:else if selectedEntity}
       <div class="entity-dashboard">
-        <h2>{selectedEntity.name}</h2>
-        <p class="text-secondary">{selectedEntity.description || ''}</p>
+        <a href="/entities/{selectedEntity.id}" class="entity-title">
+          <h2>{selectedEntity.name}</h2>
+        </a>
+        {#if selectedEntity.description}
+          <p class="text-secondary">{selectedEntity.description}</p>
+        {/if}
         
         <div class="balance-sheet-container">
           <VisualBalanceSheet entityId={selectedEntity.id} />
         </div>
-        
-        <div class="quick-actions">
-          <a href="/entities/{selectedEntity.id}" class="btn btn-primary">
-            {$t('accounts.view')}
-          </a>
-          <button class="btn btn-secondary">
-            {$t('accounts.import_transactions')}
-          </button>
-        </div>
       </div>
     {:else}
       <div class="empty-state">
-        <p class="text-muted">{$t('welcome.select_entity')}</p>
+        {#if showWelcomeButton}
+          <button class="btn btn-secondary" on:click={showWelcome}>
+            {$t('welcome.show_again')}
+          </button>
+        {:else}
+          <p class="text-muted">{$t('welcome.select_entity')}</p>
+        {/if}
       </div>
     {/if}
   </section>
@@ -107,20 +152,37 @@
     overflow: auto;
   }
   
-  .entity-dashboard h2 {
-    margin-bottom: var(--space-xs);
+  .entity-dashboard {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100%;
+  }
+  
+  .entity-title {
+    text-decoration: none;
+    color: var(--text-primary);
+  }
+  
+  .entity-title:hover {
+    color: var(--accent-color);
+  }
+  
+  .entity-title h2 {
+    margin: 0 0 var(--space-xs) 0;
+    text-align: center;
+  }
+  
+  .entity-dashboard .text-secondary {
+    text-align: center;
+    margin-bottom: var(--space-md);
   }
   
   .balance-sheet-container {
     display: flex;
     justify-content: center;
-    margin: var(--space-xl) 0;
-  }
-  
-  .quick-actions {
-    display: flex;
-    gap: var(--space-md);
-    justify-content: center;
+    flex: 1;
+    align-items: center;
   }
   
   .empty-state {

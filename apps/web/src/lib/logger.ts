@@ -95,5 +95,6 @@ export const log = {
   sqlite: createLogger('SQLite'),
   entities: createLogger('Entities'),
   vbs: createLogger('VBS'),
+  ui: createLogger('UI'),
 };
 
