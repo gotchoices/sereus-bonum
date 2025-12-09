@@ -10,98 +10,148 @@
     accountGroups,
     topLevelGroupsByType,
     childGroupsByParent,
-    hasChildren,
     loadAccounts
   } from '$lib/stores/accounts';
   import { getDataService, type AccountType, type BalanceSheetData } from '$lib/data';
+  import { loadViewState, saveViewState } from '$lib/stores/viewState';
   
-  console.log('[EntityAccounts] Script loaded');
+  // Report modes
+  type ReportMode = 'balance_sheet' | 'trial_balance' | 'income_statement' | 'cash_flow' | 'custom';
   
   // Get entity ID from route
   let entityId = $derived($page.params.id);
   let entity = $derived($entities.find(e => e.id === entityId));
   
-  // Balance sheet data - must use $state for reactivity
+  // Balance sheet data
   let balanceData = $state<BalanceSheetData | null>(null);
   let balanceLoading = $state(true);
+  
+  // View state - persisted
+  let expandedGroups = $state<Record<string, boolean>>({});
+  let reportMode = $state<ReportMode>('balance_sheet');
+  let asOfDate = $state(new Date().toISOString().split('T')[0]);
+  let retainedEarningsExpanded = $state(false);
+  
+  // Load persisted view state
+  $effect(() => {
+    if (browser && entityId) {
+      expandedGroups = loadViewState(`accounts-expand-${entityId}`, {});
+      reportMode = loadViewState(`accounts-mode-${entityId}`, 'balance_sheet');
+      retainedEarningsExpanded = loadViewState(`accounts-re-expanded-${entityId}`, false);
+      log.ui.debug('[Accounts] Loaded view state for entity:', entityId);
+    }
+  });
   
   // Load data when entity changes
   let lastEntityId: string | null = null;
   $effect(() => {
-    console.log('[EntityAccounts] $effect running, entityId:', entityId, 'browser:', browser);
     if (browser && entityId && entityId !== lastEntityId) {
       lastEntityId = entityId;
-      console.log('[EntityAccounts] Loading data for entity:', entityId);
       loadEntityData();
     }
   });
   
   async function loadEntityData() {
-    console.log('[EntityAccounts] loadEntityData() called');
+    log.ui.debug('[Accounts] Loading data for entity:', entityId);
     balanceLoading = true;
     try {
-      console.log('[EntityAccounts] Getting DataService...');
       const ds = await getDataService();
-      
-      // Load accounts for this entity (in case we navigated directly)
-      console.log('[EntityAccounts] Loading accounts...');
       await loadAccounts(entityId);
-      
-      console.log('[EntityAccounts] Fetching balance sheet...');
-      balanceData = await ds.getBalanceSheet(entityId);
-      console.log('[EntityAccounts] Balance sheet loaded:', balanceData);
+      balanceData = await ds.getBalanceSheet(entityId, asOfDate);
+      log.ui.debug('[Accounts] Balance sheet loaded');
     } catch (e) {
-      console.error('[EntityAccounts] Failed to load balance sheet:', e);
+      log.ui.error('[Accounts] Failed to load:', e);
     } finally {
       balanceLoading = false;
-      console.log('[EntityAccounts] Loading complete, balanceLoading:', balanceLoading);
+    }
+  }
+  
+  // Reload when date changes
+  async function handleDateChange() {
+    if (browser && entityId) {
+      balanceLoading = true;
+      try {
+        const ds = await getDataService();
+        balanceData = await ds.getBalanceSheet(entityId, asOfDate);
+      } catch (e) {
+        log.ui.error('[Accounts] Failed to reload:', e);
+      } finally {
+        balanceLoading = false;
+      }
     }
   }
   
   // Account type display info
   const typeInfo: Record<AccountType, { icon: string; color: string }> = {
-    ASSET: { icon: '💰', color: 'var(--asset-color)' },
-    LIABILITY: { icon: '📋', color: 'var(--liability-color)' },
-    EQUITY: { icon: '📊', color: 'var(--equity-color)' },
-    INCOME: { icon: '📈', color: 'var(--income-color)' },
-    EXPENSE: { icon: '📉', color: 'var(--expense-color)' },
+    ASSET: { icon: '💰', color: 'var(--asset-color, #4ade80)' },
+    LIABILITY: { icon: '📋', color: 'var(--liability-color, #f87171)' },
+    EQUITY: { icon: '📊', color: 'var(--equity-color, #60a5fa)' },
+    INCOME: { icon: '📈', color: 'var(--income-color, #34d399)' },
+    EXPENSE: { icon: '📉', color: 'var(--expense-color, #fb923c)' },
   };
   
-  // Balance sheet shows only A/L/E
-  const balanceSheetTypes: AccountType[] = ['ASSET', 'LIABILITY', 'EQUITY'];
-  
-  // Expanded state for groups
-  let expandedGroups = $state<Set<string>>(new Set());
-  
-  function toggleGroup(groupId: string) {
-    if (expandedGroups.has(groupId)) {
-      expandedGroups.delete(groupId);
-    } else {
-      expandedGroups.add(groupId);
+  // Types to show based on mode
+  function getVisibleTypes(): AccountType[] {
+    switch (reportMode) {
+      case 'balance_sheet':
+        return ['ASSET', 'LIABILITY', 'EQUITY'];
+      case 'trial_balance':
+        return ['ASSET', 'LIABILITY', 'EQUITY']; // Income/Expense shown under RE
+      case 'income_statement':
+        return ['INCOME', 'EXPENSE'];
+      default:
+        return ['ASSET', 'LIABILITY', 'EQUITY', 'INCOME', 'EXPENSE'];
     }
-    expandedGroups = new Set(expandedGroups);
   }
   
-  // Get accounts for a specific group
+  let visibleTypes = $derived(getVisibleTypes());
+  
+  // Expand/collapse functions
+  function toggleGroup(groupId: string) {
+    expandedGroups[groupId] = !expandedGroups[groupId];
+    expandedGroups = { ...expandedGroups };
+    saveViewState(`accounts-expand-${entityId}`, expandedGroups);
+  }
+  
+  function expandAll() {
+    const allGroupIds = $accountGroups.map(g => g.id);
+    allGroupIds.forEach(id => expandedGroups[id] = true);
+    expandedGroups = { ...expandedGroups };
+    saveViewState(`accounts-expand-${entityId}`, expandedGroups);
+  }
+  
+  function collapseAll() {
+    expandedGroups = {};
+    saveViewState(`accounts-expand-${entityId}`, expandedGroups);
+  }
+  
+  function toggleRetainedEarnings() {
+    retainedEarningsExpanded = !retainedEarningsExpanded;
+    saveViewState(`accounts-re-expanded-${entityId}`, retainedEarningsExpanded);
+  }
+  
+  function setMode(mode: ReportMode) {
+    reportMode = mode;
+    saveViewState(`accounts-mode-${entityId}`, mode);
+  }
+  
+  // Helper functions
   function getAccountsForGroup(groupId: string) {
     return $accounts.filter(a => a.accountGroupId === groupId);
   }
   
-  // Get balance for an account from balance data
   function getAccountBalance(accountId: string): number {
     if (!balanceData) return 0;
     const ab = balanceData.accountBalances.find(b => b.accountId === accountId);
     return ab?.balance ?? 0;
   }
   
-  // Get total for a group
   function getGroupTotal(groupId: string): number {
     if (!balanceData) return 0;
     const gb = balanceData.groupBalances.find(b => b.groupId === groupId);
     return gb?.balance ?? 0;
   }
   
-  // Get type total
   function getTypeTotal(type: AccountType): number {
     if (!balanceData) return 0;
     switch (type) {
@@ -112,9 +162,25 @@
     }
   }
   
-  // Format currency
+  // Retained Earnings = Net Income (calculated)
+  // For now, use total equity as it includes retained earnings
+  let retainedEarnings = $derived(balanceData?.totalEquity ?? 0);
+  
+  // Verification: Assets should equal Liabilities + Equity
+  let liabilitiesPlusEquity = $derived(
+    balanceData ? balanceData.totalLiabilities + balanceData.totalEquity : 0
+  );
+  
+  let isBalanced = $derived(
+    !balanceData || Math.abs(balanceData.totalAssets - liabilitiesPlusEquity) < 0.01
+  );
+  
+  let imbalanceAmount = $derived(
+    balanceData ? balanceData.totalAssets - liabilitiesPlusEquity : 0
+  );
+  
   function formatCurrency(amount: number, unit: string = 'USD'): string {
-    const value = amount / 100; // Assuming cents
+    const value = amount / 100;
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: unit,
@@ -130,10 +196,41 @@
       <h1>{entity?.name ?? $t('common.loading')}</h1>
     </div>
     
-    <div class="header-right">
-      <span class="as-of">{$t('accounts.as_of')}: {new Date().toLocaleDateString()}</span>
+    <div class="header-controls">
+      <!-- Mode selector -->
+      <div class="mode-selector">
+        <label for="mode-select">{$t('accounts.mode')}:</label>
+        <select id="mode-select" bind:value={reportMode} onchange={() => setMode(reportMode)}>
+          <option value="balance_sheet">{$t('accounts.mode_balance_sheet')}</option>
+          <option value="trial_balance">{$t('accounts.mode_trial_balance')}</option>
+          <option value="income_statement">{$t('accounts.mode_income_statement')}</option>
+          <option value="cash_flow">{$t('accounts.mode_cash_flow')}</option>
+          <option value="custom">{$t('accounts.mode_custom')}</option>
+        </select>
+      </div>
+      
+      <!-- Date picker -->
+      <div class="date-picker">
+        <label for="as-of-date">{$t('accounts.as_of')}:</label>
+        <input 
+          type="date" 
+          id="as-of-date"
+          bind:value={asOfDate}
+          onchange={handleDateChange}
+        />
+      </div>
     </div>
   </header>
+  
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <button class="btn-tool" onclick={expandAll}>
+      {$t('common.expand_all')}
+    </button>
+    <button class="btn-tool" onclick={collapseAll}>
+      {$t('common.collapse_all')}
+    </button>
+  </div>
   
   {#if !entity}
     <div class="loading">{$t('common.loading')}</div>
@@ -146,7 +243,7 @@
     </div>
   {:else}
     <div class="accounts-grid">
-      {#each balanceSheetTypes as type}
+      {#each visibleTypes as type}
         {@const topGroups = $topLevelGroupsByType.get(type) || []}
         {@const info = typeInfo[type]}
         {@const typeTotal = getTypeTotal(type)}
@@ -164,28 +261,22 @@
               {@const hasKids = children.length > 0}
               {@const groupAccounts = getAccountsForGroup(group.id)}
               {@const hasAccounts = groupAccounts.length > 0 || children.some(c => getAccountsForGroup(c.id).length > 0)}
-              {@const isExpanded = expandedGroups.has(group.id)}
+              {@const isExpanded = expandedGroups[group.id] ?? false}
               {@const groupTotal = getGroupTotal(group.id)}
               
               {#if hasAccounts || hasKids}
                 <div class="group-item">
                   <button 
-                    class="group-row"
-                    class:expandable={hasKids || groupAccounts.length > 0}
+                    class="group-row expandable"
                     onclick={() => toggleGroup(group.id)}
                   >
-                    {#if hasKids || groupAccounts.length > 0}
-                      <span class="expand-icon">{isExpanded ? '▼' : '▶'}</span>
-                    {:else}
-                      <span class="expand-icon"></span>
-                    {/if}
+                    <span class="expand-icon">{isExpanded ? '▼' : '▶'}</span>
                     <span class="group-name">{group.name}</span>
                     <span class="group-total">{formatCurrency(groupTotal, entity.baseUnit)}</span>
                   </button>
                   
                   {#if isExpanded}
                     <div class="group-contents">
-                      <!-- Direct accounts in this group -->
                       {#each groupAccounts as account}
                         <div class="account-row">
                           <span class="account-code">{account.code || ''}</span>
@@ -194,7 +285,6 @@
                         </div>
                       {/each}
                       
-                      <!-- Child groups -->
                       {#each children as child}
                         {@const childAccounts = getAccountsForGroup(child.id)}
                         {@const childTotal = getGroupTotal(child.id)}
@@ -220,17 +310,91 @@
                 </div>
               {/if}
             {/each}
+            
+            <!-- Retained Earnings (pseudo-account under Equity) -->
+            {#if type === 'EQUITY' && (reportMode === 'balance_sheet' || reportMode === 'trial_balance')}
+              <div class="group-item retained-earnings">
+                <button 
+                  class="group-row expandable"
+                  onclick={toggleRetainedEarnings}
+                >
+                  {#if reportMode === 'trial_balance'}
+                    <span class="expand-icon">{retainedEarningsExpanded ? '▼' : '▶'}</span>
+                  {:else}
+                    <span class="expand-icon"></span>
+                  {/if}
+                  <span class="group-name">{$t('accounts.retained_earnings')}</span>
+                  <span class="group-total">{formatCurrency(retainedEarnings, entity.baseUnit)}</span>
+                </button>
+                
+                {#if reportMode === 'trial_balance' && retainedEarningsExpanded}
+                  <div class="group-contents re-breakdown">
+                    <!-- Income section -->
+                    <div class="re-type-section">
+                      <div class="re-type-header">{$t('account_types.INCOME')}</div>
+                      {#each $topLevelGroupsByType.get('INCOME') || [] as group}
+                        {#each getAccountsForGroup(group.id) as account}
+                          <div class="account-row child">
+                            <span class="account-code">{account.code || ''}</span>
+                            <span class="account-name">{account.name}</span>
+                            <span class="account-balance">{formatCurrency(getAccountBalance(account.id), account.unit)}</span>
+                          </div>
+                        {/each}
+                      {/each}
+                    </div>
+                    
+                    <!-- Expense section -->
+                    <div class="re-type-section">
+                      <div class="re-type-header">{$t('account_types.EXPENSE')}</div>
+                      {#each $topLevelGroupsByType.get('EXPENSE') || [] as group}
+                        {#each getAccountsForGroup(group.id) as account}
+                          <div class="account-row child">
+                            <span class="account-code">{account.code || ''}</span>
+                            <span class="account-name">{account.name}</span>
+                            <span class="account-balance">{formatCurrency(getAccountBalance(account.id), account.unit)}</span>
+                          </div>
+                        {/each}
+                      {/each}
+                    </div>
+                  </div>
+                {/if}
+              </div>
+            {/if}
           </div>
         </section>
       {/each}
       
-      <!-- Net Worth -->
-      {#if balanceData}
-        <div class="net-worth-row">
-          <span class="net-worth-label">{$t('accounts.net_worth')}</span>
-          <span class="net-worth-value" class:negative={balanceData.netWorth < 0}>
-            {formatCurrency(balanceData.netWorth, entity.baseUnit)}
-          </span>
+      <!-- Footer: Net Worth and Verification -->
+      {#if balanceData && (reportMode === 'balance_sheet' || reportMode === 'trial_balance')}
+        <div class="footer-section">
+          <!-- Net Worth -->
+          <div class="net-worth-row">
+            <span class="net-worth-label">{$t('accounts.net_worth')}</span>
+            <span class="net-worth-value" class:negative={balanceData.netWorth < 0}>
+              {formatCurrency(balanceData.netWorth, entity.baseUnit)}
+            </span>
+          </div>
+          
+          <!-- Verification Line -->
+          <div class="verification-row" class:balanced={isBalanced} class:imbalanced={!isBalanced}>
+            <span class="verification-label">{$t('accounts.verification')}:</span>
+            <div class="verification-values">
+              <span class="verification-item">
+                {$t('account_types.ASSET')}: {formatCurrency(balanceData.totalAssets, entity.baseUnit)}
+              </span>
+              <span class="verification-equals">=</span>
+              <span class="verification-item">
+                {$t('accounts.liabilities_plus_equity')}: {formatCurrency(liabilitiesPlusEquity, entity.baseUnit)}
+              </span>
+              {#if isBalanced}
+                <span class="verification-status">✓ {$t('accounts.balanced')}</span>
+              {:else}
+                <span class="verification-status warning">
+                  ⚠ {$t('accounts.imbalance')}: {formatCurrency(imbalanceAmount, entity.baseUnit)}
+                </span>
+              {/if}
+            </div>
+          </div>
         </div>
       {/if}
     </div>
@@ -245,9 +409,9 @@
   
   .page-header {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
-    margin-bottom: var(--space-xl);
+    margin-bottom: var(--space-md);
     flex-wrap: wrap;
     gap: var(--space-md);
   }
@@ -273,9 +437,54 @@
     font-size: 1.5rem;
   }
   
-  .as-of {
+  .header-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--space-lg);
+    flex-wrap: wrap;
+  }
+  
+  .mode-selector,
+  .date-picker {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
     font-size: 0.875rem;
+  }
+  
+  .mode-selector label,
+  .date-picker label {
     color: var(--text-muted);
+  }
+  
+  .mode-selector select,
+  .date-picker input {
+    padding: var(--space-xs) var(--space-sm);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-primary);
+    font-size: 0.875rem;
+  }
+  
+  .toolbar {
+    display: flex;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+  }
+  
+  .btn-tool {
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+  
+  .btn-tool:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
   }
   
   .loading, .empty-state {
@@ -307,14 +516,8 @@
     font-weight: 600;
   }
   
-  .type-icon {
-    font-size: 1.1rem;
-  }
-  
-  .type-name {
-    flex: 1;
-  }
-  
+  .type-icon { font-size: 1.1rem; }
+  .type-name { flex: 1; }
   .type-total {
     font-family: var(--font-mono);
     font-size: 1rem;
@@ -329,9 +532,7 @@
     border-top: 1px solid var(--border-color);
   }
   
-  .group-item:first-child {
-    border-top: none;
-  }
+  .group-item:first-child { border-top: none; }
   
   .group-row {
     display: flex;
@@ -344,14 +545,10 @@
     color: var(--text-primary);
     text-align: left;
     font-size: 0.9rem;
-    cursor: default;
-  }
-  
-  .group-row.expandable {
     cursor: pointer;
   }
   
-  .group-row.expandable:hover {
+  .group-row:hover {
     background: var(--bg-hover);
   }
   
@@ -428,13 +625,44 @@
     color: var(--text-secondary);
   }
   
-  .child-group-name {
-    flex: 1;
-  }
-  
+  .child-group-name { flex: 1; }
   .child-group-total {
     font-family: var(--font-mono);
     font-size: 0.85rem;
+  }
+  
+  /* Retained Earnings styling */
+  .retained-earnings {
+    border-top: 2px solid var(--border-color);
+  }
+  
+  .retained-earnings .group-name {
+    font-style: italic;
+  }
+  
+  .re-breakdown {
+    padding: var(--space-sm) 0;
+  }
+  
+  .re-type-section {
+    margin-bottom: var(--space-sm);
+  }
+  
+  .re-type-header {
+    padding: var(--space-xs) var(--space-lg);
+    padding-left: calc(var(--space-lg) + 2rem);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  
+  /* Footer section */
+  .footer-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
   }
   
   .net-worth-row {
@@ -457,5 +685,55 @@
   .net-worth-value.negative {
     color: var(--danger);
   }
+  
+  .verification-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-md) var(--space-lg);
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    font-size: 0.875rem;
+  }
+  
+  .verification-row.balanced {
+    border-color: var(--success, #22c55e);
+  }
+  
+  .verification-row.imbalanced {
+    border-color: var(--warning, #f59e0b);
+    background: rgba(245, 158, 11, 0.05);
+  }
+  
+  .verification-label {
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+  
+  .verification-values {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex: 1;
+    flex-wrap: wrap;
+  }
+  
+  .verification-item {
+    font-family: var(--font-mono);
+  }
+  
+  .verification-equals {
+    color: var(--text-muted);
+  }
+  
+  .verification-status {
+    margin-left: auto;
+    font-weight: 500;
+    color: var(--success, #22c55e);
+  }
+  
+  .verification-status.warning {
+    color: var(--warning, #f59e0b);
+  }
 </style>
-

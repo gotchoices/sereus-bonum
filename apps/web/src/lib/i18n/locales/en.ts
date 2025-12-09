@@ -98,6 +98,8 @@ export default {
     view: 'View Accounts',
     import_transactions: 'Import Transactions',
     as_of: 'As of',
+    from_date: 'From',
+    to_date: 'To',
     balance: 'Balance',
     code: 'Code',
     name: 'Name',
@@ -105,6 +107,18 @@ export default {
     create_prompt: 'Create accounts or import from another program',
     net_worth: 'Net Worth',
     total: 'Total',
+    retained_earnings: 'Retained Earnings',
+    verification: 'Verification',
+    balanced: 'Balanced',
+    imbalance: 'Imbalance',
+    liabilities_plus_equity: 'Liabilities + Equity',
+    // Report modes
+    mode: 'Mode',
+    mode_balance_sheet: 'Balance Sheet',
+    mode_trial_balance: 'Trial Balance',
+    mode_income_statement: 'Income Statement',
+    mode_cash_flow: 'Cash Flow',
+    mode_custom: 'Custom',
   },
   
   ledger: {
