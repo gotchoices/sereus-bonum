@@ -26,11 +26,12 @@
 - Check balance calculation logic
 - Verify beginning balance entries
 
-#### ❓ Clarify Trial Balance vs Balance Sheet
-**Issue:** Stories unclear on Retained Earnings display differences
-- Balance Sheet: Single RE line under Equity
-- Trial Balance: RE expandable to show Income/Expense
-- Need to refine stories 01 and 04
+#### ✅ Clarify Trial Balance vs Balance Sheet
+**Resolution:** Stories and specs updated
+- Balance Sheet: Shows A/L/E only, RE expandable under Equity to show I/E subcategories
+- Trial Balance: Shows all 5 types (A/L/E/I/E) at top level, no RE expansion needed
+- Income Statement: Shows I/E with Net Income calculation line
+- Updated: Story 04, `design/specs/web/screens/accounts-view.md`
 
 #### ⬜ Income Statement Date Range
 **Issue:** Income Statement requires From/To dates, not single "As of"
@@ -51,6 +52,8 @@
 From story 01 (Alt D):
 - Light/dark mode toggle
 - Language selection
+- Date format preference (US: MM/DD/YYYY, European: DD/MM/YYYY, ISO: YYYY-MM-DD)
+- Account display format (Code only, Name only, Full path, Code: Name)
 - Sereus node configuration (future)
 
 #### ⬜ Collapsible Global Menu

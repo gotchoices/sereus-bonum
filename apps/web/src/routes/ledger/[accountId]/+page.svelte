@@ -4,8 +4,8 @@
   import { t } from '$lib/i18n';
   import { log } from '$lib/logger';
   import { entities } from '$lib/stores/entities';
-  import { accounts } from '$lib/stores/accounts';
-  import { getDataService, type LedgerEntry, type Account, type Unit } from '$lib/data';
+  import { accounts, accountGroups } from '$lib/stores/accounts';
+  import { getDataService, type LedgerEntry, type Account, type Unit, type AccountGroup, type Entity } from '$lib/data';
   
   // Route param
   let accountId = $derived($page.params.accountId);
@@ -13,6 +13,8 @@
   // Account info
   let account: Account | null = $state(null);
   let unit: Unit | null = $state(null);
+  let entity: Entity | null = $state(null);
+  let accountGroup: AccountGroup | null = $state(null);
   
   // Ledger data
   let entries: LedgerEntry[] = $state([]);
@@ -57,6 +59,12 @@
         return;
       }
       
+      // Get entity info
+      entity = await ds.getEntity(account.entityId);
+      
+      // Get account group info
+      accountGroup = await ds.getAccountGroup(account.accountGroupId);
+      
       // Get unit info
       unit = await ds.getUnit(account.unit);
       
@@ -70,6 +78,24 @@
     } finally {
       loading = false;
     }
+  }
+  
+  // Build full account path
+  function getAccountPath(): string {
+    if (!accountGroup) return account?.name ?? '';
+    
+    // Get account type name
+    const typeName = accountGroup.accountType;
+    const typeLabel = {
+      'ASSET': 'Assets',
+      'LIABILITY': 'Liabilities',
+      'EQUITY': 'Equity',
+      'INCOME': 'Income',
+      'EXPENSE': 'Expenses',
+    }[typeName] || typeName;
+    
+    // Build path: Type : Group : Account
+    return `${typeLabel} : ${accountGroup.name} : ${account?.name ?? ''}`;
   }
   
   // Format amount for display
@@ -185,9 +211,6 @@
       saveEntry();
     }
   }
-  
-  // Get entity for back link
-  let entity = $derived($entities.find(e => e.id === account?.entityId));
 </script>
 
 <div class="ledger-page">
@@ -201,10 +224,15 @@
     
     {#if account}
       <div class="account-info">
-        <h1>{account.name}</h1>
-        <span class="account-meta">
-          {account.code ? `${account.code} • ` : ''}{unit?.symbol ?? account.unit}
-        </span>
+        {#if entity}
+          <div class="entity-breadcrumb">
+            {entity.name} › {getAccountPath()}
+          </div>
+        {/if}
+        <div class="account-details">
+          <span class="account-code">{account.code || ''}</span>
+          <span class="account-unit">{unit?.symbol ?? account.unit}</span>
+        </div>
       </div>
       
       <div class="balance-display">
@@ -286,7 +314,13 @@
                   <td></td>
                   <td class="split-note">{split.note ?? ''}</td>
                   <td class="split-account">
-                    ↳ <a href="/ledger/{split.accountId}" class="split-account-link">{split.accountName}</a>
+                    ↳ <a 
+                      href="/ledger/{split.accountId}" 
+                      class="split-account-link"
+                      title={split.accountPath}
+                    >
+                      {split.accountName}
+                    </a>
                   </td>
                   <td class="col-debit amount">
                     {split.amount > 0 ? formatAmount(split.amount) : ''}
@@ -408,16 +442,31 @@
   
   .account-info {
     flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
   }
   
-  .account-info h1 {
-    margin: 0;
-    font-size: 1.25rem;
+  .entity-breadcrumb {
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    line-height: 1.4;
   }
   
-  .account-meta {
-    font-size: 0.875rem;
+  .account-details {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: 0.8125rem;
     color: var(--text-muted);
+  }
+  
+  .account-code {
+    font-family: var(--font-mono);
+  }
+  
+  .account-unit {
+    font-weight: 500;
   }
   
   .balance-display {

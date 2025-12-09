@@ -96,7 +96,7 @@
       case 'balance_sheet':
         return ['ASSET', 'LIABILITY', 'EQUITY'];
       case 'trial_balance':
-        return ['ASSET', 'LIABILITY', 'EQUITY']; // Income/Expense shown under RE
+        return ['ASSET', 'LIABILITY', 'EQUITY', 'INCOME', 'EXPENSE']; // All 5 at top level
       case 'income_statement':
         return ['INCOME', 'EXPENSE'];
       default:
@@ -105,6 +105,9 @@
   }
   
   let visibleTypes = $derived(getVisibleTypes());
+  
+  // Should we show RE under Equity? (Balance Sheet mode only)
+  let showRetainedEarningsInEquity = $derived(reportMode === 'balance_sheet');
   
   // Expand/collapse functions
   function toggleGroup(groupId: string) {
@@ -162,9 +165,29 @@
     }
   }
   
-  // Retained Earnings = Net Income (calculated)
-  // For now, use total equity as it includes retained earnings
-  let retainedEarnings = $derived(balanceData?.totalEquity ?? 0);
+  // Calculate Net Income and Retained Earnings
+  // Net Income = Total Income - Total Expenses (in our signed system, Income is negative, Expense is positive)
+  // So: Net Income = -Income - Expense (converts to positive net income when income > expenses)
+  
+  function calculateNetIncome(): number {
+    if (!balanceData) return 0;
+    
+    // Get income and expense totals from balance data
+    const incomeTotal = balanceData.groupBalances
+      .filter(g => g.accountType === 'INCOME')
+      .reduce((sum, g) => sum + g.balance, 0);
+    
+    const expenseTotal = balanceData.groupBalances
+      .filter(g => g.accountType === 'EXPENSE')
+      .reduce((sum, g) => sum + g.balance, 0);
+    
+    // Income is credit (negative), Expense is debit (positive)
+    // Net Income = -Income - Expense (e.g., -(-50000) - 20000 = 30000)
+    return -incomeTotal - expenseTotal;
+  }
+  
+  let netIncome = $derived(calculateNetIncome());
+  let retainedEarnings = $derived(netIncome); // RE is the accumulated net income
   
   // Verification: Assets should equal Liabilities + Equity
   let liabilitiesPlusEquity = $derived(
@@ -311,23 +334,19 @@
               {/if}
             {/each}
             
-            <!-- Retained Earnings (pseudo-account under Equity) -->
-            {#if type === 'EQUITY' && (reportMode === 'balance_sheet' || reportMode === 'trial_balance')}
+            <!-- Retained Earnings (pseudo-account under Equity) - Balance Sheet mode only -->
+            {#if type === 'EQUITY' && showRetainedEarningsInEquity}
               <div class="group-item retained-earnings">
                 <button 
                   class="group-row expandable"
                   onclick={toggleRetainedEarnings}
                 >
-                  {#if reportMode === 'trial_balance'}
-                    <span class="expand-icon">{retainedEarningsExpanded ? '▼' : '▶'}</span>
-                  {:else}
-                    <span class="expand-icon"></span>
-                  {/if}
+                  <span class="expand-icon">{retainedEarningsExpanded ? '▼' : '▶'}</span>
                   <span class="group-name">{$t('accounts.retained_earnings')}</span>
                   <span class="group-total">{formatCurrency(retainedEarnings, entity.baseUnit)}</span>
                 </button>
                 
-                {#if reportMode === 'trial_balance' && retainedEarningsExpanded}
+                {#if retainedEarningsExpanded}
                   <div class="group-contents re-breakdown">
                     <!-- Income section -->
                     <div class="re-type-section">
@@ -364,37 +383,60 @@
         </section>
       {/each}
       
-      <!-- Footer: Net Worth and Verification -->
-      {#if balanceData && (reportMode === 'balance_sheet' || reportMode === 'trial_balance')}
+      <!-- Footer: Mode-specific summaries -->
+      {#if balanceData}
         <div class="footer-section">
-          <!-- Net Worth -->
-          <div class="net-worth-row">
-            <span class="net-worth-label">{$t('accounts.net_worth')}</span>
-            <span class="net-worth-value" class:negative={balanceData.netWorth < 0}>
-              {formatCurrency(balanceData.netWorth, entity.baseUnit)}
-            </span>
-          </div>
           
-          <!-- Verification Line -->
-          <div class="verification-row" class:balanced={isBalanced} class:imbalanced={!isBalanced}>
-            <span class="verification-label">{$t('accounts.verification')}:</span>
-            <div class="verification-values">
-              <span class="verification-item">
-                {$t('account_types.ASSET')}: {formatCurrency(balanceData.totalAssets, entity.baseUnit)}
+          <!-- Balance Sheet & Trial Balance: Net Worth + Verification -->
+          {#if reportMode === 'balance_sheet' || reportMode === 'trial_balance'}
+            <div class="net-worth-row">
+              <span class="net-worth-label">{$t('accounts.net_worth')}</span>
+              <span class="net-worth-value" class:negative={balanceData.netWorth < 0}>
+                {formatCurrency(balanceData.netWorth, entity.baseUnit)}
               </span>
-              <span class="verification-equals">=</span>
-              <span class="verification-item">
-                {$t('accounts.liabilities_plus_equity')}: {formatCurrency(liabilitiesPlusEquity, entity.baseUnit)}
-              </span>
-              {#if isBalanced}
-                <span class="verification-status">✓ {$t('accounts.balanced')}</span>
-              {:else}
-                <span class="verification-status warning">
-                  ⚠ {$t('accounts.imbalance')}: {formatCurrency(imbalanceAmount, entity.baseUnit)}
-                </span>
-              {/if}
             </div>
-          </div>
+            
+            <div class="verification-row" class:balanced={isBalanced} class:imbalanced={!isBalanced}>
+              <span class="verification-label">{$t('accounts.verification')}:</span>
+              <div class="verification-values">
+                <span class="verification-item">
+                  {$t('account_types.ASSET')}: {formatCurrency(balanceData.totalAssets, entity.baseUnit)}
+                </span>
+                <span class="verification-equals">=</span>
+                <span class="verification-item">
+                  {$t('accounts.liabilities_plus_equity')}: {formatCurrency(liabilitiesPlusEquity, entity.baseUnit)}
+                </span>
+                {#if isBalanced}
+                  <span class="verification-status">✓ {$t('accounts.balanced')}</span>
+                {:else}
+                  <span class="verification-status warning">
+                    ⚠ {$t('accounts.imbalance')}: {formatCurrency(imbalanceAmount, entity.baseUnit)}
+                  </span>
+                {/if}
+              </div>
+            </div>
+          {/if}
+          
+          <!-- Income Statement: Net Income Line -->
+          {#if reportMode === 'income_statement'}
+            <div class="net-income-row">
+              <div class="net-income-calculation">
+                <span class="calc-label">{$t('account_types.INCOME')}:</span>
+                <span class="calc-value">{formatCurrency(-getTypeTotal('INCOME'), entity.baseUnit)}</span>
+              </div>
+              <div class="net-income-calculation">
+                <span class="calc-label">{$t('account_types.EXPENSE')}:</span>
+                <span class="calc-value">({formatCurrency(getTypeTotal('EXPENSE'), entity.baseUnit)})</span>
+              </div>
+              <div class="net-income-total">
+                <span class="total-label">{$t('accounts.net_income')}</span>
+                <span class="total-value" class:negative={netIncome < 0}>
+                  {formatCurrency(netIncome, entity.baseUnit)}
+                </span>
+              </div>
+            </div>
+          {/if}
+          
         </div>
       {/if}
     </div>
@@ -735,5 +777,46 @@
   
   .verification-status.warning {
     color: var(--warning, #f59e0b);
+  }
+  
+  /* Net Income (Income Statement mode) */
+  .net-income-row {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding: var(--space-lg);
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+  }
+  
+  .net-income-calculation {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+  }
+  
+  .calc-value {
+    font-family: var(--font-mono);
+  }
+  
+  .net-income-total {
+    display: flex;
+    justify-content: space-between;
+    padding-top: var(--space-sm);
+    margin-top: var(--space-sm);
+    border-top: 2px solid var(--border-color);
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+  
+  .total-value {
+    font-family: var(--font-mono);
+    color: var(--success, #22c55e);
+  }
+  
+  .total-value.negative {
+    color: var(--danger, #ef4444);
   }
 </style>

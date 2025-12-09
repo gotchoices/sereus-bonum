@@ -15,31 +15,108 @@ The view supports multiple modes, selectable via a mode dropdown:
 
 | Mode | Shows | Date Input | Notes |
 |------|-------|------------|-------|
-| **Balance Sheet** | Assets, Liabilities, Equity | Single date (as of) | Default mode |
-| **Trial Balance** | A/L/E + expandable Retained Earnings | Date range | Shows Income/Expense when expanded |
-| **Income Statement** | Income, Expenses only | Date range | Shows Net Income at bottom |
+| **Balance Sheet** | Assets, Liabilities, Equity | Single date (as of) | I/E rolled into RE under Equity (expandable) |
+| **Trial Balance** | All 5 types (A/L/E/I/E) | Date range | All sections visible at top level |
+| **Income Statement** | Income, Expenses only | Date range | Net Income line at bottom |
 | **Cash Flow** | Pre-selected groups | Date range | Operating, Investing, Financing |
 | **Custom** | User-selected groups | Depends on groups | Checkbox per group |
 
 ---
 
-## Retained Earnings
+## Balance Sheet Mode
 
-**Retained Earnings is a pseudo-account.** It does not exist in the database as a real account.
+**Purpose:** Financial position snapshot at a specific point in time
 
-**Calculation:**
+**Shows:** Assets, Liabilities, Equity sections
+
+**Date:** Single "as of" date
+
+**Retained Earnings:**
+- Appears as a line under Equity section
+- Shows calculated value: `(Income - Expenses)` from inception to "as of" date
+- Has expand/collapse toggle
+- When expanded: Shows Income and Expense as subcategories beneath it
+- When collapsed: Shows single RE line with net figure
+
+**Example (collapsed):**
 ```
-Retained Earnings = (Total Income - Total Expenses) 
-                    from Entity inception through Balance Sheet ending date
+EQUITY
+├─ Owner's Capital          $80,000
+├─ Retained Earnings        $40,000
+└─ Total Equity            $120,000
 ```
 
-**Behavior:**
-- Always displayed under Equity section in Balance Sheet and Trial Balance modes
-- In Trial Balance mode: has expand/collapse toggle
-- When expanded: shows Income and Expense account groups as children
-- When collapsed: shows single "Retained Earnings" line with computed total
+**Example (expanded):**
+```
+EQUITY
+├─ Owner's Capital                    $80,000
+├─▼ Retained Earnings                 $40,000
+│   ├─ Income (total)               ($60,000)  ← Credits shown as negative
+│   │   ├─ Service Revenue          ($50,000)
+│   │   └─ Interest Income          ($10,000)
+│   └─ Expenses (total)               $20,000  ← Debits shown as positive
+│       ├─ Rent                       $12,000
+│       └─ Utilities                   $8,000
+└─ Total Equity                      $120,000
+```
 
-**Note:** For a date range report, Retained Earnings is still calculated from inception to the ending date (not just the date range). Income/Expense shown underneath are for the date range.
+---
+
+## Trial Balance Mode
+
+**Purpose:** Verification and detailed review of all accounts
+
+**Shows:** All five account types as separate top-level sections:
+- Assets
+- Liabilities  
+- Equity
+- Income
+- Expenses
+
+**Date:** Date range (From/To)
+- A/L/E balances shown as of the "To" date
+- Income/Expense totals for the date range
+
+**Key Difference from Balance Sheet:** Income and Expense are NOT hidden under Equity. They appear as their own top-level sections, making all activity visible at once.
+
+**Why date range?** Income and Expense are period-based. For proper verification, you need to see them for a specific period (e.g., "fiscal year to date").
+
+**Retained Earnings in Trial Balance:**
+- Still appears as a line under Equity
+- Shows the net accumulation from inception through the "To" date
+- Does NOT expand (Income/Expense already visible as top-level sections)
+
+---
+
+## Income Statement Mode
+
+**Purpose:** Profit & Loss report
+
+**Shows:** Income and Expense sections only (A/L/E hidden)
+
+**Date:** Date range (From/To)
+
+**Net Income Line:**
+At the bottom, show calculated line:
+```
+Net Income: Total Income - Total Expenses = $XXX,XXX
+```
+
+Example:
+```
+INCOME
+├─ Service Revenue          $50,000
+├─ Interest Income          $10,000
+└─ Total Income             $60,000
+
+EXPENSES
+├─ Rent                     $12,000
+├─ Utilities                 $8,000
+└─ Total Expenses           $20,000
+
+─────────────────────────────────────
+Net Income                  $40,000
+```
 
 ---
 
