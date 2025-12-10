@@ -170,5 +170,49 @@ export default {
     balanced: 'Balanced',
     imbalance: 'Imbalance',
   },
+  
+  settings: {
+    title: 'Settings',
+    back_to_home: 'Back to Home',
+    display_prefs: 'Display Preferences',
+    accounting_prefs: 'Accounting Preferences',
+    network: 'Network',
+    // Theme
+    theme: 'Theme',
+    theme_light: 'Light',
+    theme_dark: 'Dark',
+    theme_system: 'System',
+    // Language
+    language: 'Language',
+    language_english: 'English',
+    // Date format
+    date_format: 'Date Format',
+    date_format_us: 'US (MM/DD/YYYY)',
+    date_format_eu: 'European (DD/MM/YYYY)',
+    date_format_iso: 'ISO (YYYY-MM-DD)',
+    date_format_preview: 'Today',
+    // Account display
+    account_display: 'Account Display',
+    account_display_code: 'Code only',
+    account_display_name: 'Name only',
+    account_display_path: 'Full path',
+    account_display_code_name: 'Code: Name',
+    // Sign reversal
+    sign_reversal: 'Show positive amounts for:',
+    sign_reversal_equity: 'Equity accounts',
+    sign_reversal_income: 'Income accounts',
+    sign_reversal_liability: 'Liability accounts',
+    sign_reversal_note: 'By default, credits are negative (accounting convention). Check boxes above to reverse signs for display only.',
+    // Network
+    sereus_node: 'Sereus Node',
+    node_not_configured: 'Not configured',
+    node_configure: 'Configure...',
+    node_status: 'Status',
+    node_offline: 'Offline (using local only)',
+    // Actions
+    save: 'Save',
+    cancel: 'Cancel',
+    setting_saved: 'Setting saved',
+  },
 } as const;
 

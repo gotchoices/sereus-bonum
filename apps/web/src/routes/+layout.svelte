@@ -3,6 +3,7 @@
   import { browser } from '$app/environment';
   import { initializeEntities } from '$lib/stores/entities';
   import { loadAccountGroups } from '$lib/stores/accounts';
+  import { settings } from '$lib/stores/settings';
   import { t } from '$lib/i18n';
   import { log } from '$lib/logger';
   import '../app.css';
@@ -18,6 +19,9 @@
     if (browser && !initStarted) {
       initStarted = true;
       console.log('[Layout] $effect running, starting init...');
+      
+      // Load settings first (synchronous from localStorage)
+      settings.load();
       
       Promise.all([
         initializeEntities(),

@@ -13,7 +13,7 @@
 - ✅ Ledger (transaction entry)
 - ✅ Transaction Search (Phase 1: Browser with export)
 - ⬜ Transaction Search (Phase 2: Query builder)
-- ⬜ Settings screen
+- ✅ Settings screen (theme, dates, account display, sign reversal)
 - ⬜ Import Books (GnuCash)
 
 ---
@@ -87,20 +87,23 @@
 - ⬜ VBS click-through (future enhancement)
 - ⬜ Search results (when implemented)
 
-#### ⬜ Settings Screen (PRIORITY BUMPED)
-**Priority elevated due to dark theme usability issues**
+#### ✅ Settings Screen (Complete)
+**Implemented with auto-save behavior**
 
-From story 01 (Alt D):
-- Light/dark mode toggle (explicit override for system preference)
-- Language selection
-- Date format preference (US: MM/DD/YYYY, European: DD/MM/YYYY, ISO: YYYY-MM-DD)
-- Account display format (Code only, Name only, Full path, Code: Name)
-- Sereus node configuration (future)
+Features implemented:
+- ✅ Light/dark/system theme toggle (immediate effect)
+- ✅ Language selector (English only for MVP, dropdown ready for future)
+- ✅ Date format (US/EU/ISO with live preview)
+- ✅ Account display format (Code/Name/Path/Code: Name)
+- ✅ Sign reversal for Equity/Income/Liability (display only)
+- ✅ Sereus node placeholder (future feature)
+- ✅ Settings persist in localStorage
+- ✅ Auto-load on app startup
 
-**Dark theme improvements needed:**
+**Dark theme improvements:**
 - ✅ Better contrast for disabled elements (improved in Accounts View)
-- ⬜ Improve global `text-muted` color
-- ⬜ More visible borders and separators
+- ✅ Improved global `text-muted` color (#6e7a8a)
+- ✅ More visible borders (#3d4751)
 - ⬜ Test all screens in both themes
 - ⬜ Consider separate dark theme color palette
 
