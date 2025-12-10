@@ -609,20 +609,29 @@ class SqliteDataService implements DataService {
       }
     }
     
-    // Net income flows to equity
-    const netIncome = -totalIncome - totalExpense; // Income is credit (negative), expense is debit (positive)
-    const adjustedEquity = -totalLiabilities + totalEquity + netIncome; // Liabilities are credit (negative)
+    // Calculate net income (Income - Expense)
+    // Income is credit (negative), Expense is debit (positive)
+    // Net Income = -totalIncome - totalExpense
+    const netIncome = -totalIncome - totalExpense;
     
-    // Net worth = Assets - Liabilities (in debit/credit terms, assets are positive, liabilities negative)
-    const netWorth = totalAssets + totalLiabilities; // Liabilities already negative
+    // Net worth = Assets - Liabilities
+    // (Liabilities are negative in our system, so we add them)
+    const netWorth = totalAssets + totalLiabilities;
+    
+    // For display purposes:
+    // - totalEquity returns ONLY equity accounts (not including net income)
+    // - Frontend will add Retained Earnings (net income) when displaying Balance Sheet
+    // - Liabilities and Equity are displayed as positive (absolute value)
     
     return {
       entityId,
       asOf: dateFilter,
       netWorth,
       totalAssets,
-      totalLiabilities: Math.abs(totalLiabilities),  // Display as positive
-      totalEquity: Math.abs(adjustedEquity),
+      totalLiabilities: Math.abs(totalLiabilities),
+      totalEquity: Math.abs(totalEquity),  // Only equity accounts, no net income
+      totalIncome: Math.abs(totalIncome),   // Add for frontend use
+      totalExpense,                         // Add for frontend use
       groupBalances: Array.from(groupTotals.values()),
       accountBalances,
     };

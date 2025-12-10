@@ -152,7 +152,9 @@ export interface BalanceSheetData {
   netWorth: number;
   totalAssets: number;
   totalLiabilities: number;
-  totalEquity: number;
+  totalEquity: number;        // Equity accounts only (not including net income)
+  totalIncome: number;        // For calculating retained earnings
+  totalExpense: number;       // For calculating retained earnings
   groupBalances: GroupBalance[];
   accountBalances: AccountBalance[];
 }

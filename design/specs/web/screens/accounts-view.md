@@ -1,295 +1,253 @@
-# Spec: Accounts View
+# Entity Accounts View Specification
 
-**Route:** `/entities/[id]`
-**Stories:** 01-firstlook (step 6.5), 03-entries (step 2-4), 04-reporting (all)
+**Route:** `/entities/[id]`  
+**Stories:** [01-firstlook.md](../../../stories/web/01-firstlook.md), [04-reporting.md](../../../stories/web/04-reporting.md)
+
+---
 
 ## Purpose
 
-The Accounts View is the primary interface for viewing an entity's financial position. It displays accounts organized by type and group, with balances. It supports multiple report modes and date filtering.
+Display an entity's accounts in various reporting modes (Balance Sheet, Trial Balance, Income Statement, Cash Flow) with hierarchical grouping and expandable sections.
 
 ---
 
 ## Report Modes
 
-The view supports multiple modes, selectable via a mode dropdown:
+### Balance Sheet
+- **Purpose:** Snapshot of financial position at a point in time
+- **Date Input:** "As of" (single date, defaults to today)
+- **Accounts Shown:** Assets, Liabilities, Equity only
+- **Date Behavior:** All accounts cumulative from inception through "As of" date
+- **Income/Expense:** Rolled into Retained Earnings under Equity
+- **Retained Earnings:** Expandable to show I/E breakdown
 
-| Mode | Shows | Date Input | Notes |
-|------|-------|------------|-------|
-| **Balance Sheet** | Assets, Liabilities, Equity | Single date (as of) | I/E rolled into RE under Equity (expandable) |
-| **Trial Balance** | All 5 types (A/L/E/I/E) | Date range | All sections visible at top level |
-| **Income Statement** | Income, Expenses only | Date range | Net Income line at bottom |
-| **Cash Flow** | Pre-selected groups | Date range | Operating, Investing, Financing |
-| **Custom** | User-selected groups | Depends on groups | Checkbox per group |
+### Trial Balance
+- **Purpose:** Verify books are balanced, show all account types
+- **Date Input:** "As of" (single date) OR "Period" (start + end dates)
+- **Accounts Shown:** All 5 types (A/L/E/I/E) as separate sections
+- **Date Behavior:**
+  - **A/L/E:** Cumulative from inception through end date
+  - **I/E:** If period specified, sum for period; otherwise cumulative
+- **Verification:** Shows "Assets = Liabilities + Equity ✓" at bottom
+- **Use Case:** Month-end/year-end balancing, debugging
 
----
+### Income Statement (P&L)
+- **Purpose:** Show profitability over a period
+- **Date Input:** "Period" (start + end dates, both required)
+- **Accounts Shown:** Income and Expense only
+- **Date Behavior:** Sum entries within date range only
+- **Net Income:** Total Income - Total Expense at bottom
 
-## Balance Sheet Mode
+### Cash Flow Statement
+- **Purpose:** Track cash movements by activity type
+- **Date Input:** "Period" (start + end dates, both required)
+- **Accounts Shown:** Selected groups pre-categorized as Operating, Investing, Financing
+- **Date Behavior:** Sum entries within date range
+- **Special Logic:** Balance sheet accounts show change in balance, not cumulative
 
-**Purpose:** Financial position snapshot at a specific point in time
-
-**Shows:** Assets, Liabilities, Equity sections
-
-**Date:** Single "as of" date
-
-**Retained Earnings:**
-- Appears as a line under Equity section
-- Shows calculated value: `(Income - Expenses)` from inception to "as of" date
-- Has expand/collapse toggle
-- When expanded: Shows Income and Expense as subcategories beneath it
-- When collapsed: Shows single RE line with net figure
-
-**Example (collapsed):**
-```
-EQUITY
-├─ Owner's Capital          $80,000
-├─ Retained Earnings        $40,000
-└─ Total Equity            $120,000
-```
-
-**Example (expanded):**
-```
-EQUITY
-├─ Owner's Capital                    $80,000
-├─▼ Retained Earnings                 $40,000
-│   ├─ Income (total)               ($60,000)  ← Credits shown as negative
-│   │   ├─ Service Revenue          ($50,000)
-│   │   └─ Interest Income          ($10,000)
-│   └─ Expenses (total)               $20,000  ← Debits shown as positive
-│       ├─ Rent                       $12,000
-│       └─ Utilities                   $8,000
-└─ Total Equity                      $120,000
-```
+### Custom
+- **Purpose:** Ad-hoc reporting, user selects specific groups/accounts
+- **Date Input:** "As of" OR "Period" depending on selection
+- **Accounts Shown:** User-selected
+- **Date Behavior:** Hybrid (B/S accounts cumulative, I/E accounts period-based)
 
 ---
 
-## Trial Balance Mode
+## Date Handling Rules
 
-**Purpose:** Verification and detailed review of all accounts
+### Balance Sheet Accounts (A/L/E)
+**Always cumulative from inception:**
+```sql
+WHERE t.date <= asOfDate
+```
+- No start date
+- All transactions from the beginning of time through end date
 
-**Shows:** All five account types as separate top-level sections:
-- Assets
-- Liabilities  
-- Equity
-- Income
-- Expenses
+### Income Statement Accounts (I/E)
+**Period-based when report requires it:**
+```sql
+WHERE t.date >= startDate AND t.date <= endDate
+```
+- Requires both start and end dates
+- Only transactions within the range
 
-**Date:** Date range (From/To)
-- A/L/E balances shown as of the "To" date
-- Income/Expense totals for the date range
-
-**Key Difference from Balance Sheet:** Income and Expense are NOT hidden under Equity. They appear as their own top-level sections, making all activity visible at once.
-
-**Why date range?** Income and Expense are period-based. For proper verification, you need to see them for a specific period (e.g., "fiscal year to date").
-
-**Retained Earnings in Trial Balance:**
-- Still appears as a line under Equity
-- Shows the net accumulation from inception through the "To" date
-- Does NOT expand (Income/Expense already visible as top-level sections)
+### Mixed Reports (Trial Balance, Custom)
+- **Default behavior:** Cumulative (no start date)
+- **Optional period mode:** User specifies start + end dates
+  - A/L/E still cumulative through end date
+  - I/E filtered to period only
 
 ---
 
-## Income Statement Mode
+## UI Elements
 
-**Purpose:** Profit & Loss report
+### Report Mode Selector
+- Dropdown: Balance Sheet | Trial Balance | Income Statement | Cash Flow | Custom
+- Persisted per entity in `viewState`
 
-**Shows:** Income and Expense sections only (A/L/E hidden)
+### Date Inputs
 
-**Date:** Date range (From/To)
-
-**Net Income Line:**
-At the bottom, show calculated line:
+**For Balance Sheet & Trial Balance (default):**
 ```
-Net Income: Total Income - Total Expenses = $XXX,XXX
-```
-
-Example:
-```
-INCOME
-├─ Service Revenue          $50,000
-├─ Interest Income          $10,000
-└─ Total Income             $60,000
-
-EXPENSES
-├─ Rent                     $12,000
-├─ Utilities                 $8,000
-└─ Total Expenses           $20,000
-
-─────────────────────────────────────
-Net Income                  $40,000
+[As of: YYYY-MM-DD ▼]
 ```
 
----
-
-## Balance Verification Line
-
-Display a verification line at the bottom of Balance Sheet and Trial Balance modes:
-
+**For Income Statement & Cash Flow:**
 ```
-                             Assets    Liabilities + Equity
-Verification:              $150,000              $150,000 ✓
+[From: YYYY-MM-DD ▼]  [To: YYYY-MM-DD ▼]
 ```
 
-If values don't match, show warning:
+**For Trial Balance (period mode toggle):**
 ```
-Verification:              $150,000              $149,500 ⚠ Imbalance: $500
-```
-
-This helps users verify the accounting equation: **Assets = Liabilities + Equity**
-
----
-
-## Expand/Collapse Behavior
-
-### Per-Group Controls
-- Each account group has an expand/collapse toggle (▶/▼)
-- Clicking toggles visibility of accounts within that group
-
-### Global Controls
-Add toolbar buttons:
-- **Expand All** — Expands all groups
-- **Collapse All** — Collapses all groups
-
-### State Persistence
-
-**Key requirement:** Expand/collapse state persists across sessions.
-
-Implementation:
-- Store in localStorage: `bonum-expand-state-{entityId}`
-- Structure: `{ groupId: boolean, ... }`
-- When visiting entity's Accounts View, restore previous expand state
-- Default state: all collapsed
-
-**Pattern note:** This persistence pattern applies app-wide. Any user-customized view state should persist. Consider a generalized `ViewState` storage service.
-
----
-
-## Account Hyperlinks
-
-**From stories:** Story 02 (step 9.7), Story 03 (step 4)
-
-All account names displayed in the Accounts View should be hyperlinks to that account's ledger:
-
-| Location | Link Target |
-|----------|-------------|
-| Individual accounts in expanded groups | `/ledger/{accountId}` |
-| Child accounts in hierarchical groups | `/ledger/{accountId}` |
-| Income accounts (when RE expanded, Trial Balance) | `/ledger/{accountId}` |
-| Expense accounts (when RE expanded, Trial Balance) | `/ledger/{accountId}` |
-
-**Behavior:**
-- Click account name → Navigate to ledger in current window
-- Future enhancement: Ctrl/Cmd+Click → Open ledger in new window
-- Account code (if present) is not clickable, only the account name
-
-**Visual indicator:** Account names should appear as links (underline on hover, pointer cursor)
-
----
-
-## Date Selection
-
-### Balance Sheet Mode (single date)
-```
-As of: [December 31, 2024 ▼]
+☐ Period mode
+[From: YYYY-MM-DD ▼]  [To: YYYY-MM-DD ▼]
 ```
 
-### Trial Balance / Income Statement / Cash Flow (date range)
+### Display
+
+- **Account hierarchy:** Type → Group → Account
+- **Expand/collapse:** Per group, persisted
+- **"Expand All" / "Collapse All" buttons**
+- **Account hyperlinks:** Click account name → go to ledger
+
+### Verification Line (Trial Balance only)
+
+At the bottom:
 ```
-From: [January 1, 2024] To: [December 31, 2024]
+Assets $150,000 = Liabilities + Equity $150,000 ✓
 ```
 
-**Defaults:**
-- Balance Sheet: Today
-- Trial Balance: Current fiscal year (or Jan 1 to today if no fiscal year set)
-- Income Statement: Current fiscal year
-- Cash Flow: Current fiscal year
-
----
-
-## Multi-Column Reports
-
-From story 04 (Alt E):
-- "Add Column" button adds another date period
-- Each column has its own date range
-- Supports up to 12 columns (for monthly reports)
-- Optional variance columns ($ change, % change)
-
-**Deferred to future slice.**
-
----
-
-## Saved Reports
-
-From story 04:
-- User can save current configuration with a name
-- Saves: mode, date(s), expanded groups, selected groups (custom mode)
-- Reports recalled from a "Saved Reports" dropdown/list
-- Reports persist across sessions (localStorage or database)
-
-**Deferred to future slice.**
-
----
-
-## Print/PDF
-
-From story 04 (step 4):
-- Print icon renders current view to PDF
-- Opens in new browser tab for printing/saving
-- PDF should be clean, printable format
-
-**Deferred to future slice.**
-
----
-
-## Layout Refinement
-
+Or if imbalanced:
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ ← Back to Home                                                           │
-│                                                                          │
-│ Entity Name                                          [Mode: Balance ▼]  │
-│ As of: [December 31, 2024]                    [Expand All] [Collapse]   │
-├──────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│ ASSETS                                                        $150,000  │
-│ ├─▼ Current Assets                                             $50,000  │
-│ │    1010 Checking - Bank of America                           $25,000  │
-│ │    1020 Savings - Credit Union                               $25,000  │
-│ ├─▶ Fixed Assets                                              $100,000  │
-│                                                                          │
-│ LIABILITIES                                                    $30,000  │
-│ ├─▶ Current Liabilities                                        $10,000  │
-│ ├─▶ Long-term Liabilities                                      $20,000  │
-│                                                                          │
-│ EQUITY                                                        $120,000  │
-│ ├─▶ Owner's Capital                                            $80,000  │
-│ ├─▶ Retained Earnings                                          $40,000  │  ← Pseudo-account
-│                                                                          │
-├──────────────────────────────────────────────────────────────────────────┤
-│ NET WORTH (Assets - Liabilities)                              $120,000  │
-│                                                                          │
-│ Verification: Assets $150,000 = L+E $150,000 ✓                          │
-└──────────────────────────────────────────────────────────────────────────┘
+Assets $150,000 ≠ Liabilities + Equity $147,350 ⚠ Imbalance: $2,650
 ```
 
 ---
 
-## Acceptance Criteria
+## Backend Requirements
 
-### MVP (Current Slice)
-- [ ] Balance Sheet mode displays A/L/E with balances
-- [ ] Groups are expandable/collapsible
-- [ ] Expand/collapse state persists in localStorage
-- [ ] Expand All / Collapse All buttons work
-- [ ] Retained Earnings pseudo-account displays correctly
-- [ ] Verification line shows Assets = L + E comparison
-- [ ] Date picker changes balance calculations
+### DataService Method Signature (Updated)
 
-### Future Slices
-- [ ] Trial Balance mode with Retained Earnings expansion
-- [ ] Income Statement mode
-- [ ] Cash Flow mode
-- [ ] Custom mode with group selection
-- [ ] Multi-column comparison
-- [ ] Saved reports
-- [ ] Print/PDF export
+```typescript
+interface BalanceSheetOptions {
+  asOf: string;              // End date (YYYY-MM-DD)
+  startDate?: string;        // Optional start date for period-based
+  includeIncome?: boolean;   // Include I/E in result (default: true)
+  includeExpense?: boolean;  // Include I/E in result (default: true)
+}
 
+getBalanceSheet(entityId: string, options: BalanceSheetOptions): Promise<BalanceSheetData>
+```
+
+### SQL Query Logic
+
+```sql
+SELECT 
+  a.id, a.name, a.code,
+  g.id as group_id, g.name as group_name, g.account_type,
+  COALESCE(SUM(
+    CASE 
+      -- For B/S accounts: cumulative through asOf
+      WHEN g.account_type IN ('ASSET', 'LIABILITY', 'EQUITY') 
+        THEN e.amount
+      -- For I/E accounts: period-based if startDate provided
+      WHEN g.account_type IN ('INCOME', 'EXPENSE') 
+        AND ? IS NOT NULL  -- startDate parameter
+        THEN CASE WHEN t.date >= ? THEN e.amount ELSE 0 END
+      -- Otherwise cumulative
+      ELSE e.amount
+    END
+  ), 0) as balance
+FROM account a
+JOIN account_group g ON g.id = a.account_group_id
+LEFT JOIN entry e ON e.account_id = a.id
+LEFT JOIN txn t ON t.id = e.txn_id AND t.date <= ?  -- asOf date
+WHERE a.entity_id = ? AND a.is_active = 1
+GROUP BY a.id, a.name, a.code, g.id, g.name, g.account_type
+```
+
+---
+
+## Calculation Rules
+
+### Net Income
+```typescript
+// Income is stored as negative (credit), expense as positive (debit)
+const netIncome = Math.abs(totalIncome) - totalExpense;
+// OR: const netIncome = -totalIncome - totalExpense;
+```
+
+### Retained Earnings (Pseudo-Account)
+```typescript
+const retainedEarnings = netIncome; // For current period
+// Or cumulative: all I/E from inception
+```
+
+### Balance Verification
+```typescript
+const totalDebits = totalAssets + totalExpense;
+const totalCredits = Math.abs(totalLiabilities) + Math.abs(totalEquity) + Math.abs(totalIncome);
+const isBalanced = Math.abs(totalDebits - totalCredits) < 0.01;
+```
+
+---
+
+## Example Scenarios
+
+### Scenario 1: Balance Sheet as of Dec 31, 2024
+- Mode: Balance Sheet
+- Date: As of 2024-12-31
+- Query: All accounts, transactions ≤ 2024-12-31
+- Display: A/L/E only, I/E rolled into RE under Equity
+
+### Scenario 2: Trial Balance for December 2024
+- Mode: Trial Balance (period mode)
+- Dates: From 2024-12-01, To 2024-12-31
+- Query:
+  - A/L/E: cumulative through 2024-12-31
+  - I/E: only transactions in Dec 2024
+- Display: All 5 types, verification line
+
+### Scenario 3: Income Statement for Q4 2024
+- Mode: Income Statement
+- Dates: From 2024-10-01, To 2024-12-31
+- Query: I/E accounts only, transactions in Q4
+- Display: Income and Expense with Net Income at bottom
+
+---
+
+## Balance Verification Formula
+
+**Backend returns:**
+- `totalEquity` — equity accounts ONLY (does not include net income)
+- `totalIncome` — income accounts (positive value)
+- `totalExpense` — expense accounts (positive value)
+
+**Frontend calculates:**
+- Net Income = `totalIncome - totalExpense`
+- Retained Earnings = Net Income (accumulated)
+
+**Verification:**
+```typescript
+Assets = Liabilities + Equity + Net Income
+```
+
+**Why Net Income is added:**
+- Backend `totalEquity` does not include net income
+- In Balance Sheet mode, Retained Earnings is shown under Equity but needs to be added to verification
+- In Trial Balance mode, Income/Expense shown separately, but net income still needs to be added because Equity doesn't include it
+
+**Resolved Issues:**
+- ✅ Equity total now correctly includes Retained Earnings in Balance Sheet mode
+- ✅ Verification formula works for both Balance Sheet and Trial Balance modes
+- ✅ Net Worth display removed (redundant with Equity)
+
+---
+
+## Future Enhancements
+
+- **Comparative columns:** Multiple periods side-by-side
+- **Budget vs Actual:** Compare to budget amounts
+- **Saved reports:** Name and recall configurations
+- **Print/PDF export:** Formatted for printing
+- **Drill-down:** Click totals to see transactions

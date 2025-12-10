@@ -160,47 +160,45 @@
     switch (type) {
       case 'ASSET': return balanceData.totalAssets;
       case 'LIABILITY': return balanceData.totalLiabilities;
-      case 'EQUITY': return balanceData.totalEquity;
+      case 'EQUITY':
+        // In Balance Sheet mode, include Retained Earnings in Equity total
+        if (reportMode === 'balance_sheet') {
+          return balanceData.totalEquity + netIncome();
+        }
+        return balanceData.totalEquity;
+      case 'INCOME': return balanceData.totalIncome;
+      case 'EXPENSE': return balanceData.totalExpense;
       default: return 0;
     }
   }
   
-  // Calculate Net Income and Retained Earnings
-  // Net Income = Total Income - Total Expenses (in our signed system, Income is negative, Expense is positive)
-  // So: Net Income = -Income - Expense (converts to positive net income when income > expenses)
+  // Calculate Net Income / Retained Earnings
+  // Net Income = Total Income - Total Expenses
+  // Backend returns Income/Expense as positive values
+  // Retained Earnings = Net Income (accumulated over time)
   
-  function calculateNetIncome(): number {
+  let netIncome = $derived(() => {
     if (!balanceData) return 0;
-    
-    // Get income and expense totals from balance data
-    const incomeTotal = balanceData.groupBalances
-      .filter(g => g.accountType === 'INCOME')
-      .reduce((sum, g) => sum + g.balance, 0);
-    
-    const expenseTotal = balanceData.groupBalances
-      .filter(g => g.accountType === 'EXPENSE')
-      .reduce((sum, g) => sum + g.balance, 0);
-    
-    // Income is credit (negative), Expense is debit (positive)
-    // Net Income = -Income - Expense (e.g., -(-50000) - 20000 = 30000)
-    return -incomeTotal - expenseTotal;
-  }
+    return balanceData.totalIncome - balanceData.totalExpense;
+  });
   
-  let netIncome = $derived(calculateNetIncome());
-  let retainedEarnings = $derived(netIncome); // RE is the accumulated net income
+  // Verification: Assets should equal Liabilities + Equity (+ Retained Earnings in Balance Sheet mode)
+  let liabilitiesPlusEquity = $derived(() => {
+    if (!balanceData) return 0;
+    // In both Balance Sheet and Trial Balance, we need to add net income
+    // because backend returns totalEquity without net income
+    return balanceData.totalLiabilities + balanceData.totalEquity + netIncome();
+  });
   
-  // Verification: Assets should equal Liabilities + Equity
-  let liabilitiesPlusEquity = $derived(
-    balanceData ? balanceData.totalLiabilities + balanceData.totalEquity : 0
-  );
+  let isBalanced = $derived(() => {
+    if (!balanceData) return true;
+    return Math.abs(balanceData.totalAssets - liabilitiesPlusEquity()) < 0.01;
+  });
   
-  let isBalanced = $derived(
-    !balanceData || Math.abs(balanceData.totalAssets - liabilitiesPlusEquity) < 0.01
-  );
-  
-  let imbalanceAmount = $derived(
-    balanceData ? balanceData.totalAssets - liabilitiesPlusEquity : 0
-  );
+  let imbalanceAmount = $derived(() => {
+    if (!balanceData) return 0;
+    return balanceData.totalAssets - liabilitiesPlusEquity();
+  });
   
   function formatCurrency(amount: number, unit: string = 'USD'): string {
     const value = amount / 100;
@@ -343,7 +341,7 @@
                 >
                   <span class="expand-icon">{retainedEarningsExpanded ? '▼' : '▶'}</span>
                   <span class="group-name">{$t('accounts.retained_earnings')}</span>
-                  <span class="group-total">{formatCurrency(retainedEarnings, entity.baseUnit)}</span>
+                  <span class="group-total">{formatCurrency(netIncome(), entity.baseUnit)}</span>
                 </button>
                 
                 {#if retainedEarningsExpanded}
@@ -387,16 +385,9 @@
       {#if balanceData}
         <div class="footer-section">
           
-          <!-- Balance Sheet & Trial Balance: Net Worth + Verification -->
+          <!-- Balance Sheet & Trial Balance: Verification -->
           {#if reportMode === 'balance_sheet' || reportMode === 'trial_balance'}
-            <div class="net-worth-row">
-              <span class="net-worth-label">{$t('accounts.net_worth')}</span>
-              <span class="net-worth-value" class:negative={balanceData.netWorth < 0}>
-                {formatCurrency(balanceData.netWorth, entity.baseUnit)}
-              </span>
-            </div>
-            
-            <div class="verification-row" class:balanced={isBalanced} class:imbalanced={!isBalanced}>
+            <div class="verification-row" class:balanced={isBalanced()} class:imbalanced={!isBalanced()}>
               <span class="verification-label">{$t('accounts.verification')}:</span>
               <div class="verification-values">
                 <span class="verification-item">
@@ -404,13 +395,13 @@
                 </span>
                 <span class="verification-equals">=</span>
                 <span class="verification-item">
-                  {$t('accounts.liabilities_plus_equity')}: {formatCurrency(liabilitiesPlusEquity, entity.baseUnit)}
+                  {$t('accounts.liabilities_plus_equity')}: {formatCurrency(liabilitiesPlusEquity(), entity.baseUnit)}
                 </span>
-                {#if isBalanced}
+                {#if isBalanced()}
                   <span class="verification-status">✓ {$t('accounts.balanced')}</span>
                 {:else}
                   <span class="verification-status warning">
-                    ⚠ {$t('accounts.imbalance')}: {formatCurrency(imbalanceAmount, entity.baseUnit)}
+                    ⚠ {$t('accounts.imbalance')}: {formatCurrency(imbalanceAmount(), entity.baseUnit)}
                   </span>
                 {/if}
               </div>
@@ -422,7 +413,7 @@
             <div class="net-income-row">
               <div class="net-income-calculation">
                 <span class="calc-label">{$t('account_types.INCOME')}:</span>
-                <span class="calc-value">{formatCurrency(-getTypeTotal('INCOME'), entity.baseUnit)}</span>
+                <span class="calc-value">{formatCurrency(getTypeTotal('INCOME'), entity.baseUnit)}</span>
               </div>
               <div class="net-income-calculation">
                 <span class="calc-label">{$t('account_types.EXPENSE')}:</span>
@@ -430,8 +421,8 @@
               </div>
               <div class="net-income-total">
                 <span class="total-label">{$t('accounts.net_income')}</span>
-                <span class="total-value" class:negative={netIncome < 0}>
-                  {formatCurrency(netIncome, entity.baseUnit)}
+                <span class="total-value" class:negative={netIncome() < 0}>
+                  {formatCurrency(netIncome(), entity.baseUnit)}
                 </span>
               </div>
             </div>

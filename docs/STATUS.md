@@ -48,11 +48,16 @@
 
 **Why Phase 1 first:** Provides immediate debugging tool for imbalance investigation. Phase 2 builds on the results table.
 
-#### ⬜ Fix Balance Sheet Imbalance
-**Issue:** Demo data shows $147,350 imbalance (Assets ≠ L+E)
-- Investigate debug data seeding
-- Check balance calculation logic
-- Verify beginning balance entries
+#### ✅ Fix Balance Sheet Imbalance (Complete)
+**Issue:** Equity total didn't include Retained Earnings
+- ✅ Fixed backend: `totalEquity` now returns equity accounts only (not including net income)
+- ✅ Added `totalIncome` and `totalExpense` to balance sheet data
+- ✅ Fixed frontend: Equity total in Balance Sheet mode now includes Retained Earnings
+- ✅ Retained Earnings always shown under Equity in Balance Sheet mode
+- ✅ Verification formula: Assets = Liabilities + Equity + Net Income (works for both modes)
+- ✅ Removed Net Worth display (redundant with Equity)
+- ✅ Balance Sheet: Balanced
+- ✅ Trial Balance: Balanced
 
 #### ✅ Clarify Trial Balance vs Balance Sheet
 **Resolution:** Stories and specs updated
