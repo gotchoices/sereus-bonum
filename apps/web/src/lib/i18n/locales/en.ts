@@ -123,6 +123,9 @@ export default {
     mode_income_statement: 'Income Statement',
     mode_cash_flow: 'Cash Flow',
     mode_custom: 'Custom',
+    // Saved reports & multi-column (future features)
+    saved_reports: 'Reports',
+    add_column: 'Add Column',
   },
   
   ledger: {

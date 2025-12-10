@@ -272,7 +272,7 @@
     </div>
     
     <div class="header-controls">
-      <!-- Mode selector -->
+      <!-- Mode selector (left side) -->
       <div class="mode-selector">
         <label for="mode-select">{$t('accounts.mode')}:</label>
         <select id="mode-select" bind:value={reportMode} onchange={() => setMode(reportMode)}>
@@ -284,45 +284,69 @@
         </select>
       </div>
       
-      <!-- Date picker - conditional based on report mode -->
-      <div class="date-picker">
-        {#if requiresDateRange}
-          <!-- Date range: vertical stack -->
-          <div class="date-range-stack">
-            <div class="date-input-row">
-              <label for="start-date">{$t('accounts.from_date')}:</label>
-              <input 
-                type="date" 
-                id="start-date"
-                bind:value={startDate}
-                oninput={handleDateInput}
-                onblur={handleDateBlur}
-              />
+      <!-- Saved Reports dropdown (placeholder) -->
+      <button 
+        class="saved-reports-btn" 
+        disabled 
+        title="Saved reports coming soon"
+      >
+        ⭐ {$t('accounts.saved_reports')}
+      </button>
+      
+      <!-- Spacer to push date picker right -->
+      <div class="spacer"></div>
+      
+      <!-- Date picker group (right-aligned) -->
+      <div class="date-picker-group">
+        <!-- Date picker - conditional based on report mode -->
+        <div class="date-picker">
+          {#if requiresDateRange}
+            <!-- Date range: vertical stack -->
+            <div class="date-range-stack">
+              <div class="date-input-row">
+                <label for="start-date">{$t('accounts.from_date')}:</label>
+                <input 
+                  type="date" 
+                  id="start-date"
+                  bind:value={startDate}
+                  oninput={handleDateInput}
+                  onblur={handleDateBlur}
+                />
+              </div>
+              <div class="date-input-row">
+                <label for="end-date">{$t('accounts.to_date')}:</label>
+                <input 
+                  type="date" 
+                  id="end-date"
+                  bind:value={endDate}
+                  oninput={handleDateInput}
+                  onblur={handleDateBlur}
+                />
+              </div>
             </div>
+          {:else}
+            <!-- Single "As of" date -->
             <div class="date-input-row">
-              <label for="end-date">{$t('accounts.to_date')}:</label>
+              <label for="as-of-date">{$t('accounts.as_of')}:</label>
               <input 
                 type="date" 
-                id="end-date"
+                id="as-of-date"
                 bind:value={endDate}
                 oninput={handleDateInput}
                 onblur={handleDateBlur}
               />
             </div>
-          </div>
-        {:else}
-          <!-- Single "As of" date -->
-          <div class="date-input-row">
-            <label for="as-of-date">{$t('accounts.as_of')}:</label>
-            <input 
-              type="date" 
-              id="as-of-date"
-              bind:value={endDate}
-              oninput={handleDateInput}
-              onblur={handleDateBlur}
-            />
-          </div>
-        {/if}
+          {/if}
+        </div>
+        
+        <!-- Add Column button (compact icon-only) -->
+        <button 
+          class="add-column-btn" 
+          disabled 
+          title="Multi-column view coming soon"
+        >
+          +
+        </button>
       </div>
     </div>
   </header>
@@ -567,7 +591,7 @@
   .header-controls {
     display: flex;
     align-items: center;
-    gap: var(--space-lg);
+    gap: var(--space-md);
     flex-wrap: wrap;
   }
   
@@ -576,6 +600,17 @@
     align-items: center;
     gap: var(--space-sm);
     font-size: 0.875rem;
+  }
+  
+  .spacer {
+    flex: 1;
+    min-width: var(--space-lg);
+  }
+  
+  .date-picker-group {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
   }
   
   .date-picker {
@@ -611,6 +646,49 @@
     border-radius: var(--radius-sm);
     background: var(--bg-primary);
     font-size: 0.875rem;
+  }
+  
+  /* Future feature placeholders */
+  .saved-reports-btn {
+    padding: var(--space-xs) var(--space-md);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    font-size: 0.875rem;
+    cursor: not-allowed;
+  }
+  
+  .add-column-btn {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: not-allowed;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  /* Improved contrast for disabled items in dark mode */
+  .saved-reports-btn:disabled,
+  .add-column-btn:disabled {
+    opacity: 0.6;
+    color: var(--text-muted);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+  
+  /* Better visibility in dark theme */
+  @media (prefers-color-scheme: dark) {
+    .saved-reports-btn:disabled,
+    .add-column-btn:disabled {
+      opacity: 0.7;
+      border-color: rgba(255, 255, 255, 0.25);
+      background: rgba(255, 255, 255, 0.05);
+    }
   }
   
   .toolbar {

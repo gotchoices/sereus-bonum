@@ -1,7 +1,7 @@
 /* Bonum Design System */
 
 :root {
-  /* Colors - Dark theme (default) */
+  /* Colors - Dark theme (default) - Improved contrast */
   --bg-primary: #0f1419;
   --bg-secondary: #1a1f26;
   --bg-nav: #151a21;
@@ -11,10 +11,10 @@
   
   --text-primary: #e7edf4;
   --text-secondary: #8b98a8;
-  --text-muted: #5c6975;
+  --text-muted: #6e7a8a; /* Improved: was #5c6975 (too dark) */
   
-  --border-color: #2d3741;
-  --border-light: #3d4751;
+  --border-color: #3d4751; /* Improved: was #2d3741 (too subtle) */
+  --border-light: #4d5761;
   
   --accent-color: #63b3ed;
   --accent-hover: #4fa3dd;

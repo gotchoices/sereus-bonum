@@ -87,15 +87,24 @@
 - ⬜ VBS click-through (future enhancement)
 - ⬜ Search results (when implemented)
 
-### Medium Priority (Polish & UX)
+#### ⬜ Settings Screen (PRIORITY BUMPED)
+**Priority elevated due to dark theme usability issues**
 
-#### ⬜ Settings Screen
 From story 01 (Alt D):
-- Light/dark mode toggle
+- Light/dark mode toggle (explicit override for system preference)
 - Language selection
 - Date format preference (US: MM/DD/YYYY, European: DD/MM/YYYY, ISO: YYYY-MM-DD)
 - Account display format (Code only, Name only, Full path, Code: Name)
 - Sereus node configuration (future)
+
+**Dark theme improvements needed:**
+- ✅ Better contrast for disabled elements (improved in Accounts View)
+- ⬜ Improve global `text-muted` color
+- ⬜ More visible borders and separators
+- ⬜ Test all screens in both themes
+- ⬜ Consider separate dark theme color palette
+
+### Medium Priority (Polish & UX)
 
 #### ⬜ Collapsible Global Menu
 - Hamburger toggle to hide/show sidebar
@@ -121,16 +130,25 @@ Current VBS is proof-of-concept:
 ### Lower Priority (Nice to Have)
 
 #### ⬜ Multi-Column Reports
-From story 04 (Alt E):
-- "Add Column" for period comparison
-- Up to 12 columns (monthly)
-- Variance columns ($ and %)
+From story 04 (Alt F):
+- ✅ UI placeholder: "+ Add Column" button in header (disabled with tooltip)
+- ✅ UX spec: `design/specs/web/screens/saved-reports-ux.md`
+- ⬜ Implement column management (add/remove/rename)
+- ⬜ Implement per-column date inputs (vertically stacked)
+- ⬜ Implement responsive layout (horizontal scroll, sticky headers)
+- ⬜ Implement variance columns ($ change and % change)
+- ⬜ Update backend to handle multiple date ranges
+- ⬜ Update export to multi-column format
 
 #### ⬜ Saved Reports
-From story 04 (Alt F):
-- Save report configurations with names
-- Recall from dropdown
-- Persist across sessions
+From story 04 (Alt G):
+- ✅ UI placeholder: "⭐ Reports" button in header (disabled with tooltip)
+- ✅ Store skeleton: `savedReports.ts` with interface definitions
+- ✅ UX spec: `design/specs/web/screens/saved-reports-ux.md`
+- ⬜ Implement save dialog
+- ⬜ Implement dropdown with saved reports list
+- ⬜ Implement load/rename/delete functionality
+- ⬜ Persist to localStorage
 
 #### ⬜ Cash Flow Mode Implementation
 From story 04 (Alt C):
