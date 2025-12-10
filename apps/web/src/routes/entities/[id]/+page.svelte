@@ -29,8 +29,12 @@
   // View state - persisted
   let expandedGroups = $state<Record<string, boolean>>({});
   let reportMode = $state<ReportMode>('balance_sheet');
-  let asOfDate = $state(new Date().toISOString().split('T')[0]);
+  let endDate = $state(new Date().toISOString().split('T')[0]);
+  let startDate = $state<string | undefined>(undefined);
   let retainedEarningsExpanded = $state(false);
+  
+  // Track if we need to reload data (used for onblur optimization)
+  let needsReload = $state(false);
   
   // Load persisted view state
   $effect(() => {
@@ -38,6 +42,15 @@
       expandedGroups = loadViewState(`accounts-expand-${entityId}`, {});
       reportMode = loadViewState(`accounts-mode-${entityId}`, 'balance_sheet');
       retainedEarningsExpanded = loadViewState(`accounts-re-expanded-${entityId}`, false);
+      
+      // Load persisted dates (or use defaults)
+      const savedDates = loadViewState(`accounts-dates-${entityId}`, {
+        endDate: new Date().toISOString().split('T')[0],
+        startDate: undefined
+      });
+      endDate = savedDates.endDate;
+      startDate = savedDates.startDate;
+      
       log.ui.debug('[Accounts] Loaded view state for entity:', entityId);
     }
   });
@@ -57,7 +70,7 @@
     try {
       const ds = await getDataService();
       await loadAccounts(entityId);
-      balanceData = await ds.getBalanceSheet(entityId, asOfDate);
+      balanceData = await ds.getBalanceSheet(entityId, endDate, startDate);
       log.ui.debug('[Accounts] Balance sheet loaded');
     } catch (e) {
       log.ui.error('[Accounts] Failed to load:', e);
@@ -66,13 +79,23 @@
     }
   }
   
-  // Reload when date changes
-  async function handleDateChange() {
-    if (browser && entityId) {
+  // Mark that dates have changed
+  function handleDateInput() {
+    needsReload = true;
+  }
+  
+  // Reload when date input loses focus (optimization for large datasets)
+  async function handleDateBlur() {
+    if (browser && entityId && needsReload) {
+      needsReload = false;
       balanceLoading = true;
       try {
         const ds = await getDataService();
-        balanceData = await ds.getBalanceSheet(entityId, asOfDate);
+        balanceData = await ds.getBalanceSheet(entityId, endDate, startDate);
+        
+        // Persist dates to viewState
+        persistViewState();
+        log.ui.debug('[Accounts] Dates updated and persisted:', { endDate, startDate });
       } catch (e) {
         log.ui.error('[Accounts] Failed to reload:', e);
       } finally {
@@ -80,6 +103,23 @@
       }
     }
   }
+  
+  // Check if current mode requires date range
+  let requiresDateRange = $derived(
+    reportMode === 'income_statement' || reportMode === 'cash_flow'
+  );
+  
+  // Auto-set default start date for modes that require it
+  $effect(() => {
+    if (requiresDateRange && !startDate) {
+      // Default to first day of current year
+      const year = new Date().getFullYear();
+      startDate = `${year}-01-01`;
+    } else if (!requiresDateRange && startDate) {
+      // Clear start date for modes that don't need it
+      startDate = undefined;
+    }
+  });
   
   // Account type display info
   const typeInfo: Record<AccountType, { icon: string; color: string }> = {
@@ -115,6 +155,14 @@
   let retainedEarningsExpandable = $derived(reportMode === 'balance_sheet');
   
   // Expand/collapse functions
+  // Unified function to save all view state
+  function persistViewState() {
+    saveViewState(`accounts-expand-${entityId}`, expandedGroups);
+    saveViewState(`accounts-mode-${entityId}`, reportMode);
+    saveViewState(`accounts-re-expanded-${entityId}`, retainedEarningsExpanded);
+    saveViewState(`accounts-dates-${entityId}`, { endDate, startDate });
+  }
+  
   function toggleGroup(groupId: string) {
     expandedGroups[groupId] = !expandedGroups[groupId];
     expandedGroups = { ...expandedGroups };
@@ -236,15 +284,45 @@
         </select>
       </div>
       
-      <!-- Date picker -->
+      <!-- Date picker - conditional based on report mode -->
       <div class="date-picker">
-        <label for="as-of-date">{$t('accounts.as_of')}:</label>
-        <input 
-          type="date" 
-          id="as-of-date"
-          bind:value={asOfDate}
-          onchange={handleDateChange}
-        />
+        {#if requiresDateRange}
+          <!-- Date range: vertical stack -->
+          <div class="date-range-stack">
+            <div class="date-input-row">
+              <label for="start-date">{$t('accounts.from_date')}:</label>
+              <input 
+                type="date" 
+                id="start-date"
+                bind:value={startDate}
+                oninput={handleDateInput}
+                onblur={handleDateBlur}
+              />
+            </div>
+            <div class="date-input-row">
+              <label for="end-date">{$t('accounts.to_date')}:</label>
+              <input 
+                type="date" 
+                id="end-date"
+                bind:value={endDate}
+                oninput={handleDateInput}
+                onblur={handleDateBlur}
+              />
+            </div>
+          </div>
+        {:else}
+          <!-- Single "As of" date -->
+          <div class="date-input-row">
+            <label for="as-of-date">{$t('accounts.as_of')}:</label>
+            <input 
+              type="date" 
+              id="as-of-date"
+              bind:value={endDate}
+              oninput={handleDateInput}
+              onblur={handleDateBlur}
+            />
+          </div>
+        {/if}
       </div>
     </div>
   </header>
@@ -493,21 +571,41 @@
     flex-wrap: wrap;
   }
   
-  .mode-selector,
-  .date-picker {
+  .mode-selector {
     display: flex;
     align-items: center;
     gap: var(--space-sm);
     font-size: 0.875rem;
   }
   
+  .date-picker {
+    font-size: 0.875rem;
+  }
+  
+  .date-range-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    padding: var(--space-sm);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+  }
+  
+  .date-input-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+  
   .mode-selector label,
-  .date-picker label {
+  .date-input-row label {
     color: var(--text-muted);
+    min-width: 3rem;
   }
   
   .mode-selector select,
-  .date-picker input {
+  .date-input-row input {
     padding: var(--space-xs) var(--space-sm);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);

@@ -528,29 +528,71 @@ class SqliteDataService implements DataService {
     return rows[0].values[0][0] as number;
   }
   
-  async getBalanceSheet(entityId: string, asOf?: string): Promise<BalanceSheetData> {
-    const dateFilter = asOf || new Date().toISOString().split('T')[0];
+  async getBalanceSheet(
+    entityId: string, 
+    endDate?: string,
+    startDate?: string
+  ): Promise<BalanceSheetData> {
+    const end = endDate || new Date().toISOString().split('T')[0];
     
-    // Get all account balances with group info
-    const sql = `
-      SELECT 
-        a.id as account_id,
-        a.name as account_name,
-        a.code as account_code,
-        g.id as group_id,
-        g.name as group_name,
-        g.account_type,
-        COALESCE(SUM(e.amount), 0) as balance
-      FROM account a
-      JOIN account_group g ON g.id = a.account_group_id
-      LEFT JOIN entry e ON e.account_id = a.id
-      LEFT JOIN txn t ON t.id = e.txn_id AND t.date <= ?
-      WHERE a.entity_id = ? AND a.is_active = 1
-      GROUP BY a.id, a.name, a.code, g.id, g.name, g.account_type
-      ORDER BY g.display_order, a.code
-    `;
+    log.data.info(`getBalanceSheet called: entity=${entityId}, endDate=${end}, startDate=${startDate || 'null'}`);
     
-    const rows = this.getDb().exec(sql, [dateFilter, entityId]);
+    // Build SQL query with conditional date filtering
+    // Strategy: Use CASE in the SUM to conditionally include amounts based on dates
+    let sql: string;
+    let params: (string | null)[];
+    
+    if (startDate) {
+      // Period-based query: filter I/E accounts to date range
+      sql = `
+        SELECT 
+          a.id as account_id,
+          a.name as account_name,
+          a.code as account_code,
+          g.id as group_id,
+          g.name as group_name,
+          g.account_type,
+          COALESCE(SUM(
+            CASE 
+              WHEN g.account_type IN ('ASSET', 'LIABILITY', 'EQUITY') THEN e.amount
+              WHEN g.account_type IN ('INCOME', 'EXPENSE') AND t.date >= ? AND t.date <= ? THEN e.amount
+              ELSE 0
+            END
+          ), 0) as balance
+        FROM account a
+        JOIN account_group g ON g.id = a.account_group_id
+        LEFT JOIN entry e ON e.account_id = a.id
+        LEFT JOIN txn t ON t.id = e.txn_id AND t.date <= ?
+        WHERE a.entity_id = ? AND a.is_active = 1
+        GROUP BY a.id, a.name, a.code, g.id, g.name, g.account_type
+        ORDER BY g.display_order, a.code
+      `;
+      params = [startDate, end, end, entityId];
+      log.data.debug(`Using period-based query: ${startDate} to ${end}`);
+    } else {
+      // Cumulative query: all accounts through endDate
+      sql = `
+        SELECT 
+          a.id as account_id,
+          a.name as account_name,
+          a.code as account_code,
+          g.id as group_id,
+          g.name as group_name,
+          g.account_type,
+          COALESCE(SUM(e.amount), 0) as balance
+        FROM account a
+        JOIN account_group g ON g.id = a.account_group_id
+        LEFT JOIN entry e ON e.account_id = a.id
+        LEFT JOIN txn t ON t.id = e.txn_id AND t.date <= ?
+        WHERE a.entity_id = ? AND a.is_active = 1
+        GROUP BY a.id, a.name, a.code, g.id, g.name, g.account_type
+        ORDER BY g.display_order, a.code
+      `;
+      params = [end, entityId];
+      log.data.debug(`Using cumulative query through ${end}`);
+    }
+    
+    const rows = this.getDb().exec(sql, params);
     
     const accountBalances: AccountBalance[] = [];
     const groupTotals = new Map<string, GroupBalance>();
@@ -625,7 +667,8 @@ class SqliteDataService implements DataService {
     
     return {
       entityId,
-      asOf: dateFilter,
+      endDate: end,
+      startDate: startDate || undefined,
       netWorth,
       totalAssets,
       totalLiabilities: Math.abs(totalLiabilities),

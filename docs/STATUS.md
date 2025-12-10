@@ -9,9 +9,9 @@
 ### 🔄 Web MVP - Core Screens
 - ✅ Home screen with entity list & VBS
 - ✅ Account Catalog (manage account groups)
-- ✅ Accounts View (balance sheet)
+- ✅ Accounts View (Balance Sheet, Trial Balance, Income Statement modes)
 - ✅ Ledger (transaction entry)
-- 🔄 Transaction Search (Phase 1: Browser)
+- ✅ Transaction Search (Phase 1: Browser with export)
 - ⬜ Transaction Search (Phase 2: Query builder)
 - ⬜ Settings screen
 - ⬜ Import Books (GnuCash)
@@ -68,11 +68,17 @@
 - Income Statement: Shows I/E with Net Income calculation line
 - Updated: Story 04, `design/specs/web/screens/accounts-view.md`
 
-#### ⬜ Income Statement Date Range
-**Issue:** Income Statement requires From/To dates, not single "As of"
-- Conditional date picker based on mode
-- Date range for: Trial Balance, Income Statement, Cash Flow
-- Single date for: Balance Sheet
+#### ✅ Income Statement Date Range (Complete)
+**Implementation:** Income Statement and Cash Flow now support date ranges
+- ✅ Updated `BalanceSheetData` type with `startDate` and renamed `asOf` to `endDate`
+- ✅ Updated backend SQL query with conditional date filtering:
+  - A/L/E accounts: cumulative through endDate (ignores startDate)
+  - I/E accounts: period-based (startDate to endDate) when startDate provided
+- ✅ Frontend conditional date picker:
+  - Balance Sheet & Trial Balance: single "As of" date
+  - Income Statement & Cash Flow: "From" and "To" dates (vertically stacked)
+- ✅ Auto-sets default start date (Jan 1 of current year) for period-based modes
+- ✅ Vertical date stack styling (prepares for multi-column reports)
 
 #### ✅ Account Hyperlinks Everywhere
 **Issue:** Account names should be clickable throughout
@@ -223,8 +229,13 @@ Framework decision: NativeScript-Svelte (primary), React Native (fallback)
 ### ✅ Core Screens (v1)
 - Home: Entity list with VBS dashboard
 - Account Catalog: Hierarchical group management
-- Accounts View: Balance sheet with modes, expand/collapse, verification line
+- Accounts View: Balance Sheet / Trial Balance / Income Statement modes
+  - Date range support (period-based filtering for I/E accounts)
+  - Date persistence in viewState
+  - Onblur optimization for large datasets
+  - Expand/collapse, verification line
 - Ledger: Transaction entry with autocomplete, keyboard navigation
+- Transaction Search: Browse all transactions, export to CSV/Excel
 
 ### ✅ Documentation & Planning
 - Vision and requirements docs

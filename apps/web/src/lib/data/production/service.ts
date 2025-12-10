@@ -172,7 +172,7 @@ class QuereusDataService implements DataService {
     throw new Error(NOT_IMPLEMENTED);
   }
   
-  async getBalanceSheet(_entityId: string, _asOf?: string): Promise<BalanceSheetData> {
+  async getBalanceSheet(_entityId: string, _endDate?: string, _startDate?: string): Promise<BalanceSheetData> {
     throw new Error(NOT_IMPLEMENTED);
   }
   

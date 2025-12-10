@@ -95,20 +95,47 @@ WHERE t.date >= startDate AND t.date <= endDate
 
 ### Date Inputs
 
-**For Balance Sheet & Trial Balance (default):**
+**Layout Strategy:**
+- Date inputs are **vertically stacked** above the data column
+- This layout prepares for future multi-column reports (period comparisons)
+- Each column will have its own vertically-stacked date range
+
+**For Balance Sheet & Trial Balance:**
 ```
-[As of: YYYY-MM-DD ▼]
+┌─────────────────┐
+│ As of:          │
+│ [YYYY-MM-DD ▼] │
+└─────────────────┘
+     ↓
+[Account data...]
 ```
+- Single "As of" date
+- All accounts cumulative from inception through this date
 
 **For Income Statement & Cash Flow:**
 ```
-[From: YYYY-MM-DD ▼]  [To: YYYY-MM-DD ▼]
+┌─────────────────┐
+│ From:           │
+│ [YYYY-MM-DD ▼] │
+│ To:             │
+│ [YYYY-MM-DD ▼] │
+└─────────────────┘
+     ↓
+[Account data...]
 ```
+- Date range required (both fields)
+- Income/Expense accounts filtered to this period
+- Balance sheet accounts (if shown) still cumulative through "To" date
 
-**For Trial Balance (period mode toggle):**
+**Future: Multi-Column View:**
 ```
-☐ Period mode
-[From: YYYY-MM-DD ▼]  [To: YYYY-MM-DD ▼]
+┌─────────┬─────────┬─────────┐
+│ From:   │ From:   │ From:   │
+│   To:   │   To:   │   To:   │
+├─────────┼─────────┼─────────┤
+│ $50,000 │ $60,000 │ $70,000 │
+│ $30,000 │ $35,000 │ $40,000 │
+└─────────┴─────────┴─────────┘
 ```
 
 ### Display
@@ -117,6 +144,13 @@ WHERE t.date >= startDate AND t.date <= endDate
 - **Expand/collapse:** Per group, persisted
 - **"Expand All" / "Collapse All" buttons**
 - **Account hyperlinks:** Click account name → go to ledger
+- **Indentation:** Visual hierarchy using indentation (2 spaces per level)
+  - Type: No indentation
+  - Group: 2 spaces
+  - Account: 4 spaces
+  - Sub-account: 6 spaces (if hierarchical accounts implemented)
+
+**Note:** Current implementation shows all values in a single balance column. Future enhancement will implement logical column structure (Type | Group | Account | Balance) to enable proper spreadsheet formulas in exports. See "Future Enhancements" section below.
 
 ### Verification Line (Trial Balance only)
 
@@ -134,45 +168,63 @@ Assets $150,000 ≠ Liabilities + Equity $147,350 ⚠ Imbalance: $2,650
 
 ## Backend Requirements
 
-### DataService Method Signature (Updated)
+### DataService Method Signature
 
 ```typescript
 interface BalanceSheetOptions {
-  asOf: string;              // End date (YYYY-MM-DD)
-  startDate?: string;        // Optional start date for period-based
-  includeIncome?: boolean;   // Include I/E in result (default: true)
-  includeExpense?: boolean;  // Include I/E in result (default: true)
+  endDate: string;           // End date (YYYY-MM-DD) - always required
+  startDate?: string;        // Optional start date for period-based filtering
+  // When startDate is provided:
+  //   - Balance sheet accounts (A/L/E): cumulative through endDate (ignore startDate)
+  //   - Income/Expense accounts: sum entries where startDate <= date <= endDate
 }
 
-getBalanceSheet(entityId: string, options: BalanceSheetOptions): Promise<BalanceSheetData>
+getBalanceSheet(
+  entityId: string, 
+  endDate: string,           // Renamed from 'asOf' for clarity
+  startDate?: string         // Optional for period-based reports
+): Promise<BalanceSheetData>
 ```
 
+**Backward Compatibility:**
+- Existing calls with single `asOf` parameter work as before
+- New calls can provide `startDate` for period filtering
+
 ### SQL Query Logic
+
+**Single query approach with conditional date filtering:**
 
 ```sql
 SELECT 
   a.id, a.name, a.code,
   g.id as group_id, g.name as group_name, g.account_type,
-  COALESCE(SUM(
-    CASE 
-      -- For B/S accounts: cumulative through asOf
-      WHEN g.account_type IN ('ASSET', 'LIABILITY', 'EQUITY') 
-        THEN e.amount
-      -- For I/E accounts: period-based if startDate provided
-      WHEN g.account_type IN ('INCOME', 'EXPENSE') 
-        AND ? IS NOT NULL  -- startDate parameter
-        THEN CASE WHEN t.date >= ? THEN e.amount ELSE 0 END
-      -- Otherwise cumulative
-      ELSE e.amount
-    END
-  ), 0) as balance
+  COALESCE(SUM(e.amount), 0) as balance
 FROM account a
 JOIN account_group g ON g.id = a.account_group_id
 LEFT JOIN entry e ON e.account_id = a.id
-LEFT JOIN txn t ON t.id = e.txn_id AND t.date <= ?  -- asOf date
+LEFT JOIN txn t ON t.id = e.txn_id 
+  AND (
+    -- Balance sheet accounts: cumulative through endDate
+    (g.account_type IN ('ASSET', 'LIABILITY', 'EQUITY') AND t.date <= ?)
+    OR
+    -- Income/Expense: period-based if startDate provided, else cumulative
+    (g.account_type IN ('INCOME', 'EXPENSE') 
+      AND t.date <= ?  -- endDate
+      AND (? IS NULL OR t.date >= ?)  -- startDate if provided
+    )
+  )
 WHERE a.entity_id = ? AND a.is_active = 1
 GROUP BY a.id, a.name, a.code, g.id, g.name, g.account_type
+ORDER BY g.display_order, a.code
 ```
+
+**Parameters:** `[endDate, endDate, startDate, startDate, entityId]`
+
+**Logic:**
+- **Balance Sheet mode** (no startDate): All accounts cumulative through endDate
+- **Income Statement mode** (with startDate): 
+  - A/L/E: cumulative through endDate (startDate ignored)
+  - I/E: only transactions within startDate to endDate range
 
 ---
 
@@ -254,6 +306,32 @@ Assets = Liabilities + Equity + Net Income
 
 ## Future Enhancements
 
+### Hierarchical Column Structure (High Priority)
+**Problem:** Current implementation shows all balances in a single column, making group/type totals appear incorrect and breaking Excel SUM formulas.
+
+**Solution:** Implement logical column structure:
+- **Display:** Use indentation to show hierarchy (current approach)
+- **Export:** Separate physical columns (Type | Group | Account | Balance)
+
+**Benefits:**
+- Excel exports have working SUM() formulas
+- Clearer separation of totals at each level
+- Enables proper multi-column comparative reports
+
+**Example Export Format:**
+```csv
+Type,Group,Account,Balance
+Assets,,,500000.00
+,Current Assets,,300000.00
+,,Checking,150000.00
+,,Savings,150000.00
+,Fixed Assets,,200000.00
+,,Equipment,200000.00
+```
+
+**See also:** `design/specs/web/global/export.md` for export implementation details
+
+### Other Enhancements
 - **Comparative columns:** Multiple periods side-by-side
 - **Budget vs Actual:** Compare to budget amounts
 - **Saved reports:** Name and recall configurations

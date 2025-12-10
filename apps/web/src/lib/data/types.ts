@@ -148,7 +148,8 @@ export interface AccountBalance {
 
 export interface BalanceSheetData {
   entityId: string;
-  asOf: string;
+  endDate: string;            // End date (renamed from asOf for clarity)
+  startDate?: string;         // Optional start date for period-based reports
   netWorth: number;
   totalAssets: number;
   totalLiabilities: number;
@@ -256,7 +257,11 @@ export interface DataService {
   
   // Balance calculations
   getAccountBalance(accountId: string, asOf?: string): Promise<number>;
-  getBalanceSheet(entityId: string, asOf?: string): Promise<BalanceSheetData>;
+  getBalanceSheet(
+    entityId: string, 
+    endDate?: string,      // End date (formerly 'asOf')
+    startDate?: string     // Optional start date for period-based filtering
+  ): Promise<BalanceSheetData>;
   
   // Ledger view
   getLedgerEntries(accountId: string, options?: {
