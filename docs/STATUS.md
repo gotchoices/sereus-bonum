@@ -10,7 +10,7 @@
 - ✅ Home screen with entity list & VBS
 - ✅ Account Catalog (manage account groups)
 - ✅ Accounts View (Balance Sheet, Trial Balance, Income Statement modes)
-- ✅ Ledger (transaction entry)
+- ✅ Ledger (transaction entry with split support)
 - ✅ Transaction Search (Phase 1: Browser with export)
 - ⬜ Transaction Search (Phase 2: Query builder)
 - ✅ Settings screen (theme, dates, account display, sign reversal)
@@ -256,7 +256,15 @@ Framework decision: NativeScript-Svelte (primary), React Native (fallback)
   - Date persistence in viewState
   - Onblur optimization for large datasets
   - Expand/collapse, verification line
-- Ledger: Transaction entry with autocomplete, keyboard navigation
+- Ledger: Transaction entry with autocomplete, keyboard navigation, split support
+  - Split button (|) to left of account input
+  - Colon completion (`:` completes to end of current path element)
+  - Tab in Debit OR Credit saves entry (prevents browser URL jump)
+  - Click transaction row to edit (placeholder - logs click)
+  - Split entry mode with multi-line UI
+  - Auto-balance calculation (pre-fills "amount to balance")
+  - Add/remove split entries
+  - Save split transactions with multiple entries
 - Transaction Search: Browse all transactions, export to CSV/Excel
 
 ### ✅ Documentation & Planning

@@ -53,22 +53,46 @@ Primary transaction entry interface for an account. Optimized for keyboard-centr
 
 ### Offset Account Autocomplete
 
+**Visual Layout:**
+```
+[🔀] [Account search input_______________________]
+ ↑ Split button (small icon to left of input)
+```
+
+**Split Button:**
+- Icon: `|` (vertical bar) or `⋮` (three dots) or spreadsheet icon
+- Position: Immediately to the left of account input
+- Size: Compact (same height as input)
+- Action: Toggle split entry mode
+- Tooltip: "Add split (Ctrl+Enter)"
+
+**Account Search Behavior:**
+
 Per story step 7:
 - Dropdown appears on focus
 - Type to filter by any part of account path
-- Tab for completion
-- Arrow keys to navigate
-- Path separator (`:` or `/`) to jump to next path segment
+- **Tab:** Completes to top result (full path)
+- **Colon (`:`):** Completes to end of current path element only
+- **Arrow keys:** Navigate results
 - Shows full account path in dropdown
 
-Example: Typing "util" shows:
+**Colon Completion Example:**
+
+User types: `exp` → sees "Expenses : Utilities : Electric"
+- User presses `:` → completes to `Expenses : `
+- User types `ut` → filters to utilities accounts
+- User presses `:` → completes to `Expenses : Utilities : `
+- User types `el` → filters to Electric
+- User presses Tab → completes to full path `Expenses : Utilities : Electric`
+
+**Autocomplete dropdown example:**
 ```
 Expenses : Utilities : Electric
 Expenses : Utilities : Gas
 Expenses : Utilities : Water
 ```
 
-### Split Transaction View
+### Split Transaction View (Display)
 
 When a transaction has multiple entries:
 
@@ -84,27 +108,73 @@ When a transaction has multiple entries:
 - Main row shows total and "[Split]" as offset
 - Child rows indent, show individual entries
 - Each child row has its own note field
-- Last entry amount pre-fills to balance
+- Click to expand/collapse
+
+### Split Transaction Entry (New)
+
+**Triggering Split Mode:**
+- Click split button `[|]` to left of account input
+- Or press Ctrl+Enter
+
+**Split Entry UI:**
+
+From story 03 (Alt A), when split mode is activated:
+
+```
+Transaction Header:
+  Date: [12/03]  Ref: [1002]  Memo: [Grocery run__________]
+
+Split Entries:
+┌──────────────────────────────────────────────────────────────┐
+│ Account              │ Note              │ Debit │ Credit  │
+├──────────────────────┼───────────────────┼───────┼─────────┤
+│ Checking             │                   │       │ 123.45  │ ← Current account (auto)
+│ [Groceries_______]   │ [Food_________]   │ 98.00 │         │ ← First split
+│ [Search account__]   │ [Note_________]   │ 25.45 │         │ ← Auto-filled to balance
+│                      │                   │       │         │
+│                                          [+ Add Split]      │
+└──────────────────────────────────────────────────────────────┘
+                                            [Save] [Cancel]
+```
+
+**Split Entry Behavior:**
+1. First row shows current account with total amount (read-only)
+2. Each split row has: Account search, Note, Amount
+3. **Auto-balance:** As user enters amounts, next empty row pre-fills with "amount needed to balance"
+4. User can override auto-filled amount
+5. "+ Add Split" button adds another blank row
+6. Each row has [X] remove button
+7. Save button enabled when transaction balances to zero
+8. Warning shown if imbalanced
 
 ### Keyboard Navigation
 
 | Key | Action |
 |-----|--------|
-| Tab | Next field |
+| Tab | Next field; **if in last field (Credit), saves entry like Enter** |
 | Shift+Tab | Previous field |
-| Enter | Confirm entry, move to next row |
+| Enter | Confirm entry, save and start new row |
 | Escape | Cancel current edit |
-| Ctrl+S | Force save (though auto-save on complete) |
 | Ctrl+Enter | Toggle split mode |
+| `:` (colon) | In account search: complete to end of current path element |
 | Arrow Down | In autocomplete, next option |
 | Arrow Up | In autocomplete, previous option |
+
+**Important Tab Behavior:**
+- In most fields: Tab moves to next field
+- **In Credit field (last field):** Tab triggers save (prevents cursor jumping to browser URL bar)
+- This maintains keyboard flow without requiring Enter
 
 ## Behavior
 
 1. **Auto-save:** Transaction saved when all required fields complete (date, offset, amount)
 2. **Real-time balance:** Header balance updates as entries are committed
 3. **Linked window:** If opened from Accounts View, that view updates reactively
-4. **Split detection:** Entering split mode when:
+4. **Click to edit:** Clicking on any existing transaction row toggles it into edit mode
+   - Row fields become editable inputs
+   - Save changes on Enter or blur
+   - Cancel changes on Escape
+5. **Split detection:** Entering split mode when:
    - User explicitly toggles (keyboard/button)
    - User enters a second offset account
 
