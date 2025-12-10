@@ -24,59 +24,42 @@ Global application settings and user preferences.
 ### Page Structure
 
 ```
-┌─────────────────────────────────────────────┐
-│ ← Back to Home                              │
-│                                             │
-│ Settings                                    │
-│                                             │
-│ ┌─────────────────────────────────────────┐│
-│ │ Display Preferences                     ││
-│ │                                         ││
-│ │ Theme:                                  ││
-│ │  ○ Light  ● Dark  ○ System             ││
-│ │                                         ││
-│ │ Language:                               ││
-│ │  [English ▼]                            ││
-│ │                                         ││
-│ │ Date Format:                            ││
-│ │  ○ US (MM/DD/YYYY)                      ││
-│ │  ● European (DD/MM/YYYY)                ││
-│ │  ○ ISO (YYYY-MM-DD)                     ││
-│ │                                         ││
-│ │ Account Display:                        ││
-│ │  ○ Code only                            ││
-│ │  ● Name only                            ││
-│ │  ○ Full path                            ││
-│ │  ○ Code: Name                           ││
-│ │                                         ││
-│ └─────────────────────────────────────────┘│
-│                                             │
-│ ┌─────────────────────────────────────────┐│
-│ │ Accounting Preferences                  ││
-│ │                                         ││
-│ │ ☐ Show positive amounts for:           ││
-│ │    ☐ Equity accounts                   ││
-│ │    ☐ Income accounts                   ││
-│ │    ☐ Liability accounts                ││
-│ │                                         ││
-│ │ Note: By default, credits are negative ││
-│ │ (accounting convention). Check boxes   ││
-│ │ above to reverse signs for display.    ││
-│ │                                         ││
-│ └─────────────────────────────────────────┘│
-│                                             │
-│ ┌─────────────────────────────────────────┐│
-│ │ Network (Future)                        ││
-│ │                                         ││
-│ │ Sereus Node:                            ││
-│ │  [Not configured]      [Configure...] ││
-│ │                                         ││
-│ │ Status: ⚠ Offline (using local only)   ││
-│ │                                         ││
-│ └─────────────────────────────────────────┘│
-│                                             │
-│                      [Save]  [Cancel]      │
-└─────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│ ← Back to Home                                   │
+│                                                  │
+│ Settings                                         │
+│                                                  │
+│ ┌────────────────────────────────────────────┐  │
+│ │ Display Preferences                        │  │
+│ ├────────────────────────────────────────────┤  │
+│ │ Theme:               [Dark ▼]              │  │
+│ ├────────────────────────────────────────────┤  │
+│ │ Language:            [English ▼]           │  │
+│ ├────────────────────────────────────────────┤  │
+│ │ Date Format:         [US ▼]  12/10/2025   │  │
+│ ├────────────────────────────────────────────┤  │
+│ │ Account Display:     [Name only ▼]         │  │
+│ └────────────────────────────────────────────┘  │
+│                                                  │
+│ ┌────────────────────────────────────────────┐  │
+│ │ Accounting Preferences                     │  │
+│ ├────────────────────────────────────────────┤  │
+│ │ ☐ Hide negative signs on Equity & Income  │  │
+│ │    (Shows true accounting by default)      │  │
+│ └────────────────────────────────────────────┘  │
+│                                                  │
+│ ┌────────────────────────────────────────────┐  │
+│ │ Network (Future)                           │  │
+│ ├────────────────────────────────────────────┤  │
+│ │ Sereus Nodes:               [+ Add Node]   │  │
+│ ├────────────────────────────────────────────┤  │
+│ │ ┌──────────────────────────────────────┐   │  │
+│ │ │  No nodes configured yet             │   │  │
+│ │ └──────────────────────────────────────┘   │  │
+│ └────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────┘
+
+(Auto-saves on change, no Save button needed)
 ```
 
 ---
@@ -119,18 +102,21 @@ Global application settings and user preferences.
 
 ### 2. Accounting Preferences
 
-**Sign Convention**
+**Sign Convention** (Simplified)
 
-Checkboxes to reverse display signs for specific account types:
-- ☐ Show Equity as positive (reverse sign)
-- ☐ Show Income as positive (reverse sign)
-- ☐ Show Liability as positive (reverse sign)
+Single toggle:
+- ☐ Hide negative signs on Equity and Income
 
 **Context:**
 - Database stores signed amounts: debit = +, credit = -
-- Equity, Income, Liability are credit-normal (negative in DB)
-- Some users prefer seeing all balances as positive
+- Equity and Income are credit-normal (naturally negative in DB)
+- Binary choice: show true accounting signs OR hide negatives
 - This is display-only; database unchanged
+
+**When checked:**
+- Equity shows as positive
+- Income shows as positive
+- Liabilities remain unchanged (stay negative)
 
 **Applies to:**
 - Account balances in Accounts View
@@ -140,15 +126,19 @@ Checkboxes to reverse display signs for specific account types:
 
 **Default:** Unchecked (show accounting convention signs)
 
-**Stored in:** `localStorage: bonum-sign-reversal` (object with boolean flags)
+**Stored in:** `localStorage: bonum-sign-reversal` (sets both equity and income flags)
 
 ### 3. Network (Future)
 
-**Sereus Node Configuration**
-- Shows connection status
-- "Configure..." button opens modal (future implementation)
-- For MVP: Shows "Not configured" and "Offline (using local only)"
-- Future: Node URL, credentials, sync status
+**Sereus Nodes List**
+- Shows list of configured nodes (empty for MVP)
+- "+ Add Node" button (disabled, future implementation)
+- Each node card shows:
+  - Node URL (wss://...)
+  - Connection status
+  - Remove button
+- For MVP: Shows "No nodes configured yet"
+- Future: Add/remove nodes, connection management, sync status
 
 ---
 

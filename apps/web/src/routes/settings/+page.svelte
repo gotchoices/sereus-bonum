@@ -8,9 +8,7 @@
   let theme = $state<Theme>('system');
   let dateFormat = $state<DateFormat>('US');
   let accountDisplay = $state<AccountDisplay>('name');
-  let signReversalEquity = $state(false);
-  let signReversalIncome = $state(false);
-  let signReversalLiability = $state(false);
+  let hideNegativeSigns = $state(false); // Simplified: single toggle for Equity + Income
   
   // Date format preview
   let datePreview = $derived(getDateFormatPreview(dateFormat));
@@ -22,9 +20,8 @@
     theme = currentSettings.theme;
     dateFormat = currentSettings.dateFormat;
     accountDisplay = currentSettings.accountDisplay;
-    signReversalEquity = currentSettings.signReversal.equity;
-    signReversalIncome = currentSettings.signReversal.income;
-    signReversalLiability = currentSettings.signReversal.liability;
+    // Simplified: if either equity or income is reversed, toggle is on
+    hideNegativeSigns = currentSettings.signReversal.equity || currentSettings.signReversal.income;
   });
   
   // Auto-save on change
@@ -41,10 +38,11 @@
   }
   
   function handleSignReversalChange() {
+    // Simplified: toggle applies to both Equity and Income
     settings.setSignReversal({
-      equity: signReversalEquity,
-      income: signReversalIncome,
-      liability: signReversalLiability,
+      equity: hideNegativeSigns,
+      income: hideNegativeSigns,
+      liability: false, // Liabilities stay as-is
     });
   }
 </script>
@@ -60,134 +58,45 @@
     <h2>{$t('settings.display_prefs')}</h2>
     
     <!-- Theme -->
-    <div class="setting-group">
-      <label class="setting-label">{$t('settings.theme')}</label>
-      <div class="radio-group">
-        <label class="radio-option">
-          <input 
-            type="radio" 
-            name="theme" 
-            value="light" 
-            bind:group={theme}
-            onchange={handleThemeChange}
-          />
-          <span>{$t('settings.theme_light')}</span>
-        </label>
-        <label class="radio-option">
-          <input 
-            type="radio" 
-            name="theme" 
-            value="dark" 
-            bind:group={theme}
-            onchange={handleThemeChange}
-          />
-          <span>{$t('settings.theme_dark')}</span>
-        </label>
-        <label class="radio-option">
-          <input 
-            type="radio" 
-            name="theme" 
-            value="system" 
-            bind:group={theme}
-            onchange={handleThemeChange}
-          />
-          <span>{$t('settings.theme_system')}</span>
-        </label>
-      </div>
+    <div class="setting-row">
+      <label class="setting-label" for="theme-select">{$t('settings.theme')}</label>
+      <select id="theme-select" bind:value={theme} onchange={handleThemeChange}>
+        <option value="light">{$t('settings.theme_light')}</option>
+        <option value="dark">{$t('settings.theme_dark')}</option>
+        <option value="system">{$t('settings.theme_system')}</option>
+      </select>
     </div>
     
     <!-- Language -->
-    <div class="setting-group">
-      <label class="setting-label" for="language">{$t('settings.language')}</label>
-      <select id="language" disabled>
+    <div class="setting-row">
+      <label class="setting-label" for="language-select">{$t('settings.language')}</label>
+      <select id="language-select" disabled>
         <option value="en">{$t('settings.language_english')}</option>
       </select>
-      <p class="setting-note">Additional languages coming soon</p>
     </div>
     
     <!-- Date Format -->
-    <div class="setting-group">
-      <label class="setting-label">{$t('settings.date_format')}</label>
-      <div class="radio-group">
-        <label class="radio-option">
-          <input 
-            type="radio" 
-            name="dateFormat" 
-            value="US" 
-            bind:group={dateFormat}
-            onchange={handleDateFormatChange}
-          />
-          <span>{$t('settings.date_format_us')}</span>
-        </label>
-        <label class="radio-option">
-          <input 
-            type="radio" 
-            name="dateFormat" 
-            value="EU" 
-            bind:group={dateFormat}
-            onchange={handleDateFormatChange}
-          />
-          <span>{$t('settings.date_format_eu')}</span>
-        </label>
-        <label class="radio-option">
-          <input 
-            type="radio" 
-            name="dateFormat" 
-            value="ISO" 
-            bind:group={dateFormat}
-            onchange={handleDateFormatChange}
-          />
-          <span>{$t('settings.date_format_iso')}</span>
-        </label>
+    <div class="setting-row">
+      <label class="setting-label" for="date-format-select">{$t('settings.date_format')}</label>
+      <div class="select-with-preview">
+        <select id="date-format-select" bind:value={dateFormat} onchange={handleDateFormatChange}>
+          <option value="US">{$t('settings.date_format_us')}</option>
+          <option value="EU">{$t('settings.date_format_eu')}</option>
+          <option value="ISO">{$t('settings.date_format_iso')}</option>
+        </select>
+        <span class="preview-text">{datePreview}</span>
       </div>
-      <p class="setting-note">{$t('settings.date_format_preview')}: {datePreview}</p>
     </div>
     
     <!-- Account Display -->
-    <div class="setting-group">
-      <label class="setting-label">{$t('settings.account_display')}</label>
-      <div class="radio-group">
-        <label class="radio-option">
-          <input 
-            type="radio" 
-            name="accountDisplay" 
-            value="code" 
-            bind:group={accountDisplay}
-            onchange={handleAccountDisplayChange}
-          />
-          <span>{$t('settings.account_display_code')}</span>
-        </label>
-        <label class="radio-option">
-          <input 
-            type="radio" 
-            name="accountDisplay" 
-            value="name" 
-            bind:group={accountDisplay}
-            onchange={handleAccountDisplayChange}
-          />
-          <span>{$t('settings.account_display_name')}</span>
-        </label>
-        <label class="radio-option">
-          <input 
-            type="radio" 
-            name="accountDisplay" 
-            value="path" 
-            bind:group={accountDisplay}
-            onchange={handleAccountDisplayChange}
-          />
-          <span>{$t('settings.account_display_path')}</span>
-        </label>
-        <label class="radio-option">
-          <input 
-            type="radio" 
-            name="accountDisplay" 
-            value="code-name" 
-            bind:group={accountDisplay}
-            onchange={handleAccountDisplayChange}
-          />
-          <span>{$t('settings.account_display_code_name')}</span>
-        </label>
-      </div>
+    <div class="setting-row">
+      <label class="setting-label" for="account-display-select">{$t('settings.account_display')}</label>
+      <select id="account-display-select" bind:value={accountDisplay} onchange={handleAccountDisplayChange}>
+        <option value="code">{$t('settings.account_display_code')}</option>
+        <option value="name">{$t('settings.account_display_name')}</option>
+        <option value="path">{$t('settings.account_display_path')}</option>
+        <option value="code-name">{$t('settings.account_display_code_name')}</option>
+      </select>
     </div>
   </section>
   
@@ -195,35 +104,16 @@
   <section class="settings-section">
     <h2>{$t('settings.accounting_prefs')}</h2>
     
-    <div class="setting-group">
-      <label class="setting-label">{$t('settings.sign_reversal')}</label>
-      <div class="checkbox-group">
-        <label class="checkbox-option">
-          <input 
-            type="checkbox" 
-            bind:checked={signReversalEquity}
-            onchange={handleSignReversalChange}
-          />
-          <span>{$t('settings.sign_reversal_equity')}</span>
-        </label>
-        <label class="checkbox-option">
-          <input 
-            type="checkbox" 
-            bind:checked={signReversalIncome}
-            onchange={handleSignReversalChange}
-          />
-          <span>{$t('settings.sign_reversal_income')}</span>
-        </label>
-        <label class="checkbox-option">
-          <input 
-            type="checkbox" 
-            bind:checked={signReversalLiability}
-            onchange={handleSignReversalChange}
-          />
-          <span>{$t('settings.sign_reversal_liability')}</span>
-        </label>
-      </div>
-      <p class="setting-note">{$t('settings.sign_reversal_note')}</p>
+    <div class="setting-row">
+      <label class="setting-label toggle-label">
+        <input 
+          type="checkbox" 
+          bind:checked={hideNegativeSigns}
+          onchange={handleSignReversalChange}
+        />
+        <span>{$t('settings.hide_negative_signs')}</span>
+      </label>
+      <p class="setting-note">{$t('settings.hide_negative_signs_note')}</p>
     </div>
   </section>
   
@@ -231,15 +121,25 @@
   <section class="settings-section network-section">
     <h2>{$t('settings.network')} <span class="future-badge">Future</span></h2>
     
-    <div class="setting-group">
-      <label class="setting-label">{$t('settings.sereus_node')}</label>
-      <div class="node-config">
-        <span class="node-status">{$t('settings.node_not_configured')}</span>
-        <button class="btn-secondary" disabled>{$t('settings.node_configure')}</button>
+    <div class="setting-row">
+      <label class="setting-label">{$t('settings.sereus_nodes')}</label>
+      <button class="btn-add" disabled title="Adding nodes coming soon">+ {$t('settings.add_node')}</button>
+    </div>
+    
+    <div class="node-list">
+      <div class="node-list-empty">
+        {$t('settings.no_nodes_configured')}
       </div>
-      <p class="setting-note">
-        {$t('settings.node_status')}: ⚠ {$t('settings.node_offline')}
-      </p>
+      <!-- Future: nodes will appear here as cards with remove buttons -->
+      <!--
+      <div class="node-card">
+        <div class="node-info">
+          <div class="node-url">wss://sereus.example.com:1234</div>
+          <div class="node-status">⚠ Offline</div>
+        </div>
+        <button class="btn-remove" disabled>Remove</button>
+      </div>
+      -->
     </div>
   </section>
 </div>
@@ -297,70 +197,66 @@
     border-radius: var(--radius-sm);
   }
   
-  .setting-group {
-    margin-bottom: var(--space-lg);
+  .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-md) 0;
+    border-bottom: 1px solid var(--border-color);
+    gap: var(--space-lg);
   }
   
-  .setting-group:last-child {
-    margin-bottom: 0;
+  .setting-row:last-child {
+    border-bottom: none;
   }
   
   .setting-label {
-    display: block;
     font-weight: 500;
     color: var(--text-primary);
-    margin-bottom: var(--space-sm);
+    flex: 1;
+  }
+  
+  .toggle-label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    cursor: pointer;
+  }
+  
+  .toggle-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
   }
   
   .setting-note {
     font-size: 0.875rem;
     color: var(--text-muted);
-    margin-top: var(--space-sm);
-    margin-bottom: 0;
+    margin: var(--space-xs) 0 0 0;
+    padding-left: 26px; /* Align with checkbox text */
   }
   
-  .radio-group,
-  .checkbox-group {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-sm);
-  }
-  
-  .radio-option,
-  .checkbox-option {
+  .select-with-preview {
     display: flex;
     align-items: center;
-    gap: var(--space-sm);
-    padding: var(--space-sm);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition: background-color 0.2s;
+    gap: var(--space-md);
   }
   
-  .radio-option:hover,
-  .checkbox-option:hover {
-    background: var(--bg-hover);
-  }
-  
-  .radio-option input,
-  .checkbox-option input {
-    cursor: pointer;
-  }
-  
-  .radio-option span,
-  .checkbox-option span {
-    color: var(--text-primary);
+  .preview-text {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    white-space: nowrap;
   }
   
   select {
-    width: 100%;
-    padding: var(--space-sm);
+    min-width: 200px;
+    padding: var(--space-xs) var(--space-sm);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     background: var(--bg-secondary);
     color: var(--text-primary);
     font-size: 0.875rem;
+    cursor: pointer;
   }
   
   select:disabled {
@@ -368,32 +264,72 @@
     cursor: not-allowed;
   }
   
-  .node-config {
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-    padding: var(--space-sm);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    background: var(--bg-secondary);
-  }
-  
-  .node-status {
-    flex: 1;
-    color: var(--text-muted);
-  }
-  
-  .btn-secondary {
+  .btn-add {
     padding: var(--space-xs) var(--space-md);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
-    background: var(--bg-primary);
+    background: var(--bg-secondary);
     color: var(--text-primary);
     font-size: 0.875rem;
     cursor: pointer;
   }
   
-  .btn-secondary:disabled {
+  .btn-add:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  .node-list {
+    margin-top: var(--space-md);
+  }
+  
+  .node-list-empty {
+    padding: var(--space-lg);
+    text-align: center;
+    color: var(--text-muted);
+    border: 1px dashed var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+  }
+  
+  .node-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-md);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    margin-bottom: var(--space-sm);
+  }
+  
+  .node-info {
+    flex: 1;
+  }
+  
+  .node-url {
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    color: var(--text-primary);
+  }
+  
+  .node-status {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: var(--space-xs);
+  }
+  
+  .btn-remove {
+    padding: var(--space-xs) var(--space-sm);
+    border: 1px solid var(--danger);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--danger);
+    font-size: 0.875rem;
+    cursor: pointer;
+  }
+  
+  .btn-remove:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }

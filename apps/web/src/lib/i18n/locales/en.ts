@@ -197,18 +197,14 @@ export default {
     account_display_name: 'Name only',
     account_display_path: 'Full path',
     account_display_code_name: 'Code: Name',
-    // Sign reversal
-    sign_reversal: 'Show positive amounts for:',
-    sign_reversal_equity: 'Equity accounts',
-    sign_reversal_income: 'Income accounts',
-    sign_reversal_liability: 'Liability accounts',
-    sign_reversal_note: 'By default, credits are negative (accounting convention). Check boxes above to reverse signs for display only.',
+    // Sign reversal (simplified)
+    hide_negative_signs: 'Equity/Income',
+    hide_negative_signs_note: 'Hide negative signs. By default, Equity and Income show as negative (accounting convention). Check this to display them as positive numbers.',
     // Network
-    sereus_node: 'Sereus Node',
-    node_not_configured: 'Not configured',
-    node_configure: 'Configure...',
-    node_status: 'Status',
-    node_offline: 'Offline (using local only)',
+    sereus_nodes: 'Sereus Nodes',
+    add_node: 'Add Node',
+    no_nodes_configured: 'No nodes configured yet',
+    remove_node: 'Remove',
     // Actions
     save: 'Save',
     cancel: 'Cancel',

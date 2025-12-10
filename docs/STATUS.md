@@ -87,16 +87,17 @@
 - ⬜ VBS click-through (future enhancement)
 - ⬜ Search results (when implemented)
 
-#### ✅ Settings Screen (Complete)
-**Implemented with auto-save behavior**
+#### ✅ Settings Screen (Complete - Compact Design)
+**Implemented with auto-save behavior and compact UI**
 
 Features implemented:
+- ✅ Compact row-based layout (label + dropdown per setting)
 - ✅ Light/dark/system theme toggle (immediate effect)
 - ✅ Language selector (English only for MVP, dropdown ready for future)
-- ✅ Date format (US/EU/ISO with live preview)
+- ✅ Date format with live preview (US/EU/ISO)
 - ✅ Account display format (Code/Name/Path/Code: Name)
-- ✅ Sign reversal for Equity/Income/Liability (display only)
-- ✅ Sereus node placeholder (future feature)
+- ✅ Simplified sign toggle (hide negatives for Equity + Income together)
+- ✅ Sereus nodes list UI (empty state, "+ Add Node" button for future)
 - ✅ Settings persist in localStorage
 - ✅ Auto-load on app startup
 
