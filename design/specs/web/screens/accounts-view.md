@@ -19,7 +19,10 @@ Display an entity's accounts in various reporting modes (Balance Sheet, Trial Ba
 - **Accounts Shown:** Assets, Liabilities, Equity only
 - **Date Behavior:** All accounts cumulative from inception through "As of" date
 - **Income/Expense:** Rolled into Retained Earnings under Equity
-- **Retained Earnings:** Expandable to show I/E breakdown
+- **Retained Earnings:** 
+  - Shown as expandable line item under Equity
+  - Click to expand and see Income/Expense breakdown
+  - Included in Equity total
 
 ### Trial Balance
 - **Purpose:** Verify books are balanced, show all account types
@@ -28,6 +31,11 @@ Display an entity's accounts in various reporting modes (Balance Sheet, Trial Ba
 - **Date Behavior:**
   - **A/L/E:** Cumulative from inception through end date
   - **I/E:** If period specified, sum for period; otherwise cumulative
+- **Retained Earnings:**
+  - Shown as non-expandable line item under Equity
+  - Displays Net Income (Income - Expense)
+  - Included in Equity total
+  - Not expandable (I/E already shown separately at top level)
 - **Verification:** Shows "Assets = Liabilities + Equity ✓" at bottom
 - **Use Case:** Month-end/year-end balancing, debugging
 

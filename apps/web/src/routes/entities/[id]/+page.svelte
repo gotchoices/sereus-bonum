@@ -106,8 +106,13 @@
   
   let visibleTypes = $derived(getVisibleTypes());
   
-  // Should we show RE under Equity? (Balance Sheet mode only)
-  let showRetainedEarningsInEquity = $derived(reportMode === 'balance_sheet');
+  // Should we show RE under Equity? (Balance Sheet and Trial Balance modes)
+  let showRetainedEarningsInEquity = $derived(
+    reportMode === 'balance_sheet' || reportMode === 'trial_balance'
+  );
+  
+  // Should RE be expandable? (Balance Sheet mode only)
+  let retainedEarningsExpandable = $derived(reportMode === 'balance_sheet');
   
   // Expand/collapse functions
   function toggleGroup(groupId: string) {
@@ -161,8 +166,9 @@
       case 'ASSET': return balanceData.totalAssets;
       case 'LIABILITY': return balanceData.totalLiabilities;
       case 'EQUITY':
-        // In Balance Sheet mode, include Retained Earnings in Equity total
-        if (reportMode === 'balance_sheet') {
+        // In both Balance Sheet and Trial Balance modes, include Retained Earnings
+        // (since RE is shown as a line item under Equity in both modes)
+        if (reportMode === 'balance_sheet' || reportMode === 'trial_balance') {
           return balanceData.totalEquity + netIncome();
         }
         return balanceData.totalEquity;
@@ -332,47 +338,57 @@
               {/if}
             {/each}
             
-            <!-- Retained Earnings (pseudo-account under Equity) - Balance Sheet mode only -->
+            <!-- Retained Earnings (pseudo-account under Equity) -->
             {#if type === 'EQUITY' && showRetainedEarningsInEquity}
               <div class="group-item retained-earnings">
-                <button 
-                  class="group-row expandable"
-                  onclick={toggleRetainedEarnings}
-                >
-                  <span class="expand-icon">{retainedEarningsExpanded ? '▼' : '▶'}</span>
-                  <span class="group-name">{$t('accounts.retained_earnings')}</span>
-                  <span class="group-total">{formatCurrency(netIncome(), entity.baseUnit)}</span>
-                </button>
-                
-                {#if retainedEarningsExpanded}
-                  <div class="group-contents re-breakdown">
-                    <!-- Income section -->
-                    <div class="re-type-section">
-                      <div class="re-type-header">{$t('account_types.INCOME')}</div>
-                      {#each $topLevelGroupsByType.get('INCOME') || [] as group}
-                        {#each getAccountsForGroup(group.id) as account}
-                          <div class="account-row child">
-                            <span class="account-code">{account.code || ''}</span>
-                            <a href="/ledger/{account.id}" class="account-name">{account.name}</a>
-                            <span class="account-balance">{formatCurrency(getAccountBalance(account.id), account.unit)}</span>
-                          </div>
+                {#if retainedEarningsExpandable}
+                  <!-- Balance Sheet mode: expandable to show I/E breakdown -->
+                  <button 
+                    class="group-row expandable"
+                    onclick={toggleRetainedEarnings}
+                  >
+                    <span class="expand-icon">{retainedEarningsExpanded ? '▼' : '▶'}</span>
+                    <span class="group-name">{$t('accounts.retained_earnings')}</span>
+                    <span class="group-total">{formatCurrency(netIncome(), entity.baseUnit)}</span>
+                  </button>
+                  
+                  {#if retainedEarningsExpanded}
+                    <div class="group-contents re-breakdown">
+                      <!-- Income section -->
+                      <div class="re-type-section">
+                        <div class="re-type-header">{$t('account_types.INCOME')}</div>
+                        {#each $topLevelGroupsByType.get('INCOME') || [] as group}
+                          {#each getAccountsForGroup(group.id) as account}
+                            <div class="account-row child">
+                              <span class="account-code">{account.code || ''}</span>
+                              <a href="/ledger/{account.id}" class="account-name">{account.name}</a>
+                              <span class="account-balance">{formatCurrency(getAccountBalance(account.id), account.unit)}</span>
+                            </div>
+                          {/each}
                         {/each}
-                      {/each}
-                    </div>
-                    
-                    <!-- Expense section -->
-                    <div class="re-type-section">
-                      <div class="re-type-header">{$t('account_types.EXPENSE')}</div>
-                      {#each $topLevelGroupsByType.get('EXPENSE') || [] as group}
-                        {#each getAccountsForGroup(group.id) as account}
-                          <div class="account-row child">
-                            <span class="account-code">{account.code || ''}</span>
-                            <a href="/ledger/{account.id}" class="account-name">{account.name}</a>
-                            <span class="account-balance">{formatCurrency(getAccountBalance(account.id), account.unit)}</span>
-                          </div>
+                      </div>
+                      
+                      <!-- Expense section -->
+                      <div class="re-type-section">
+                        <div class="re-type-header">{$t('account_types.EXPENSE')}</div>
+                        {#each $topLevelGroupsByType.get('EXPENSE') || [] as group}
+                          {#each getAccountsForGroup(group.id) as account}
+                            <div class="account-row child">
+                              <span class="account-code">{account.code || ''}</span>
+                              <a href="/ledger/{account.id}" class="account-name">{account.name}</a>
+                              <span class="account-balance">{formatCurrency(getAccountBalance(account.id), account.unit)}</span>
+                            </div>
+                          {/each}
                         {/each}
-                      {/each}
+                      </div>
                     </div>
+                  {/if}
+                {:else}
+                  <!-- Trial Balance mode: non-expandable line item -->
+                  <div class="group-row">
+                    <span class="expand-icon"></span>
+                    <span class="group-name">{$t('accounts.retained_earnings')}</span>
+                    <span class="group-total">{formatCurrency(netIncome(), entity.baseUnit)}</span>
                   </div>
                 {/if}
               </div>

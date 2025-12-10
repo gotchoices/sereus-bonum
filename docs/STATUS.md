@@ -52,8 +52,10 @@
 **Issue:** Equity total didn't include Retained Earnings
 - ✅ Fixed backend: `totalEquity` now returns equity accounts only (not including net income)
 - ✅ Added `totalIncome` and `totalExpense` to balance sheet data
-- ✅ Fixed frontend: Equity total in Balance Sheet mode now includes Retained Earnings
-- ✅ Retained Earnings always shown under Equity in Balance Sheet mode
+- ✅ Fixed frontend: Equity total in both modes now includes Retained Earnings
+- ✅ Retained Earnings shown under Equity in both modes:
+  - **Balance Sheet:** Expandable to show Income/Expense breakdown
+  - **Trial Balance:** Non-expandable line item (I/E already shown separately)
 - ✅ Verification formula: Assets = Liabilities + Equity + Net Income (works for both modes)
 - ✅ Removed Net Worth display (redundant with Equity)
 - ✅ Balance Sheet: Balanced
