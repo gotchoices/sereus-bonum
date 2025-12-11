@@ -110,9 +110,8 @@
       case 'Tab':
         // Complete to highlighted result and advance focus
         if (searchResults[selectedIndex]) {
-          e.preventDefault();
           selectAccount(searchResults[selectedIndex]);
-          // Focus will naturally advance (preventDefault stops browser default)
+          // Don't preventDefault - let browser advance focus naturally
         }
         break;
       case 'Enter':
