@@ -6,6 +6,7 @@
   import { entities } from '$lib/stores/entities';
   import { accounts, accountGroups } from '$lib/stores/accounts';
   import { getDataService, type LedgerEntry, type Account, type Unit, type AccountGroup, type Entity } from '$lib/data';
+  import AccountAutocomplete from '$lib/components/AccountAutocomplete.svelte';
   
   // Route param
   let accountId = $derived($page.params.accountId);
@@ -423,34 +424,44 @@
   }
   
   // Handle Enter/Tab key on amount fields
-  function handleAmountKeydown(e: KeyboardEvent, isInSplitMode: boolean = false) {
-    if (isInSplitMode) {
-      // In split mode, Tab moves to next split row (handled by browser default)
-      // Enter saves the split transaction
-      if (e.key === 'Enter') {
+  function handleAmountKeydown(e: KeyboardEvent) {
+    // Simple mode: Enter or Tab saves and moves to next transaction
+    if (!isSplitMode) {
+      if (e.key === 'Enter' && (newEntry.debit || newEntry.credit)) {
         e.preventDefault();
-        saveSplitEntry();
+        saveEntry();
+        return;
+      }
+      
+      // Tab in either Debit or Credit field saves and focuses date input
+      if (e.key === 'Tab' && !e.shiftKey && (newEntry.debit || newEntry.credit)) {
+        e.preventDefault();
+        saveEntry().then(() => {
+          // Focus date input for next entry
+          setTimeout(() => {
+            const dateInput = document.querySelector('.new-entry-row .input-date') as HTMLInputElement;
+            if (dateInput) dateInput.focus();
+          }, 50);
+        });
       }
       return;
     }
     
-    // Simple mode: Enter or Tab saves and moves to next transaction
-    if (e.key === 'Enter' && (newEntry.debit || newEntry.credit)) {
+    // Split mode: Tab from amount goes to first split's Note field
+    if (e.key === 'Tab' && !e.shiftKey) {
       e.preventDefault();
-      saveEntry();
-      return;
+      setTimeout(() => {
+        const firstSplitNote = document.querySelector('.split-entry-row .input-split-note') as HTMLInputElement;
+        if (firstSplitNote) {
+          firstSplitNote.focus();
+        }
+      }, 50);
     }
     
-    // Tab in either Debit or Credit field saves and focuses date input
-    if (e.key === 'Tab' && !e.shiftKey && (newEntry.debit || newEntry.credit)) {
+    // Enter saves the split transaction
+    if (e.key === 'Enter') {
       e.preventDefault();
-      saveEntry().then(() => {
-        // Focus date input for next entry
-        setTimeout(() => {
-          const dateInput = document.querySelector('.new-entry-row .input-date') as HTMLInputElement;
-          if (dateInput) dateInput.focus();
-        }, 50);
-      });
+      saveSplitEntry();
     }
   }
   
@@ -624,17 +635,26 @@
             </td>
             <td class="col-offset autocomplete-container">
               <div class="offset-input-wrapper">
-                <input 
-                  type="text" 
-                  bind:value={newEntry.offsetSearch}
-                  oninput={handleOffsetSearch}
-                  onkeydown={handleSearchKeydown}
-                  onfocus={() => handleOffsetSearch()}
-                  onblur={() => setTimeout(() => showAutocomplete = false, 200)}
-                  placeholder={$t('ledger.search_accounts')}
-                  class="input-offset"
-                  disabled={isSplitMode}
-                />
+                {#if isSplitMode}
+                  <input 
+                    type="text"
+                    value={account?.name || ''}
+                    disabled
+                    placeholder=""
+                    class="input-offset"
+                  />
+                {:else}
+                  <AccountAutocomplete
+                    entityId={account?.entityId || ''}
+                    bind:value={newEntry.offsetSearch}
+                    bind:selectedId={newEntry.offsetAccountId}
+                    placeholder={$t('ledger.search_accounts')}
+                    disabled={false}
+                    onselect={(result) => {
+                      log.ui.debug('[Ledger] Account selected:', result.path);
+                    }}
+                  />
+                {/if}
                 <button 
                   class="split-button"
                   onclick={() => {
@@ -655,19 +675,6 @@
                   |
                 </button>
               </div>
-              {#if showAutocomplete}
-                <div class="autocomplete-dropdown">
-                  {#each searchResults as result, i (result.id)}
-                    <button 
-                      class="autocomplete-option"
-                      class:selected={i === selectedSearchIndex}
-                      onmousedown={() => selectAccount(result)}
-                    >
-                      {result.path}
-                    </button>
-                  {/each}
-                </div>
-              {/if}
             </td>
             <td class="col-debit">
               <input 
@@ -737,30 +744,19 @@
                     class="input-split-note"
                   />
                 </td>
-                <td class="col-offset autocomplete-container">
-                  <input 
-                    type="text" 
+                <td class="col-offset">
+                  <AccountAutocomplete
+                    entityId={account?.entityId || ''}
                     bind:value={split.accountSearch}
-                    oninput={() => handleSplitAccountSearch(split.id, split.accountSearch)}
-                    onfocus={() => handleSplitAccountSearch(split.id, split.accountSearch)}
-                    onblur={() => setTimeout(() => {
-                      showSplitAutocomplete = { ...showSplitAutocomplete, [split.id]: false };
-                    }, 200)}
+                    bind:selectedId={split.accountId}
                     placeholder={$t('ledger.search_accounts')}
-                    class="input-offset"
+                    disabled={false}
+                    onselect={(result) => {
+                      log.ui.debug('[Ledger] Split account selected:', result.path);
+                      // Force reactivity update
+                      splitEntries = [...splitEntries];
+                    }}
                   />
-                  {#if showSplitAutocomplete[split.id] && splitSearchResults[split.id]}
-                    <div class="autocomplete-dropdown">
-                      {#each splitSearchResults[split.id] as result (result.id)}
-                        <button 
-                          class="autocomplete-option"
-                          onmousedown={() => selectSplitAccount(split.id, result)}
-                        >
-                          {result.path}
-                        </button>
-                      {/each}
-                    </div>
-                  {/if}
                 </td>
                 <td class="col-debit" colspan="2">
                   <input 
