@@ -39,19 +39,33 @@
     id: string;
     accountId: string;
     accountSearch: string;
-    amount: string;
+    debit: string;
+    credit: string;
     note: string;
   }>>([]);
   
   // Initialize split entries with first empty row
   function initSplitMode() {
     isSplitMode = true;
+    
+    // Calculate what's needed to balance
+    const currentAccountAmount = newEntry.debit 
+      ? parseFloat(newEntry.debit) * (unit?.displayDivisor ?? 100)
+      : newEntry.credit
+        ? -parseFloat(newEntry.credit) * (unit?.displayDivisor ?? 100)
+        : 0;
+    
+    // Need opposite sign to balance
+    const amountToBalance = -currentAccountAmount;
+    const absAmount = Math.abs(amountToBalance / (unit?.displayDivisor ?? 100)).toFixed(2);
+    
     splitEntries = [
       {
         id: crypto.randomUUID(),
         accountId: newEntry.offsetAccountId || '',
         accountSearch: newEntry.offsetSearch || '',
-        amount: newEntry.debit || newEntry.credit || '',
+        debit: amountToBalance > 0 ? absAmount : '',
+        credit: amountToBalance < 0 ? absAmount : '',
         note: '',
       }
     ];
@@ -67,18 +81,20 @@
         : 0;
     
     const splitTotal = splitEntries.reduce((sum, split) => {
-      const amt = parseFloat(split.amount) || 0;
-      return sum + (amt * (unit?.displayDivisor ?? 100));
+      const debitAmt = parseFloat(split.debit) || 0;
+      const creditAmt = parseFloat(split.credit) || 0;
+      return sum + (debitAmt * (unit?.displayDivisor ?? 100)) - (creditAmt * (unit?.displayDivisor ?? 100));
     }, 0);
     
     const amountToBalance = -(currentAccountAmount + splitTotal);
-    const displayAmount = Math.abs(amountToBalance / (unit?.displayDivisor ?? 100)).toFixed(2);
+    const absAmount = Math.abs(amountToBalance / (unit?.displayDivisor ?? 100)).toFixed(2);
     
     splitEntries = [...splitEntries, {
       id: crypto.randomUUID(),
       accountId: '',
       accountSearch: '',
-      amount: displayAmount,
+      debit: amountToBalance > 0 ? absAmount : '',
+      credit: amountToBalance < 0 ? absAmount : '',
       note: '',
     }];
   }
@@ -100,8 +116,9 @@
         : 0;
     
     const splitTotal = splitEntries.reduce((sum, split) => {
-      const amt = parseFloat(split.amount) || 0;
-      return sum + (amt * (unit?.displayDivisor ?? 100));
+      const debitAmt = parseFloat(split.debit) || 0;
+      const creditAmt = parseFloat(split.credit) || 0;
+      return sum + (debitAmt * (unit?.displayDivisor ?? 100)) - (creditAmt * (unit?.displayDivisor ?? 100));
     }, 0);
     
     return currentAccountAmount + splitTotal;
@@ -347,7 +364,7 @@
     if (!account) return;
     
     // Validate all splits have accounts
-    const invalidSplits = splitEntries.filter(s => !s.accountId && !s.accountSearch);
+    const invalidSplits = splitEntries.filter(s => !s.accountId);
     if (invalidSplits.length > 0) {
       log.ui.warn('[Ledger] All splits must have an account selected');
       return;
@@ -374,11 +391,13 @@
       ];
       
       for (const split of splitEntries) {
-        const splitAmount = parseFloat(split.amount) * (unit?.displayDivisor ?? 100);
+        const debitAmt = parseFloat(split.debit) || 0;
+        const creditAmt = parseFloat(split.credit) || 0;
+        const splitAmount = (debitAmt * (unit?.displayDivisor ?? 100)) - (creditAmt * (unit?.displayDivisor ?? 100));
         entries.push({
           transactionId: '',
           accountId: split.accountId,
-          amount: -splitAmount, // Opposite sign from current account
+          amount: splitAmount,
           note: split.note || undefined,
         });
       }
@@ -701,37 +720,6 @@
           
           <!-- Split entry rows (when in split mode) -->
           {#if isSplitMode}
-            <tr class="split-mode-header">
-              <td colspan="7">
-                <div class="split-mode-indicator">
-                  Split Transaction Entry - Balance: {formatAmount(getSplitBalance())}
-                  {#if Math.abs(getSplitBalance()) < 1}
-                    <span class="balanced">✓</span>
-                  {:else}
-                    <span class="imbalanced">⚠ Imbalanced</span>
-                  {/if}
-                </div>
-              </td>
-            </tr>
-            
-            <!-- Current account row (read-only) -->
-            <tr class="split-current-account">
-              <td></td>
-              <td></td>
-              <td class="col-note"></td>
-              <td class="col-offset current-account-name">{account?.name || ''}</td>
-              <td class="col-debit" colspan="2">
-                <span class="current-account-amount">
-                  {#if newEntry.debit}
-                    {newEntry.debit} DR
-                  {:else if newEntry.credit}
-                    {newEntry.credit} CR
-                  {/if}
-                </span>
-              </td>
-              <td></td>
-            </tr>
-            
             {#each splitEntries as split, i (split.id)}
               <tr class="split-entry-row">
                 <td></td>
@@ -758,17 +746,33 @@
                     }}
                   />
                 </td>
-                <td class="col-debit" colspan="2">
+                <td class="col-debit">
                   <input 
                     type="text" 
-                    bind:value={split.amount}
+                    bind:value={split.debit}
                     onkeydown={(e) => {
-                      // If this is the last split and user presses Tab, go to date of next entry
+                      // Enter saves split transaction
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        saveSplitEntry();
+                      }
+                    }}
+                    placeholder=""
+                    class="input-amount"
+                    disabled={!!split.credit}
+                  />
+                </td>
+                <td class="col-credit">
+                  <input 
+                    type="text" 
+                    bind:value={split.credit}
+                    onkeydown={(e) => {
+                      // If this is the last split and user presses Tab, go to "Add Split" button
                       if (e.key === 'Tab' && !e.shiftKey && i === splitEntries.length - 1) {
                         e.preventDefault();
                         setTimeout(() => {
-                          const dateInput = document.querySelector('.new-entry-row .input-date') as HTMLInputElement;
-                          if (dateInput) dateInput.focus();
+                          const addSplitBtn = document.querySelector('.btn-add-split') as HTMLButtonElement;
+                          if (addSplitBtn) addSplitBtn.focus();
                         }, 50);
                       }
                       // Enter saves split transaction
@@ -777,8 +781,9 @@
                         saveSplitEntry();
                       }
                     }}
-                    placeholder={$t('ledger.amount_to_balance')}
+                    placeholder=""
                     class="input-amount"
+                    disabled={!!split.debit}
                   />
                 </td>
                 <td class="col-actions">

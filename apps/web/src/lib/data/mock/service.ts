@@ -853,6 +853,41 @@ class SqliteDataService implements DataService {
       }
     }
     
+    // Sort by relevance: prioritize matches at start of path/name/type
+    results.sort((a, b) => {
+      const aPath = a.path.toLowerCase();
+      const bPath = b.path.toLowerCase();
+      const aName = a.name.toLowerCase();
+      const bName = b.name.toLowerCase();
+      
+      // 1. Exact match on account name
+      if (aName === lowerQuery) return -1;
+      if (bName === lowerQuery) return 1;
+      
+      // 2. Path starts with query (e.g., "L" matches "Liabilities" before "Assets : Land")
+      const aPathStarts = aPath.startsWith(lowerQuery);
+      const bPathStarts = bPath.startsWith(lowerQuery);
+      if (aPathStarts && !bPathStarts) return -1;
+      if (!aPathStarts && bPathStarts) return 1;
+      
+      // 3. Name starts with query
+      const aNameStarts = aName.startsWith(lowerQuery);
+      const bNameStarts = bName.startsWith(lowerQuery);
+      if (aNameStarts && !bNameStarts) return -1;
+      if (!aNameStarts && bNameStarts) return 1;
+      
+      // 4. Type name starts with query (extract first element before " : ")
+      const aType = aPath.split(' : ')[0];
+      const bType = bPath.split(' : ')[0];
+      const aTypeStarts = aType.startsWith(lowerQuery);
+      const bTypeStarts = bType.startsWith(lowerQuery);
+      if (aTypeStarts && !bTypeStarts) return -1;
+      if (!aTypeStarts && bTypeStarts) return 1;
+      
+      // 5. Fall back to original order (display_order)
+      return 0;
+    });
+    
     return results;
   }
   

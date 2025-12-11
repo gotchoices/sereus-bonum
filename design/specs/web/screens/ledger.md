@@ -8,6 +8,10 @@
 
 Primary transaction entry interface for an account. Optimized for keyboard-centric rapid data entry with minimal mouse interaction.
 
+**References:**
+- **[Transaction Entry](../global/transaction-entry.md):** Detailed specs for simple and split transaction entry
+- **[Account Autocomplete](../global/account-autocomplete.md):** Detailed specs for account selection behavior
+
 ---
 
 ## Header Section
@@ -115,6 +119,46 @@ Expand to show child entries:
   ├── |      | Cleaning        | Household|       |  15.45
   └── |      | Paper goods     | Office   |       |  10.00
 ```
+
+---
+
+## Transaction Entry
+
+See **[Transaction Entry Spec](../global/transaction-entry.md)** for complete details on:
+- Simple mode (single offset account)
+- Split mode (multiple offset accounts)
+- Tab flow and keyboard navigation
+- Auto-balance calculation
+- Validation rules
+
+### Quick Summary
+
+**New Entry Row:** Always visible at bottom of ledger
+- Enter date, ref, memo, select account, enter amount
+- Tab from Debit/Credit field saves transaction
+- Click split button (`|`) to enter multi-account transaction
+
+**Account Selection:** Uses **[Account Autocomplete](../global/account-autocomplete.md)**
+- Type to search, colon (`:`) for progressive path completion
+- Tab/Enter to select from dropdown
+
+---
+
+## Editing Existing Transactions
+
+**Current behavior (MVP):** Click transaction row logs entry ID (placeholder)
+
+**Future behavior:** See [Transaction Entry Spec - Editing](../global/transaction-entry.md#editing-existing-transactions)
+- Click row to load into entry form
+- Edit fields, then Save or Cancel
+- Simple transactions load in simple mode
+- Split transactions load in split mode with all splits visible
+
+---
+
+## Deleting Transactions
+
+**Not in MVP.** See [Transaction Entry Spec - Deleting](../global/transaction-entry.md#deleting-transactions) for future implementation.
 
 ---
 

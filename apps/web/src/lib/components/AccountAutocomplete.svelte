@@ -26,7 +26,7 @@
   let showDropdown = $state(false);
   let selectedIndex = $state(0);
   
-  // Search for accounts
+  // Search for accounts (max 10 results)
   async function handleSearch() {
     if (!entityId || value.length < 1) {
       searchResults = [];
@@ -38,9 +38,9 @@
     try {
       const ds = await getDataService();
       const results = await ds.searchAccounts(entityId, value);
-      searchResults = results;
+      searchResults = results.slice(0, 10); // Max 10 results per spec
       showDropdown = results.length > 0;
-      selectedIndex = 0;
+      selectedIndex = 0; // Reset to top on new search
       log.ui.debug('[AccountAutocomplete] Search results:', results.length);
     } catch (e) {
       log.ui.error('[AccountAutocomplete] Search error:', e);
@@ -58,8 +58,30 @@
     log.ui.debug('[AccountAutocomplete] Selected:', result.path);
   }
   
+  // Find longest matching path element (excluding final account name)
+  function findLongestMatchingElement(path: string, query: string): number {
+    const lowerQuery = query.toLowerCase();
+    const pathParts = path.split(' : ');
+    
+    // Exclude final element (account name - no : after it)
+    let longestMatchIndex = -1;
+    
+    for (let i = 0; i < pathParts.length - 1; i++) {
+      if (pathParts[i].toLowerCase().includes(lowerQuery)) {
+        longestMatchIndex = i;
+      }
+    }
+    
+    return longestMatchIndex;
+  }
+  
   // Handle keyboard navigation
   function handleKeydown(e: KeyboardEvent) {
+    // Allow left/right arrows for normal text editing
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      return;
+    }
+    
     if (!showDropdown && e.key !== ':') return;
     
     switch (e.key) {
@@ -72,40 +94,50 @@
         selectedIndex = Math.max(selectedIndex - 1, 0);
         break;
       case ':':
-        // Complete to end of current path element using TOP result (index 0)
-        if (searchResults.length > 0) {
+        // Complete through longest matching element of HIGHLIGHTED result
+        if (searchResults[selectedIndex]) {
           e.preventDefault();
-          const result = searchResults[0]; // Always use top filtered result
-          const path = result.path;
+          const result = searchResults[selectedIndex];
+          const longestMatchIndex = findLongestMatchingElement(result.path, value);
           
-          // Find how many colons we've already typed
-          const colonsTyped = (value.match(/:/g) || []).length;
-          const pathParts = path.split(' : ');
-          
-          // Complete to the next colon position
-          if (colonsTyped < pathParts.length - 1) {
-            value = pathParts.slice(0, colonsTyped + 1).join(' : ') + ' : ';
+          if (longestMatchIndex >= 0) {
+            const pathParts = result.path.split(' : ');
+            value = pathParts.slice(0, longestMatchIndex + 1).join(' : ') + ' : ';
             handleSearch();
           }
         }
         break;
       case 'Tab':
-        // Complete to top result
+        // Complete to highlighted result and advance focus
         if (searchResults[selectedIndex]) {
           e.preventDefault();
           selectAccount(searchResults[selectedIndex]);
+          // Focus will naturally advance (preventDefault stops browser default)
         }
         break;
       case 'Enter':
+        // Complete to highlighted result and stay in field
         if (searchResults[selectedIndex]) {
           e.preventDefault();
           selectAccount(searchResults[selectedIndex]);
         }
         break;
       case 'Escape':
+        e.preventDefault();
         showDropdown = false;
         break;
     }
+  }
+  
+  // Handle blur - clear if no valid selection
+  function handleBlur() {
+    setTimeout(() => {
+      showDropdown = false;
+      // If no selectedId, clear the input
+      if (!selectedId && value) {
+        value = '';
+      }
+    }, 200); // Delay to allow click on dropdown
   }
   
   // Clear selection when value changes manually
@@ -124,7 +156,7 @@
     oninput={handleInput}
     onkeydown={handleKeydown}
     onfocus={() => handleSearch()}
-    onblur={() => setTimeout(() => showDropdown = false, 200)}
+    onblur={handleBlur}
     {placeholder}
     {disabled}
     class="account-input"

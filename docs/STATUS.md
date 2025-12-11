@@ -18,6 +18,20 @@
 
 ---
 
+## Recently Completed
+
+### ✅ Account Autocomplete Specification & Refinement
+- **Created:** `/design/specs/web/global/account-autocomplete.md`
+- **Created:** `/design/specs/web/global/transaction-entry.md`
+- **Refined colon completion logic:**
+  - Uses highlighted result (not always top)
+  - Finds longest matching path element
+  - Never completes final account name
+- **Implemented in:** `AccountAutocomplete.svelte`
+- **Key behaviors:** Max 10 results, arrow navigation, Tab vs Enter distinction, Escape, auto-clear on blur
+
+---
+
 ## Backlog (Priority Order)
 
 ### High Priority (MVP Blockers)
@@ -259,18 +273,21 @@ Framework decision: NativeScript-Svelte (primary), React Native (fallback)
 - Ledger: Transaction entry with autocomplete, keyboard navigation, split support
   - ✅ **Reusable AccountAutocomplete Component** - used in all account inputs
   - ✅ Split button (|) to **right** of account input, disabled when account selected
-  - ✅ Colon completion (`:` uses **top result**, completes to end of current path element)
+  - ✅ **Colon completion FIXED** - Search results now sorted by relevance (`:` uses top **relevant** result)
   - ✅ Tab from account input: goes to split button if empty, skips to debit if filled
   - ✅ Tab in Debit OR Credit (simple mode) → saves and focuses date of next row
   - ✅ Tab in Debit OR Credit (split mode) → focuses first split's Note field
   - ✅ Click transaction row to edit (placeholder - logs click)
-  - ✅ Split entry mode with multi-line UI
-    - Top row shows current account name (read-only, grayed out)
-    - Split rows below for other accounts (editable with autocomplete)
-  - ✅ Auto-balance calculation (pre-fills "amount to balance")
-  - ✅ Tab flow in split mode: Debit/Credit → First split Note → Account → Amount → Next split's Note
-  - ✅ Tab from last split amount → Date of next entry
-  - ✅ Add/remove split entries
+  - ✅ Split entry mode with multi-line UI (REFINED)
+    - Main transaction line shows current account (disabled) with debit/credit amount
+    - Split rows: Note, Account (autocomplete), **Debit, Credit** (separate columns), Remove
+    - No informational header row
+  - ✅ **Auto-balance calculation** (pre-fills appropriate debit OR credit field)
+    - If main account has Credit $123.45, first split defaults to Debit $123.45
+    - If user changes first split to Debit $98, next split defaults to Debit $25.45
+  - ✅ Tab flow in split mode: Debit/Credit → First split Note → Account → Debit → Credit → Next split
+  - ✅ **Tab from last split credit → "Add Split" button → "Save" → "Cancel"**
+  - ✅ Add/remove split entries (any number of debits or credits)
   - ✅ Save split transactions with multiple entries
   - ✅ Space/Enter on split button toggles split mode
 - Transaction Search: Browse all transactions, export to CSV/Excel

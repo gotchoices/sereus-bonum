@@ -53,6 +53,12 @@ Primary transaction entry interface for an account. Optimized for keyboard-centr
 
 ### Offset Account Autocomplete
 
+**Reusable Component:** `AccountAutocomplete.svelte`
+- Used for main transaction account input
+- Used for all split entry account inputs
+- Ensures consistent behavior across all account selection fields
+- Encapsulates search, keyboard navigation, dropdown, and colon completion logic
+
 **Visual Layout:**
 ```
 [Account search input_______________________] [|]
@@ -76,11 +82,12 @@ Primary transaction entry interface for an account. Optimized for keyboard-centr
 4. Debit OR Credit → Tab → **Saves entry and moves cursor to Date of next row**
 
 **Tab Flow (Split Mode):**
-1. Date → Tab → Ref → Tab → Memo → Tab (Split button not in tab order)
-2. Top row shows current account (read-only, no input)
-3. Tab goes directly to first split's Note field
-4. Note → Tab → Account → Tab → Amount → Tab → **Next split's Note field**
-5. Last split Amount → Tab → **Date of next transaction row**
+1. Date → Tab → Ref → Tab → Memo → Tab → Current account input (disabled, shows account name)
+2. Tab → Debit or Credit → Tab → **First split's Note field**
+3. Note → Tab → Account → Tab → Debit → Tab → Credit → Tab → **Next split's Note field**
+4. Last split Credit → Tab → **"Add Split" button**
+5. Tab → **"Save" button** → Tab → **"Cancel" button**
+6. Or Shift+Tab to go back through splits
 
 **Account Search Behavior:**
 
@@ -94,14 +101,19 @@ Per story step 7:
 
 **Colon Completion Example:**
 
-User types: `exp` → sees "Expenses : Utilities : Electric" (top result)
-- User presses `:` → completes to `Expenses : ` (first element of top result)
-- User types `ut` → filters to utilities accounts
-- User presses `:` → completes to `Expenses : Utilities : ` (second element)
-- User types `el` → filters to Electric
-- User presses Tab → completes to full path `Expenses : Utilities : Electric`
+User types: `l` → sees "Liabilities : Credit Card : VISA" (top result)
+- User presses `:` → completes to `Liabilities : ` (first element of **top result only**)
+- User types `cre` → filters to credit card accounts
+- User presses `:` → completes to `Liabilities : Credit Card : ` (second element of **top result**)
+- User types `vi` → filters to VISA
+- User presses Tab → completes to full path `Liabilities : Credit Card : VISA`
 
-**Important:** Colon completion uses the **top filtered result** (index 0), not the currently highlighted result. This ensures predictable completion behavior as the user types.
+**CRITICAL:** Colon completion **ALWAYS** uses `searchResults[0]` (the top filtered result), **NOT** the currently arrow-key-selected result. This ensures predictable, type-ahead completion behavior.
+
+Example bug to avoid:
+- User types `l` → sees "Liabilities" at top, "Assets : Land" below
+- User arrow-keys down to select "Assets : Land"
+- User presses `:` → Should still complete to `Liabilities : ` (top result), NOT `Assets : `
 
 **Autocomplete dropdown example:**
 ```
@@ -141,23 +153,27 @@ From story 03 (Alt A), when split mode is activated:
 ```
 Transaction Header (shared fields):
   Date: [12/03]  Ref: [1002]  Memo: [Grocery run__________]
+  Account: Checking (disabled)  Credit: 123.45
 
 Split Entries:  Balance: $0.00 ✓
-┌──────────────────────────────────────────────────────────────┐
-│ Note     │ Account              │ Amount    │     │
-├──────────┼──────────────────────┼───────────┼─────┤
-│          │ Checking             │ 123.45 CR │     │ ← Current account (READ-ONLY)
-│ [Food__] │ [Groceries_______]   │ 98.00     │ [×] │ ← First split
-│ [Gas___] │ [Search account__]   │ 25.45     │ [×] │ ← Auto-filled to balance
-│                                                    │
-│                        [+ Add Split]  [Save] [Cancel]
-└──────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│ Note     │ Account              │ Debit  │ Credit │     │
+├──────────┼──────────────────────┼────────┼────────┼─────┤
+│ [Food__] │ [Groceries_______]   │ 98.00  │        │ [×] │ ← Auto-filled DR
+│ [Gas___] │ [Search account__]   │ 25.45  │        │ [×] │ ← Auto-filled DR to balance
+│                                                           │
+│              [+ Add Split]  [Save]  [Cancel]              │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
-**Key Differences from Display:**
-- Top line (current account) is **read-only** - shows account name and total amount
-- All split lines below are editable
-- Amount is simplified (not split into Debit/Credit columns in split mode)
+**Key Features:**
+- **Current account (top):** Disabled input showing account name, with original Debit/Credit amount
+- **Split lines:** Editable rows with Note, Account autocomplete, Debit, Credit, Remove button
+- **Auto-balance:** New splits pre-fill the appropriate Debit or Credit field with amount needed to balance
+  - If current account is Credit $123.45, first split defaults to Debit $123.45
+  - If user changes first split to Debit $98.00, next split defaults to Debit $25.45
+- **Both columns:** Each split can be either debit or credit (user can override defaults)
+- **Tab flow:** Ends at "Add Split" button, then Save, then Cancel
 
 **Split Entry Behavior:**
 1. First row shows current account with total amount (read-only)
