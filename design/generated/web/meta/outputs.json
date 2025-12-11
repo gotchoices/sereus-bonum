@@ -1,0 +1,41 @@
+{
+  "version": "1.0",
+  "generated": "2024-12-11",
+  "outputs": [
+    {
+      "source": "design/specs/web/global/account-autocomplete.md",
+      "type": "component",
+      "targets": [
+        {
+          "path": "apps/web/src/lib/components/AccountAutocomplete.svelte",
+          "type": "svelte-component"
+        }
+      ],
+      "dependencies": [
+        {
+          "path": "apps/web/src/routes/help/en/account-autocomplete/+page.md",
+          "type": "help-content",
+          "locale": "en"
+        }
+      ]
+    },
+    {
+      "source": "design/specs/web/global/transaction-entry.md",
+      "type": "screen-behavior",
+      "targets": [
+        {
+          "path": "apps/web/src/routes/ledger/[accountId]/+page.svelte",
+          "type": "svelte-page"
+        }
+      ],
+      "dependencies": [
+        {
+          "path": "apps/web/src/routes/help/en/transaction-entry/+page.md",
+          "type": "help-content",
+          "locale": "en"
+        }
+      ]
+    }
+  ]
+}
+

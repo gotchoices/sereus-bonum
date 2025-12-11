@@ -20,15 +20,20 @@
 
 ## Recently Completed
 
-### ✅ Account Autocomplete Specification & Refinement
-- **Created:** `/design/specs/web/global/account-autocomplete.md`
-- **Created:** `/design/specs/web/global/transaction-entry.md`
+### ✅ Account Autocomplete & Transaction Entry - Specs & Help
+- **Created specs:**
+  - `/design/specs/web/global/account-autocomplete.md` (agent rules)
+  - `/design/specs/web/global/transaction-entry.md` (agent rules)
+- **Created help content:**
+  - `/apps/web/src/routes/help/en/account-autocomplete/+page.md` (user narrative)
+  - `/apps/web/src/routes/help/en/transaction-entry/+page.md` (user narrative)
+- **Tracked in:** `/design/generated/web/meta/outputs.json`
 - **Refined colon completion logic:**
   - Uses highlighted result (not always top)
   - Finds longest matching path element
   - Never completes final account name
 - **Implemented in:** `AccountAutocomplete.svelte`
-- **Key behaviors:** Max 10 results, arrow navigation, Tab vs Enter distinction, Escape, auto-clear on blur
+- **Key behaviors:** Max 10 results, arrow navigation, Tab vs Enter distinction, Escape, auto-clear on blur, auto-select on tab
 
 ---
 
