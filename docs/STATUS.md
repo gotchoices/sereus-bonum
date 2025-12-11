@@ -257,14 +257,20 @@ Framework decision: NativeScript-Svelte (primary), React Native (fallback)
   - Onblur optimization for large datasets
   - Expand/collapse, verification line
 - Ledger: Transaction entry with autocomplete, keyboard navigation, split support
-  - Split button (|) to left of account input
-  - Colon completion (`:` completes to end of current path element)
-  - Tab in Debit OR Credit saves entry (prevents browser URL jump)
-  - Click transaction row to edit (placeholder - logs click)
-  - Split entry mode with multi-line UI
-  - Auto-balance calculation (pre-fills "amount to balance")
-  - Add/remove split entries
-  - Save split transactions with multiple entries
+  - ✅ Split button (|) to **right** of account input, disabled when account selected
+  - ✅ Colon completion (`:` uses **top result**, completes to end of current path element)
+  - ✅ Tab from account input: goes to split button if empty, skips to debit if filled
+  - ✅ Tab in Debit OR Credit saves entry and focuses date of next row
+  - ✅ Click transaction row to edit (placeholder - logs click)
+  - ✅ Split entry mode with multi-line UI
+    - Top row shows current account (read-only) with amount
+    - Split rows below for other accounts (editable)
+  - ✅ Auto-balance calculation (pre-fills "amount to balance")
+  - ✅ Tab flow in split mode: Note → Account → Amount → Next split's Note
+  - ✅ Tab from last split amount → Date of next entry
+  - ✅ Add/remove split entries
+  - ✅ Save split transactions with multiple entries
+  - ✅ Space/Enter on split button toggles split mode
 - Transaction Search: Browse all transactions, export to CSV/Excel
 
 ### ✅ Documentation & Planning

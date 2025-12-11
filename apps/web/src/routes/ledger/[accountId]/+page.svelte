@@ -265,10 +265,10 @@
         selectedSearchIndex = Math.max(selectedSearchIndex - 1, 0);
         break;
       case ':':
-        // Complete to end of current path element
-        if (searchResults[selectedSearchIndex]) {
+        // Complete to end of current path element using TOP result (index 0)
+        if (searchResults.length > 0) {
           e.preventDefault();
-          const result = searchResults[selectedSearchIndex];
+          const result = searchResults[0]; // Always use top filtered result
           const path = result.path;
           const currentInput = newEntry.offsetSearch;
           
@@ -422,20 +422,47 @@
     splitEntries = [];
   }
   
-  // Handle Enter/Tab key on amount fields to save
-  function handleAmountKeydown(e: KeyboardEvent) {
-    // Enter always saves if amount entered
+  // Handle Enter/Tab key on amount fields
+  function handleAmountKeydown(e: KeyboardEvent, isInSplitMode: boolean = false) {
+    if (isInSplitMode) {
+      // In split mode, Tab moves to next split row (handled by browser default)
+      // Enter saves the split transaction
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        saveSplitEntry();
+      }
+      return;
+    }
+    
+    // Simple mode: Enter or Tab saves and moves to next transaction
     if (e.key === 'Enter' && (newEntry.debit || newEntry.credit)) {
       e.preventDefault();
       saveEntry();
       return;
     }
     
-    // Tab in either Debit or Credit field saves (since only one can be filled)
-    // This prevents cursor jumping to browser URL bar and maintains keyboard flow
+    // Tab in either Debit or Credit field saves and focuses date input
     if (e.key === 'Tab' && !e.shiftKey && (newEntry.debit || newEntry.credit)) {
       e.preventDefault();
-      saveEntry();
+      saveEntry().then(() => {
+        // Focus date input for next entry
+        setTimeout(() => {
+          const dateInput = document.querySelector('.new-entry-row .input-date') as HTMLInputElement;
+          if (dateInput) dateInput.focus();
+        }, 50);
+      });
+    }
+  }
+  
+  // Handle keyboard on split button
+  function handleSplitButtonKeydown(e: KeyboardEvent) {
+    if (e.key === ' ' || e.key === 'Enter') {
+      e.preventDefault();
+      if (!isSplitMode) {
+        initSplitMode();
+      } else {
+        cancelSplit();
+      }
     }
   }
 </script>
@@ -597,6 +624,17 @@
             </td>
             <td class="col-offset autocomplete-container">
               <div class="offset-input-wrapper">
+                <input 
+                  type="text" 
+                  bind:value={newEntry.offsetSearch}
+                  oninput={handleOffsetSearch}
+                  onkeydown={handleSearchKeydown}
+                  onfocus={() => handleOffsetSearch()}
+                  onblur={() => setTimeout(() => showAutocomplete = false, 200)}
+                  placeholder={$t('ledger.search_accounts')}
+                  class="input-offset"
+                  disabled={isSplitMode}
+                />
                 <button 
                   class="split-button"
                   onclick={() => {
@@ -607,22 +645,15 @@
                       splitEntries = [];
                     }
                   }}
+                  onkeydown={handleSplitButtonKeydown}
                   class:active={isSplitMode}
-                  title="Add split (Ctrl+Enter)"
+                  disabled={!!newEntry.offsetAccountId}
+                  title={newEntry.offsetAccountId ? "Clear account first" : "Add split (Ctrl+Enter / Space)"}
                   type="button"
+                  tabindex={newEntry.offsetAccountId ? -1 : 0}
                 >
                   |
                 </button>
-                <input 
-                  type="text" 
-                  bind:value={newEntry.offsetSearch}
-                  oninput={handleOffsetSearch}
-                  onkeydown={handleSearchKeydown}
-                  onfocus={() => handleOffsetSearch()}
-                  onblur={() => setTimeout(() => showAutocomplete = false, 200)}
-                  placeholder={$t('ledger.search_accounts')}
-                  class="input-offset"
-                />
               </div>
               {#if showAutocomplete}
                 <div class="autocomplete-dropdown">
@@ -676,6 +707,24 @@
               </td>
             </tr>
             
+            <!-- Current account row (read-only) -->
+            <tr class="split-current-account">
+              <td></td>
+              <td></td>
+              <td class="col-note"></td>
+              <td class="col-offset current-account-name">{account?.name || ''}</td>
+              <td class="col-debit" colspan="2">
+                <span class="current-account-amount">
+                  {#if newEntry.debit}
+                    {newEntry.debit} DR
+                  {:else if newEntry.credit}
+                    {newEntry.credit} CR
+                  {/if}
+                </span>
+              </td>
+              <td></td>
+            </tr>
+            
             {#each splitEntries as split, i (split.id)}
               <tr class="split-entry-row">
                 <td></td>
@@ -717,6 +766,21 @@
                   <input 
                     type="text" 
                     bind:value={split.amount}
+                    onkeydown={(e) => {
+                      // If this is the last split and user presses Tab, go to date of next entry
+                      if (e.key === 'Tab' && !e.shiftKey && i === splitEntries.length - 1) {
+                        e.preventDefault();
+                        setTimeout(() => {
+                          const dateInput = document.querySelector('.new-entry-row .input-date') as HTMLInputElement;
+                          if (dateInput) dateInput.focus();
+                        }, 50);
+                      }
+                      // Enter saves split transaction
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        saveSplitEntry();
+                      }
+                    }}
                     placeholder={$t('ledger.amount_to_balance')}
                     class="input-amount"
                   />
@@ -992,6 +1056,17 @@
     color: white;
   }
   
+  .split-button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  
+  .split-button:disabled:hover {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+    color: var(--text-muted);
+  }
+  
   .autocomplete-dropdown {
     position: absolute;
     top: 100%;
@@ -1066,6 +1141,29 @@
   
   .split-mode-indicator .imbalanced {
     color: var(--warning);
+  }
+  
+  .split-current-account {
+    background: var(--bg-secondary);
+    font-weight: 500;
+  }
+  
+  .split-current-account td {
+    background: var(--bg-secondary);
+    padding: var(--space-sm) var(--space-md);
+    border-bottom: 1px solid var(--border-light);
+  }
+  
+  .current-account-name {
+    color: var(--text-primary);
+    font-style: italic;
+  }
+  
+  .current-account-amount {
+    display: block;
+    text-align: right;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
   }
   
   .split-entry-row {

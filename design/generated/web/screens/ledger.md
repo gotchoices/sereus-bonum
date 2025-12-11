@@ -55,16 +55,32 @@ Primary transaction entry interface for an account. Optimized for keyboard-centr
 
 **Visual Layout:**
 ```
-[🔀] [Account search input_______________________]
- ↑ Split button (small icon to left of input)
+[Account search input_______________________] [|]
+                                               ↑ Split button (to right of input)
 ```
 
 **Split Button:**
-- Icon: `|` (vertical bar) or `⋮` (three dots) or spreadsheet icon
-- Position: Immediately to the left of account input
-- Size: Compact (same height as input)
+- Icon: `|` (vertical bar)
+- Position: Immediately to the **right** of account input
+- Size: Compact (same height as input, ~24px wide)
+- **Enabled:** Only when account input is empty
+- **Disabled:** When account has been selected (grayed out)
 - Action: Toggle split entry mode
+- Keyboard: Space or Enter when focused
 - Tooltip: "Add split (Ctrl+Enter)"
+
+**Tab Flow (Simple Mode):**
+1. Date → Tab → Ref → Tab → Memo → Tab → Account input
+2. **If account empty:** Tab → Split button (Space toggles split mode)
+3. **If account filled:** Tab → Debit field (bypasses split button)
+4. Debit OR Credit → Tab → **Saves entry and moves cursor to Date of next row**
+
+**Tab Flow (Split Mode):**
+1. Date → Tab → Ref → Tab → Memo → Tab (Split button not in tab order)
+2. Top row shows current account (read-only, no input)
+3. Tab goes directly to first split's Note field
+4. Note → Tab → Account → Tab → Amount → Tab → **Next split's Note field**
+5. Last split Amount → Tab → **Date of next transaction row**
 
 **Account Search Behavior:**
 
@@ -78,12 +94,14 @@ Per story step 7:
 
 **Colon Completion Example:**
 
-User types: `exp` → sees "Expenses : Utilities : Electric"
-- User presses `:` → completes to `Expenses : `
+User types: `exp` → sees "Expenses : Utilities : Electric" (top result)
+- User presses `:` → completes to `Expenses : ` (first element of top result)
 - User types `ut` → filters to utilities accounts
-- User presses `:` → completes to `Expenses : Utilities : `
+- User presses `:` → completes to `Expenses : Utilities : ` (second element)
 - User types `el` → filters to Electric
 - User presses Tab → completes to full path `Expenses : Utilities : Electric`
+
+**Important:** Colon completion uses the **top filtered result** (index 0), not the currently highlighted result. This ensures predictable completion behavior as the user types.
 
 **Autocomplete dropdown example:**
 ```
@@ -121,21 +139,25 @@ When a transaction has multiple entries:
 From story 03 (Alt A), when split mode is activated:
 
 ```
-Transaction Header:
+Transaction Header (shared fields):
   Date: [12/03]  Ref: [1002]  Memo: [Grocery run__________]
 
-Split Entries:
+Split Entries:  Balance: $0.00 ✓
 ┌──────────────────────────────────────────────────────────────┐
-│ Account              │ Note              │ Debit │ Credit  │
-├──────────────────────┼───────────────────┼───────┼─────────┤
-│ Checking             │                   │       │ 123.45  │ ← Current account (auto)
-│ [Groceries_______]   │ [Food_________]   │ 98.00 │         │ ← First split
-│ [Search account__]   │ [Note_________]   │ 25.45 │         │ ← Auto-filled to balance
-│                      │                   │       │         │
-│                                          [+ Add Split]      │
+│ Note     │ Account              │ Amount    │     │
+├──────────┼──────────────────────┼───────────┼─────┤
+│          │ Checking             │ 123.45 CR │     │ ← Current account (READ-ONLY)
+│ [Food__] │ [Groceries_______]   │ 98.00     │ [×] │ ← First split
+│ [Gas___] │ [Search account__]   │ 25.45     │ [×] │ ← Auto-filled to balance
+│                                                    │
+│                        [+ Add Split]  [Save] [Cancel]
 └──────────────────────────────────────────────────────────────┘
-                                            [Save] [Cancel]
 ```
+
+**Key Differences from Display:**
+- Top line (current account) is **read-only** - shows account name and total amount
+- All split lines below are editable
+- Amount is simplified (not split into Debit/Credit columns in split mode)
 
 **Split Entry Behavior:**
 1. First row shows current account with total amount (read-only)
