@@ -43,9 +43,17 @@
 
 **Process:** For each spec, review all sections. If a technical detail can be unambiguously derived from the human-centric rules, delete it. If not, enhance the rules to be clear enough that it CAN be derived.
 
+**Regeneration:** After cleaning specs, refresh consolidations to ensure technical details are properly documented there. Code regeneration only needed if behavior changed (not just documentation cleanup).
+
 ### Global Specs (Web)
 - ✅ `design/specs/web/global/account-autocomplete.md` - Cleaned: kept Rules only, removed Interface/Dropdown/Search/Keyboard/Validation sections (all redundant or technical)
-- ✅ `design/specs/web/global/transaction-entry.md` - Cleaned: consolidated duplicate sections, kept original Rules + visual layouts + Actions, removed redundant technical details (210 → 114 lines)
+- ✅ `design/specs/web/global/transaction-entry.md` - Cleaned: consolidated duplicate sections, kept original Rules + visual layouts + Actions, removed redundant technical details (210 → 122 lines)
+- ✅ **Consolidation refreshed:** `design/generated/web/screens/ledger.md` - Updated with corrected technical details from cleaned specs (colon completion behavior, tab flow, auto-balance logic)
+- ✅ **Code cleaned:** `apps/web/src/routes/ledger/[accountId]/+page.svelte` - Removed ~190 lines of dead autocomplete code, implemented Ctrl+Enter at page level
+  - ✅ Dead code removed (unused search/autocomplete state and functions from pre-refactor)
+  - ✅ Ctrl+Enter now works correctly (page-level handler)
+  - ✅ All functionality verified against specs
+  - **Ready for testing**
 - ⬜ `design/specs/web/global/backend.md` - SQLite mock backend
 - ⬜ `design/specs/web/global/export.md` - CSV/Excel export behavior
 - ⬜ `design/specs/web/global/view-state.md` - Persistence of UI states

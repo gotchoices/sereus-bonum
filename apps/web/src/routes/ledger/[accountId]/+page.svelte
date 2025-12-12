@@ -133,15 +133,6 @@
   // Edit mode state
   let editingEntryId = $state<string | null>(null);
   
-  // Account search results for autocomplete
-  let searchResults: Array<{ id: string; name: string; path: string; code?: string }> = $state([]);
-  let showAutocomplete = $state(false);
-  let selectedSearchIndex = $state(0);
-  
-  // Split account autocomplete (per split row)
-  let splitSearchResults = $state<Record<string, Array<{ id: string; name: string; path: string }>>>({});
-  let showSplitAutocomplete = $state<Record<string, boolean>>({});
-  
   // Load data when account changes
   $effect(() => {
     if (browser && accountId) {
@@ -210,119 +201,15 @@
     return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
   
-  // Handle offset account search
-  async function handleOffsetSearch() {
-    if (!account || newEntry.offsetSearch.length < 1) {
-      searchResults = [];
-      showAutocomplete = false;
-      return;
-    }
-    
-    try {
-      const ds = await getDataService();
-      searchResults = await ds.searchAccounts(account.entityId, newEntry.offsetSearch);
-      showAutocomplete = searchResults.length > 0;
-      selectedSearchIndex = 0;
-    } catch (e) {
-      log.ui.error('[Ledger] Search error:', e);
-    }
-  }
-  
-  // Select an account from autocomplete
-  function selectAccount(result: { id: string; name: string; path: string }) {
-    newEntry.offsetAccountId = result.id;
-    newEntry.offsetSearch = result.path;
-    showAutocomplete = false;
-  }
-  
-  // Handle split account search
-  async function handleSplitAccountSearch(splitId: string, query: string) {
-    if (!account || query.length < 1) {
-      splitSearchResults[splitId] = [];
-      showSplitAutocomplete[splitId] = false;
-      return;
-    }
-    
-    try {
-      const ds = await getDataService();
-      const results = await ds.searchAccounts(account.entityId, query);
-      splitSearchResults = { ...splitSearchResults, [splitId]: results };
-      showSplitAutocomplete = { ...showSplitAutocomplete, [splitId]: results.length > 0 };
-    } catch (e) {
-      log.ui.error('[Ledger] Split search error:', e);
-    }
-  }
-  
-  // Select split account from autocomplete
-  function selectSplitAccount(splitId: string, result: { id: string; name: string; path: string }) {
-    const split = splitEntries.find(s => s.id === splitId);
-    if (split) {
-      split.accountId = result.id;
-      split.accountSearch = result.path;
-      splitEntries = [...splitEntries];
-    }
-    showSplitAutocomplete = { ...showSplitAutocomplete, [splitId]: false };
-  }
-  
-  // Handle keyboard in offset account input
-  function handleSearchKeydown(e: KeyboardEvent) {
-    // Ctrl+Enter toggles split mode
+  // Global keyboard handler for Ctrl+Enter
+  function handlePageKeydown(e: KeyboardEvent) {
     if (e.key === 'Enter' && e.ctrlKey) {
       e.preventDefault();
-      if (!isSplitMode) {
+      if (!isSplitMode && !newEntry.offsetAccountId) {
         initSplitMode();
-      } else {
+      } else if (isSplitMode) {
         cancelSplit();
       }
-      return;
-    }
-    
-    if (!showAutocomplete && e.key !== ':') return;
-    
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        selectedSearchIndex = Math.min(selectedSearchIndex + 1, searchResults.length - 1);
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        selectedSearchIndex = Math.max(selectedSearchIndex - 1, 0);
-        break;
-      case ':':
-        // Complete to end of current path element using TOP result (index 0)
-        if (searchResults.length > 0) {
-          e.preventDefault();
-          const result = searchResults[0]; // Always use top filtered result
-          const path = result.path;
-          const currentInput = newEntry.offsetSearch;
-          
-          // Find how many colons we've already typed
-          const colonsTyped = (currentInput.match(/:/g) || []).length;
-          const pathParts = path.split(' : ');
-          
-          // Complete to the next colon position
-          if (colonsTyped < pathParts.length - 1) {
-            newEntry.offsetSearch = pathParts.slice(0, colonsTyped + 1).join(' : ') + ' : ';
-            handleOffsetSearch();
-          }
-        }
-        break;
-      case 'Tab':
-        // Complete to top result
-        if (searchResults[selectedSearchIndex]) {
-          e.preventDefault();
-          selectAccount(searchResults[selectedSearchIndex]);
-        }
-        break;
-      case 'Enter':
-        if (searchResults[selectedSearchIndex]) {
-          e.preventDefault();
-          selectAccount(searchResults[selectedSearchIndex]);
-        }
-        break;
-      case 'Escape':
-        showAutocomplete = false;
-        break;
     }
   }
   
@@ -541,7 +428,7 @@
   }
 </script>
 
-<div class="ledger-page">
+<div class="ledger-page" onkeydown={handlePageKeydown}>
   <!-- Header -->
   <header class="ledger-header">
     {#if entity}

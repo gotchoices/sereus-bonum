@@ -1,233 +1,226 @@
 # Consolidation: Account Ledger
 
 **Route:** `/ledger/[accountId]`
-**Source:** `design/stories/web/03-entries.md`
-**Generated:** 2024-12-09
+**Source:** `design/stories/web/03-entries.md`, `design/specs/web/global/transaction-entry.md`, `design/specs/web/global/account-autocomplete.md`
+**Generated:** 2024-12-12
 
 ## Purpose
 
-Primary transaction entry interface for an account. Optimized for keyboard-centric rapid data entry.
+Primary transaction entry interface for an account. Optimized for keyboard-centric rapid data entry without requiring constant visual attention to the screen.
 
-## Layout
+## Technical Requirements
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ ← Back to Accounts View                                          │
-│                                                                   │
-│ ┌─────────────────────────────────────────────────────────────┐ │
-│ │ Checking Account                              Balance: $1,234 │ │
-│ │ Bank of America • USD                                         │ │
-│ └─────────────────────────────────────────────────────────────┘ │
-│                                                                   │
-│ ┌─────────────────────────────────────────────────────────────┐ │
-│ │ Date     │ Ref  │ Memo          │ Offset    │ Debit │ Credit │ │
-│ ├──────────┼──────┼───────────────┼───────────┼───────┼────────┤ │
-│ │ 12/01    │ 1001 │ Electric bill │ Utilities │       │  85.00 │ │
-│ │ 12/02    │ DEP  │ Paycheck      │ Income    │500.00 │        │ │
-│ │ 12/03    │ 1002 │ Groceries     │ [Split]   │       │ 123.45 │ │
-│ │ ________ │ ____ │ _____________ │ _________ │ _____ │ ______ │ │ ← New entry row
-│ └─────────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────┘
-```
+### Components Structure
 
-## Components
+**Main Page:** `apps/web/src/routes/ledger/[accountId]/+page.svelte`
+- Uses `AccountAutocomplete.svelte` component for all account selection
+- Implements both simple and split transaction entry modes
+- Manages transaction state, validation, and persistence
 
-### Header Section
-- **Back link:** Returns to Accounts View for this entity
-- **Account name:** Primary identifier
-- **Account details:** Parent group, unit (currency)
-- **Running balance:** Updates in real-time as entries are made
+**Reusable Component:** `apps/web/src/lib/components/AccountAutocomplete.svelte`
+- Encapsulates account search, filtering, keyboard navigation
+- Implements colon completion logic
+- Provides consistent behavior across all account inputs
+- Props: `entityId`, `value` (bind), `selectedId` (bind), `placeholder`, `disabled`, `onselect` callback
 
-### Ledger Table
+### Data Flow
 
-| Column | Description | Input behavior |
-|--------|-------------|----------------|
-| Date | Transaction date | Date picker, defaults to today |
-| Ref | Check number, reference | Free text |
-| Memo | Transaction description | Free text |
-| Offset | Counter-account | Autocomplete with account search |
-| Debit | Increase to account | Number, auto-formats |
-| Credit | Decrease from account | Number, auto-formats |
+**Inputs:**
+- Route param: `accountId` (from URL)
+- Account details (name, type, unit, parent path)
+- Ledger entries for this account
+- Entity's full account tree (for autocomplete)
+- Running balance
 
-**Note:** For this account's perspective, Debit/Credit columns match the account's normal balance direction. For an Asset account: Debit = money in, Credit = money out.
+**State Management:**
+- Simple mode: `{ date, ref, memo, offsetAccountId, debit, credit }`
+- Split mode: adds array of `{ note, accountId, debit, credit }` entries
+- Auto-balance calculation on split entry changes
+- Real-time validation (balanced = sum of all entries = $0.00 ± $0.01)
 
-### Offset Account Autocomplete
+**Outputs:**
+- Transaction save → Updates ledger entries
+- Balance recalculation → Updates header display
+- Reactive updates → Notifies linked Accounts View
 
-**Reusable Component:** `AccountAutocomplete.svelte`
-- Used for main transaction account input
-- Used for all split entry account inputs
-- Ensures consistent behavior across all account selection fields
-- Encapsulates search, keyboard navigation, dropdown, and colon completion logic
+### Account Autocomplete Implementation
 
-**Visual Layout:**
-```
-[Account search input_______________________] [|]
-                                               ↑ Split button (to right of input)
-```
+**Search & Filter:**
+- Case-insensitive match on: account name, code, group name, type name, full path
+- Sort priority: exact name match > path starts with query > name starts > type starts > contains anywhere
+- Display: full account path in dropdown
+- Limit: max 10 results, scrollable
 
-**Split Button:**
-- Icon: `|` (vertical bar)
-- Position: Immediately to the **right** of account input
-- Size: Compact (same height as input, ~24px wide)
-- **Enabled:** Only when account input is empty
-- **Disabled:** When account has been selected (grayed out)
-- Action: Toggle split entry mode
-- Keyboard: Space or Enter when focused
-- Tooltip: "Add split (Ctrl+Enter)"
+**Keyboard Behaviors:**
+- **Tab:** Selects highlighted result, fills full path, advances focus to next field
+- **Enter:** Selects highlighted result, fills full path, stays in same field
+- **Escape:** Closes dropdown without selection
+- **Up/Down arrows:** Move highlight in dropdown
+- **Left/Right arrows:** Normal text cursor movement
+- **Colon (`:`):** Completes highlighted result through longest matching path element (never completes final account name)
+- **Auto-select:** When tabbing into populated field, select all text
 
-**Tab Flow (Simple Mode):**
-1. Date → Tab → Ref → Tab → Memo → Tab → Account input
-2. **If account empty:** Tab → Split button (Space toggles split mode)
-3. **If account filled:** Tab → Debit field (bypasses split button)
-4. Debit OR Credit → Tab → **Saves entry and moves cursor to Date of next row**
+**Colon Completion Logic:**
+1. Use currently highlighted dropdown result (default = top, or arrow-key selected)
+2. Find longest path element in that result containing current search text
+3. Complete through that element plus trailing ` : `
+4. Never complete the final account name (no colon after it)
 
-**Tab Flow (Split Mode):**
-1. Date → Tab → Ref → Tab → Memo → Tab → Current account input (disabled, shows account name)
-2. Tab → Debit or Credit → Tab → **First split's Note field**
-3. Note → Tab → Account → Tab → Debit → Tab → Credit → Tab → **Next split's Note field**
-4. Last split Credit → Tab → **"Add Split" button**
-5. Tab → **"Save" button** → Tab → **"Cancel" button**
-6. Or Shift+Tab to go back through splits
+Example: Search "land" → highlighted "Assets : Land Holdings : Building A" → press `:` → completes to "Assets : Land Holdings : "
 
-**Account Search Behavior:**
+**Validation:**
+- Must have valid `selectedId` (not just text) before save
+- Tab away without selection → clear input and `selectedId`
 
-Per story step 7:
-- Dropdown appears on focus
-- Type to filter by any part of account path
-- **Tab:** Completes to top result (full path)
-- **Colon (`:`):** Completes to end of current path element only
-- **Arrow keys:** Navigate results
-- Shows full account path in dropdown
+### Transaction Entry Modes
 
-**Colon Completion Example:**
+**Simple Mode:**
+- Fields: Date, Ref, Memo, Account (autocomplete), Debit, Credit
+- Split button: right of Account input, enabled only when Account empty
+- Debit/Credit: both always enabled (consistent tab flow), on blur clears other field
+- Tab from Credit → saves transaction, creates new blank row, cursor to Date
 
-User types: `l` → sees "Liabilities : Credit Card : VISA" (top result)
-- User presses `:` → completes to `Liabilities : ` (first element of **top result only**)
-- User types `cre` → filters to credit card accounts
-- User presses `:` → completes to `Liabilities : Credit Card : ` (second element of **top result**)
-- User types `vi` → filters to VISA
-- User presses Tab → completes to full path `Liabilities : Credit Card : VISA`
+**Split Mode:**
+- Triggered by split button click or Ctrl+Enter keyboard shortcut (when Account empty)
+- Page-level keyboard handler: `onkeydown={handlePageKeydown}` on ledger-page div
+- Main line: Date, Ref, Memo, Current Account (disabled/read-only), Debit, Credit
+- Split entries: each has Note, Account (autocomplete), Debit, Credit, Remove (×)
+- Initial focus: Debit field of main transaction line
+- Auto-balance: new split rows pre-fill appropriate Debit or Credit with balancing amount
+- Tab flow: main Debit/Credit → first split Note → Account → Debit → Credit → next split
+- Last split Credit: if balanced → Save button, if unbalanced → auto-create new split
+- Buttons: [Save] [Cancel] [+ Add Split]
 
-**CRITICAL:** Colon completion **ALWAYS** uses `searchResults[0]` (the top filtered result), **NOT** the currently arrow-key-selected result. This ensures predictable, type-ahead completion behavior.
+### Validation Rules
 
-Example bug to avoid:
-- User types `l` → sees "Liabilities" at top, "Assets : Land" below
-- User arrow-keys down to select "Assets : Land"
-- User presses `:` → Should still complete to `Liabilities : ` (top result), NOT `Assets : `
+**Simple Mode:**
+- Date: valid date
+- Account: selectedId must be set
+- Amount: exactly one of Debit OR Credit (not both, not neither)
 
-**Autocomplete dropdown example:**
-```
-Expenses : Utilities : Electric
-Expenses : Utilities : Gas
-Expenses : Utilities : Water
-```
+**Split Mode:**
+- Date: valid date
+- Main line: Debit OR Credit
+- Each split: selectedId + Debit OR Credit
+- Balance: sum of all entries = $0.00 (±$0.01 tolerance)
+- Save button disabled until valid
 
-### Split Transaction View (Display)
-
-When a transaction has multiple entries:
+### Layout Structure
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│ 12/03 │ 1002 │ Grocery run           │ [Split]  │       │ 123.45 │
-│   ├── │      │ Food                  │ Groceries│       │  98.00 │
-│   ├── │      │ Cleaning supplies     │ Household│       │  15.45 │
-│   └── │      │ Paper goods           │ Office   │       │  10.00 │
+┌─ Header ────────────────────────────────────────────────────────┐
+│ ← Entity Name                                                    │
+│ Account Path: Full path with colons                              │
+│ Account Code: [code] | Unit: [USD]                               │
+│ Balance: $X,XXX.XX                                                │
+└──────────────────────────────────────────────────────────────────┘
+
+┌─ Ledger Table ──────────────────────────────────────────────────┐
+│ Date | Ref | Memo | Offset | Debit | Credit | Balance |          │
+│───────────────────────────────────────────────────────────────────│
+│ (existing transactions...)                                        │
+│ (new entry row...)                                                │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-- Main row shows total and "[Split]" as offset
-- Child rows indent, show individual entries
-- Each child row has its own note field
-- Click to expand/collapse
-
-### Split Transaction Entry (New)
-
-**Triggering Split Mode:**
-- Click split button `[|]` to left of account input
-- Or press Ctrl+Enter
-
-**Split Entry UI:**
-
-From story 03 (Alt A), when split mode is activated:
-
+**Split Mode Layout Addition:**
 ```
-Transaction Header (shared fields):
-  Date: [12/03]  Ref: [1002]  Memo: [Grocery run__________]
-  Account: Checking (disabled)  Credit: 123.45
-
-Split Entries:  Balance: $0.00 ✓
-┌────────────────────────────────────────────────────────────────────┐
-│ Note     │ Account              │ Debit  │ Credit │     │
-├──────────┼──────────────────────┼────────┼────────┼─────┤
-│ [Food__] │ [Groceries_______]   │ 98.00  │        │ [×] │ ← Auto-filled DR
-│ [Gas___] │ [Search account__]   │ 25.45  │        │ [×] │ ← Auto-filled DR to balance
-│                                                           │
-│              [+ Add Split]  [Save]  [Cancel]              │
-└────────────────────────────────────────────────────────────────────┘
+┌─ Split Entry ───────────────────────────────────────────────────┐
+│ Main: Date | Ref | Memo | [Current Acct] | Debit | Credit       │
+│                                                                   │
+│ Splits: Note | [Account] | Debit | Credit | [×]                  │
+│        Note | [Account] | Debit | Credit | [×]                   │
+│        (Balance: $0.00 ✓)                                         │
+│        [Save] [Cancel] [+ Add Split]                              │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-**Key Features:**
-- **Current account (top):** Disabled input showing account name, with original Debit/Credit amount
-- **Split lines:** Editable rows with Note, Account autocomplete, Debit, Credit, Remove button
-- **Auto-balance:** New splits pre-fill the appropriate Debit or Credit field with amount needed to balance
-  - If current account is Credit $123.45, first split defaults to Debit $123.45
-  - If user changes first split to Debit $98.00, next split defaults to Debit $25.45
-- **Both columns:** Each split can be either debit or credit (user can override defaults)
-- **Tab flow:** Ends at "Add Split" button, then Save, then Cancel
+### Event Handlers
 
-**Split Entry Behavior:**
-1. First row shows current account with total amount (read-only)
-2. Each split row has: Account search, Note, Amount
-3. **Auto-balance:** As user enters amounts, next empty row pre-fills with "amount needed to balance"
-4. User can override auto-filled amount
-5. "+ Add Split" button adds another blank row
-6. Each row has [X] remove button
-7. Save button enabled when transaction balances to zero
-8. Warning shown if imbalanced
+**Simple Mode:**
+- `onKeyDown` (Debit/Credit): Tab → `saveEntry()` then focus Date of next row
+- `onKeyDown` (Debit/Credit): Enter → `saveEntry()`
+- `onBlur` (Debit): if value, clear Credit
+- `onBlur` (Credit): if value, clear Debit
+- `onFocus` (any field with value): select all text
+- Split button `onClick`: `initSplitMode()`
 
-### Keyboard Navigation
+**Split Mode:**
+- `onKeyDown` (main Debit/Credit): Tab → focus first split Note
+- `onKeyDown` (split Credit, last split): Tab → check balance, if balanced focus Save button, else `addSplitEntry()`
+- `onKeyDown` (any field): Enter → `saveSplitEntry()` if valid
+- `onBlur` (split Debit): if value, clear split Credit
+- `onBlur` (split Credit): if value, clear split Debit
+- `onFocus` (any field with value): select all text
+- Remove button `onClick`: `removeSplitEntry(splitId)`
+- Add Split button `onClick`: `addSplitEntry()`
+- Save button `onClick`: `saveSplitEntry()`
+- Cancel button `onClick`: `cancelSplit()`
 
-| Key | Action |
-|-----|--------|
-| Tab | Next field; **if in last field (Credit), saves entry like Enter** |
-| Shift+Tab | Previous field |
-| Enter | Confirm entry, save and start new row |
-| Escape | Cancel current edit |
-| Ctrl+Enter | Toggle split mode |
-| `:` (colon) | In account search: complete to end of current path element |
-| Arrow Down | In autocomplete, next option |
-| Arrow Up | In autocomplete, previous option |
+### Data Service Calls
 
-**Important Tab Behavior:**
-- In most fields: Tab moves to next field
-- **In Credit field (last field):** Tab triggers save (prevents cursor jumping to browser URL bar)
-- This maintains keyboard flow without requiring Enter
+```typescript
+// Load ledger
+const account = await dataService.getAccount(accountId);
+const entity = await dataService.getEntity(account.entityId);
+const entries = await dataService.getLedgerEntries(accountId);
+const balance = await dataService.getAccountBalance(accountId);
 
-## Behavior
+// Save transaction (simple)
+await dataService.createTransaction({
+  date,
+  reference,
+  memo,
+  entries: [
+    { accountId: currentAccountId, debit: amount, credit: 0 },
+    { accountId: offsetAccountId, debit: 0, credit: amount }
+  ]
+});
 
-1. **Auto-save:** Transaction saved when all required fields complete (date, offset, amount)
-2. **Real-time balance:** Header balance updates as entries are committed
-3. **Linked window:** If opened from Accounts View, that view updates reactively
-4. **Click to edit:** Clicking on any existing transaction row toggles it into edit mode
-   - Row fields become editable inputs
-   - Save changes on Enter or blur
-   - Cancel changes on Escape
-5. **Split detection:** Entering split mode when:
-   - User explicitly toggles (keyboard/button)
-   - User enters a second offset account
+// Save transaction (split)
+await dataService.createTransaction({
+  date,
+  reference,
+  memo,
+  entries: [
+    { accountId: currentAccountId, debit/credit },
+    ...splitEntries.map(split => ({
+      accountId: split.accountId,
+      note: split.note,
+      debit: split.debit,
+      credit: split.credit
+    }))
+  ]
+});
+```
 
-## Data Requirements
+### Navigation
 
-- Account details (name, group, unit, balance)
-- Transaction list for this account
-- Full account tree for autocomplete
-- Entity's base unit for display
+**Entry Points:**
+- From Accounts View: click account name → `/ledger/[accountId]`
+- From split detail: click split account → `/ledger/[splitAccountId]`
+
+**Exit:**
+- Back link → returns to Accounts View for current entity
+
+### Future Features (Not MVP)
+
+**Click-to-Edit:**
+- Click existing transaction row → load into entry form
+- Simple transaction → simple mode
+- Split transaction → split mode with all splits
+- Save/Cancel to complete edit
+
+**Delete:**
+- Delete button in edit mode with confirmation dialog
 
 ## Acceptance Criteria
 
-- [ ] Can enter simple transaction without mouse
-- [ ] Offset account autocomplete filters as user types
-- [ ] Split transactions show nested entry rows
+- [ ] Can enter multiple simple transactions without leaving keyboard
+- [ ] Can enter split transactions with auto-balance assistance
+- [ ] Offset account autocomplete filters and sorts correctly
+- [ ] Colon completion works for partial path entry
+- [ ] Tab flow is consistent and completes transactions correctly
 - [ ] Balance updates in real-time
-- [ ] Linked Accounts View updates when entries made
-
+- [ ] Transaction validation prevents unbalanced or incomplete entries
+- [ ] Linked Accounts View updates when entries are made
