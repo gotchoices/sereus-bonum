@@ -63,7 +63,7 @@
 - ✅ `design/specs/web/screens/accounts-view.md` - Cleaned: removed TypeScript interfaces, SQL queries, backend signatures, calculation formulas; kept report modes, date handling, UI elements, user actions (340 → 180 lines)
 - ✅ `design/specs/web/screens/catalog.md` - Cleaned: removed TypeScript interface, data model section; kept user actions, hierarchy, modals, context menu (119 → 165 lines)
 - ✅ `design/specs/web/screens/ledger.md` - Enhanced: added transaction display (collapsed/expanded), in-place editing, locked transactions, new entry workflow; references transaction-edit.md for component (189 → 344 lines)
-- ✅ **Ledger Implementation Updated:** `apps/web/src/routes/ledger/[accountId]/+page.svelte` - Added display modes, expand/collapse, edit mode, locked transactions (1218 → 1140 lines)
+- ✅ **Ledger Implementation Updated:** `apps/web/src/routes/ledger/[accountId]/+page.svelte` - Added display modes, expand/collapse, edit mode, locked transactions (1218 → 1483 lines)
   - ✅ Transaction grouping by transactionId
   - ✅ Collapsed/expanded display modes with per-transaction toggle
   - ✅ Expand All / Collapse All toolbar buttons
@@ -73,6 +73,25 @@
   - ✅ View state persistence (expand/collapse, expandAll)
   - ✅ Escape key cancels edit/split modes
   - ✅ Click-to-edit for unlocked transactions
+  - ✅ **Code Review Complete:** See `CODE_REVIEW_LEDGER.md` - 95% spec compliance
+  - ✅ **Critical Fix:** Account display now shows name only, full path on hover (per spec ledger.md:42-68)
+    - Backend: Added `offsetAccountPath` field to LedgerEntry
+    - Both `getLedgerEntries()` and `getAllTransactions()` updated
+    - Frontend: Split entries now compact and readable
+  - ✅ **Fix:** Expand/collapse buttons now show for ALL transactions (spec ledger.md:214-218)
+    - Removed conditional that hid buttons for simple transactions
+    - All transactions are now expandable to show entry breakdown
+  - ✅ **Fix:** Expanded view now shows BOTH entries correctly (spec ledger.md:194-212)
+    - Shows current account entry line
+    - Shows offset account entry line (or split entries for multi-entry transactions)
+    - Matches spec example with proper debit/credit display
+  - ✅ **CRITICAL FIX:** Expand/collapse reactivity completely rewritten (2024-12-12)
+    - **Root cause:** Single `viewState` $state object wasn't triggering $derived recalculation
+    - **Solution:** Split into individual $state variables (`expandedTransactions`, `expandAll`, `closedDate`)
+    - **Result:** Svelte 5's fine-grained reactivity now properly tracks changes
+    - Expand/collapse buttons now functional
+    - "Expand All" / "Collapse All" now work
+    - State persistence still functional
   - **Note:** Full transaction editor (edit existing with splits) is stubbed - to be implemented next
 - ✅ **Consolidation updated:** `design/generated/web/screens/ledger.md` - Added transaction grouping, display modes, edit mode, locked transactions, view state persistence sections
 - ✅ **i18n updated:** Added expand/collapse, editing, balance keys to `en.ts`

@@ -740,6 +740,7 @@ class SqliteDataService implements DataService {
       // Get offset account (for simple transactions)
       let offsetAccountId: string | undefined;
       let offsetAccountName: string | undefined;
+      let offsetAccountPath: string | undefined;
       let splitEntries: SplitEntry[] | undefined;
       
       if (isSplit) {
@@ -765,9 +766,10 @@ class SqliteDataService implements DataService {
       } else {
         // Get the single offset account
         const offsetRows = this.getDb().exec(`
-          SELECT e.account_id, a.name
+          SELECT e.account_id, a.name, g.name as group_name, g.account_type
           FROM entry e
           JOIN account a ON a.id = e.account_id
+          JOIN account_group g ON g.id = a.account_group_id
           WHERE e.txn_id = ? AND e.id != ?
           LIMIT 1
         `, [txnId, entryId]);
@@ -775,6 +777,16 @@ class SqliteDataService implements DataService {
         if (offsetRows.length && offsetRows[0].values.length) {
           offsetAccountId = offsetRows[0].values[0][0] as string;
           offsetAccountName = offsetRows[0].values[0][1] as string;
+          const offsetGroupName = offsetRows[0].values[0][2] as string;
+          const offsetAccountType = offsetRows[0].values[0][3] as string;
+          const offsetTypeName = {
+            'ASSET': 'Assets',
+            'LIABILITY': 'Liabilities',
+            'EQUITY': 'Equity',
+            'INCOME': 'Income',
+            'EXPENSE': 'Expenses',
+          }[offsetAccountType] || offsetAccountType;
+          offsetAccountPath = `${offsetTypeName} : ${offsetGroupName} : ${offsetAccountName}`;
         }
       }
       
@@ -790,6 +802,7 @@ class SqliteDataService implements DataService {
         runningBalance,
         offsetAccountId,
         offsetAccountName,
+        offsetAccountPath,
         isSplit,
         splitEntries,
       });
@@ -958,6 +971,7 @@ class SqliteDataService implements DataService {
       // Get offset account or splits (only once per transaction)
       let offsetAccountId: string | undefined;
       let offsetAccountName: string | undefined;
+      let offsetAccountPath: string | undefined;
       let splitEntries: SplitEntry[] | undefined;
       
       if (!processedTxns.has(txnId)) {
@@ -1019,7 +1033,8 @@ class SqliteDataService implements DataService {
               'INCOME': 'Income',
               'EXPENSE': 'Expenses',
             }[offsetAccountType] || offsetAccountType;
-            offsetAccountName = `${offsetTypeName} : ${offsetGroupName} : ${offsetName}`;
+            offsetAccountName = offsetName;  // Just the account name
+            offsetAccountPath = `${offsetTypeName} : ${offsetGroupName} : ${offsetName}`;  // Full path
           }
         }
       }
@@ -1036,6 +1051,7 @@ class SqliteDataService implements DataService {
         runningBalance: 0, // Not applicable in cross-account view
         offsetAccountId,
         offsetAccountName,
+        offsetAccountPath,
         isSplit,
         splitEntries,
         // Additional fields for search view (stored in memo/reference for now)

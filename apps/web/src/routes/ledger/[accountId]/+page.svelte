@@ -6,7 +6,7 @@
   import { log } from '$lib/logger';
   import { entities } from '$lib/stores/entities';
   import { accounts, accountGroups } from '$lib/stores/accounts';
-  import { createViewStateStore } from '$lib/stores/viewState';
+  import { loadViewState, saveViewState } from '$lib/stores/viewState';
   import { getDataService, type LedgerEntry, type Account, type Unit, type AccountGroup, type Entity, type Transaction, type Entry } from '$lib/data';
   import AccountAutocomplete from '$lib/components/AccountAutocomplete.svelte';
   
@@ -24,19 +24,38 @@
   let loading = $state(true);
   let error: string | null = $state(null);
   
-  // View state persistence (expand/collapse, closed period)
-  interface LedgerViewState {
-    expandedTransactions: Record<string, boolean>;
-    expandAll: boolean;
-    closedDate?: string; // Transactions before this date are locked
-  }
+  // View state - use individual reactive variables for proper reactivity
+  let expandedTransactions = $state<Record<string, boolean>>({});
+  let expandAll = $state(false);
+  let closedDate = $state<string | undefined>(undefined);
   
-  const viewState = createViewStateStore<LedgerViewState>('ledger', {
-    expandedTransactions: {},
-    expandAll: false,
+  // Load view state when accountId changes
+  $effect(() => {
+    if (browser && accountId) {
+      const loaded = loadViewState<{
+        expandedTransactions: Record<string, boolean>;
+        expandAll: boolean;
+        closedDate?: string;
+      }>(`ledger:${accountId}`, {
+        expandedTransactions: {},
+        expandAll: false,
+      });
+      expandedTransactions = loaded.expandedTransactions;
+      expandAll = loaded.expandAll;
+      closedDate = loaded.closedDate;
+    }
   });
   
-  let closedDate = $derived($viewState.closedDate);
+  // Save view state whenever it changes
+  $effect(() => {
+    if (browser && accountId) {
+      saveViewState(`ledger:${accountId}`, {
+        expandedTransactions,
+        expandAll,
+        closedDate,
+      });
+    }
+  });
   
   // Transaction grouping (derived from entries)
   interface TransactionGroup {
@@ -55,7 +74,8 @@
     for (const entry of entries) {
       if (!txnMap.has(entry.transactionId)) {
         const isLocked = closedDate ? entry.date < closedDate : false;
-        const isExpanded = $viewState.expandAll || $viewState.expandedTransactions[entry.transactionId] || false;
+        // Read from reactive state variables directly
+        const isExpanded = expandAll || expandedTransactions[entry.transactionId] || false;
         
         txnMap.set(entry.transactionId, {
           transactionId: entry.transactionId,
@@ -106,6 +126,8 @@
     date: string;
     reference: string;
     memo: string;
+    mainDebit: string;
+    mainCredit: string;
     entries: Array<{
       id: string;
       accountId: string;
@@ -253,23 +275,23 @@
   
   // Toggle transaction expand/collapse
   function toggleExpand(transactionId: string) {
-    const current = $viewState.expandedTransactions[transactionId] || false;
-    viewState.update(state => ({
-      ...state,
-      expandedTransactions: {
-        ...state.expandedTransactions,
-        [transactionId]: !current,
-      },
-    }));
+    log.ui.debug('[Ledger] Toggling expand for:', transactionId);
+    expandedTransactions = {
+      ...expandedTransactions,
+      [transactionId]: !expandedTransactions[transactionId]
+    };
   }
   
   // Expand/Collapse All
-  function expandAll() {
-    viewState.update(state => ({ ...state, expandAll: true }));
+  function handleExpandAll() {
+    log.ui.debug('[Ledger] Expand all clicked');
+    expandAll = true;
   }
   
-  function collapseAll() {
-    viewState.update(state => ({ ...state, expandAll: false, expandedTransactions: {} }));
+  function handleCollapseAll() {
+    log.ui.debug('[Ledger] Collapse all clicked');
+    expandAll = false;
+    expandedTransactions = {};
   }
   
   // Enter edit mode for existing transaction
@@ -295,6 +317,8 @@
       date: txn.date,
       reference: txn.reference || '',
       memo: txn.memo || '',
+      mainDebit: mainEntry.amount > 0 ? formatAmount(mainEntry.amount) : '',
+      mainCredit: mainEntry.amount < 0 ? formatAmount(Math.abs(mainEntry.amount)) : '',
       entries: otherEntries.map(e => ({
         id: e.entryId,
         accountId: e.offsetAccountId || e.accountId,
@@ -304,11 +328,6 @@
         note: e.note || '',
       })),
     };
-    
-    // If it's a split (3+ entries), show as split mode in editor
-    if (txn.entries.length > 2) {
-      // Initialize split data (handled by editingData.entries)
-    }
   }
   
   // Exit edit mode
@@ -634,10 +653,10 @@
   {#if transactions.length > 0}
     <div class="ledger-toolbar">
       <div class="toolbar-left">
-        <button class="btn-icon" onclick={expandAll} title={$t('ledger.expand_all')}>
+        <button class="btn-icon" onclick={handleExpandAll} title={$t('ledger.expand_all')}>
           ▼ {$t('ledger.expand_all')}
         </button>
-        <button class="btn-icon" onclick={collapseAll} title={$t('ledger.collapse_all')}>
+        <button class="btn-icon" onclick={handleCollapseAll} title={$t('ledger.collapse_all')}>
           ▶ {$t('ledger.collapse_all')}
         </button>
       </div>
@@ -704,7 +723,9 @@
                     
                     <!-- TODO: Render full transaction editor here -->
                     <div class="edit-placeholder">
-                      <p>Edit mode UI coming soon</p>
+                      <p>Edit mode UI: This will be a full inline editor matching the new entry form</p>
+                      <p>Date: {editingData.date}, Memo: {editingData.memo || '(none)'}</p>
+                      <p>Entries: {editingData.entries.length + 1}</p>
                       <div class="edit-actions">
                         <button class="btn-primary" onclick={saveEdit}>{$t('common.save')}</button>
                         <button class="btn-secondary" onclick={cancelEdit}>{$t('common.cancel')}</button>
@@ -716,7 +737,7 @@
               </tr>
             {:else}
               <!-- Transaction header (collapsed or expanded) -->
-              {#if txn.isExpanded && txn.entries.length > 1}
+              {#if txn.isExpanded}
                 <!-- Expanded: Show transaction header + all entries -->
                 <tr 
                   class="transaction-header"
@@ -737,7 +758,9 @@
                   <td class="col-ref">{txn.reference ?? ''}</td>
                   <td class="col-memo">{txn.memo ?? ''}</td>
                   <td class="col-offset">
-                    <span class="split-indicator">[{$t('ledger.split')}]</span>
+                    {#if txn.entries[0]?.isSplit}
+                      <span class="split-indicator">[{$t('ledger.split')}]</span>
+                    {/if}
                   </td>
                   <td class="col-debit amount"></td>
                   <td class="col-credit amount"></td>
@@ -750,17 +773,14 @@
                 
                 <!-- Entry lines -->
                 {#each txn.entries as entry (entry.entryId)}
+                  <!-- Current account entry -->
                   <tr class="entry-line" class:locked={txn.isLocked}>
                     <td class="col-expand"></td>
                     <td class="col-date"></td>
                     <td class="col-ref"></td>
                     <td class="col-memo">{entry.note ?? ''}</td>
                     <td class="col-offset">
-                      {#if entry.offsetAccountName}
-                        <a href="/ledger/{entry.offsetAccountId}" title={entry.offsetAccountName}>
-                          {entry.offsetAccountName}
-                        </a>
-                      {/if}
+                      {account?.name}
                     </td>
                     <td class="col-debit amount">
                       {entry.amount > 0 ? formatAmount(entry.amount) : ''}
@@ -770,6 +790,52 @@
                     </td>
                     <td class="col-balance amount"></td>
                   </tr>
+                  
+                  <!-- Offset account entry (for simple transactions) -->
+                  {#if entry.offsetAccountName}
+                    <tr class="entry-line" class:locked={txn.isLocked}>
+                      <td class="col-expand"></td>
+                      <td class="col-date"></td>
+                      <td class="col-ref"></td>
+                      <td class="col-memo"></td>
+                      <td class="col-offset">
+                        <a href="/ledger/{entry.offsetAccountId}" title={entry.offsetAccountPath || entry.offsetAccountName}>
+                          {entry.offsetAccountName}
+                        </a>
+                      </td>
+                      <td class="col-debit amount">
+                        {entry.amount < 0 ? formatAmount(Math.abs(entry.amount)) : ''}
+                      </td>
+                      <td class="col-credit amount">
+                        {entry.amount > 0 ? formatAmount(entry.amount) : ''}
+                      </td>
+                      <td class="col-balance amount"></td>
+                    </tr>
+                  {/if}
+                  
+                  <!-- Split entries (for split transactions) -->
+                  {#if entry.splitEntries}
+                    {#each entry.splitEntries as split (split.entryId)}
+                      <tr class="entry-line" class:locked={txn.isLocked}>
+                        <td class="col-expand"></td>
+                        <td class="col-date"></td>
+                        <td class="col-ref"></td>
+                        <td class="col-memo">{split.note ?? ''}</td>
+                        <td class="col-offset">
+                          <a href="/ledger/{split.accountId}" title={split.accountPath}>
+                            {split.accountName}
+                          </a>
+                        </td>
+                        <td class="col-debit amount">
+                          {split.amount > 0 ? formatAmount(split.amount) : ''}
+                        </td>
+                        <td class="col-credit amount">
+                          {split.amount < 0 ? formatAmount(Math.abs(split.amount)) : ''}
+                        </td>
+                        <td class="col-balance amount"></td>
+                      </tr>
+                    {/each}
+                  {/if}
                 {/each}
               {:else}
                 <!-- Collapsed: Single line for entire transaction -->
@@ -780,24 +846,22 @@
                   onclick={() => !txn.isLocked && enterEditMode(txn)}
                 >
                   <td class="col-expand">
-                    {#if txn.entries.length > 1}
-                      <button 
-                        class="expand-btn" 
-                        onclick={(e) => { e.stopPropagation(); toggleExpand(txn.transactionId); }}
-                        aria-label={$t('ledger.expand')}
-                      >
-                        ▶
-                      </button>
-                    {/if}
+                    <button 
+                      class="expand-btn" 
+                      onclick={(e) => { e.stopPropagation(); toggleExpand(txn.transactionId); }}
+                      aria-label={$t('ledger.expand')}
+                    >
+                      ▶
+                    </button>
                   </td>
                   <td class="col-date">{txn.date}</td>
                   <td class="col-ref">{txn.reference ?? ''}</td>
                   <td class="col-memo">{txn.memo ?? ''}</td>
                   <td class="col-offset">
-                    {#if txn.entries.length > 2}
+                    {#if txn.entries.length > 2 || txn.entries[0]?.isSplit}
                       <span class="split-indicator">[{$t('ledger.split')}]</span>
                     {:else if txn.entries[0]?.offsetAccountName}
-                      <a href="/ledger/{txn.entries[0].offsetAccountId}" title={txn.entries[0].offsetAccountName}>
+                      <a href="/ledger/{txn.entries[0].offsetAccountId}" title={txn.entries[0].offsetAccountPath || txn.entries[0].offsetAccountName}>
                         {txn.entries[0].offsetAccountName}
                       </a>
                     {/if}

@@ -2,8 +2,7 @@
 
 **Route:** `/ledger/[accountId]`
 **Source:** `design/stories/web/03-entries.md`, `design/specs/web/screens/ledger.md`, `design/specs/web/global/transaction-edit.md`, `design/specs/web/global/account-autocomplete.md`
-**Generated:** 2024-12-12  
-**Updated:** 2024-12-12 (Added: transaction display modes, expand/collapse, in-place editing, locked transactions, view state persistence)
+**Generated:** 2024-12-12
 
 ## Purpose
 

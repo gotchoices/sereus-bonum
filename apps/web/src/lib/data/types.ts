@@ -184,7 +184,8 @@ export interface LedgerEntry {
   runningBalance: number;   // Calculated running balance
   // Offset account info (for simple transactions)
   offsetAccountId?: string;
-  offsetAccountName?: string;
+  offsetAccountName?: string;      // Just the account name (e.g., "Checking")
+  offsetAccountPath?: string;      // Full path for tooltip (e.g., "Assets : Current : Checking")
   // Split info
   isSplit: boolean;
   splitEntries?: SplitEntry[];

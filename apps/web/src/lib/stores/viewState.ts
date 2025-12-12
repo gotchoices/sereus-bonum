@@ -2,8 +2,49 @@
 // See: design/specs/web/global/view-state.md
 
 import { browser } from '$app/environment';
+import { writable, type Writable } from 'svelte/store';
 
 const STORAGE_PREFIX = 'bonum-';
+
+/**
+ * Create a reactive store that persists to localStorage
+ * 
+ * @param key - Storage key (will be prefixed with 'bonum-')
+ * @param defaultValue - Default value if nothing stored
+ * @returns Writable store that auto-saves to localStorage
+ */
+export function createViewStateStore<T>(key: string, defaultValue: T): Writable<T> {
+  const storageKey = `${STORAGE_PREFIX}viewState:${key}`;
+  
+  // Load initial value
+  let initialValue = defaultValue;
+  if (browser) {
+    try {
+      const stored = localStorage.getItem(storageKey);
+      if (stored) {
+        initialValue = JSON.parse(stored) as T;
+      }
+    } catch (e) {
+      console.warn('[ViewState] Failed to load:', key, e);
+    }
+  }
+  
+  // Create writable store
+  const store = writable<T>(initialValue);
+  
+  // Subscribe to changes and save to localStorage
+  if (browser) {
+    store.subscribe(value => {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(value));
+      } catch (e) {
+        console.warn('[ViewState] Failed to save:', key, e);
+      }
+    });
+  }
+  
+  return store;
+}
 
 /**
  * Save view state to localStorage
