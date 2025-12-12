@@ -23,7 +23,7 @@
 ### ✅ Account Autocomplete & Transaction Entry - Specs & Help
 - **Created specs:**
   - `/design/specs/web/global/account-autocomplete.md` (agent rules)
-  - `/design/specs/web/global/transaction-entry.md` (agent rules)
+  - `/design/specs/web/global/transaction-edit.md` (agent rules - renamed & refactored)
 - **Created help content:**
   - `/apps/web/src/routes/help/en/account-autocomplete/+page.md` (user narrative)
   - `/apps/web/src/routes/help/en/transaction-entry/+page.md` (user narrative)
@@ -47,7 +47,7 @@
 
 ### Global Specs (Web)
 - ✅ `design/specs/web/global/account-autocomplete.md` - Cleaned: kept Rules only, removed Interface/Dropdown/Search/Keyboard/Validation sections (all redundant or technical)
-- ✅ `design/specs/web/global/transaction-entry.md` - Cleaned: consolidated duplicate sections, kept original Rules + visual layouts + Actions, removed redundant technical details (210 → 122 lines)
+- ✅ `design/specs/web/global/transaction-edit.md` - Cleaned & refactored: mode-agnostic component spec, moved screen concerns to ledger.md (122 → 180 lines)
 - ✅ **Consolidation refreshed:** `design/generated/web/screens/ledger.md` - Updated with corrected technical details from cleaned specs (colon completion behavior, tab flow, auto-balance logic)
 - ✅ **Code cleaned:** `apps/web/src/routes/ledger/[accountId]/+page.svelte` - Removed ~190 lines of dead autocomplete code, implemented Ctrl+Enter at page level
   - ✅ Dead code removed (unused search/autocomplete state and functions from pre-refactor)
@@ -62,6 +62,7 @@
 ### Screen Specs (Web)
 - ✅ `design/specs/web/screens/accounts-view.md` - Cleaned: removed TypeScript interfaces, SQL queries, backend signatures, calculation formulas; kept report modes, date handling, UI elements, user actions (340 → 180 lines)
 - ✅ `design/specs/web/screens/catalog.md` - Cleaned: removed TypeScript interface, data model section; kept user actions, hierarchy, modals, context menu (119 → 165 lines)
+- ✅ `design/specs/web/screens/ledger.md` - Enhanced: added transaction display (collapsed/expanded), in-place editing, locked transactions, new entry workflow; references transaction-edit.md for component (189 → 338 lines)
 - ✅ `design/specs/web/screens/search.md` - Cleaned: removed TypeScript interfaces, component architecture, data structures, i18n keys, styling details; kept display format, export behavior, navigation (206 → 176 lines)
 - ✅ `design/specs/web/screens/saved-reports-ux.md` - Cleaned: removed TypeScript interface, component structure, file paths, accessibility section; kept UI layout, phases, persistence, user actions (351 → 290 lines)
 
@@ -348,7 +349,7 @@ Framework decision: NativeScript-Svelte (primary), React Native (fallback)
     - ✅ Button order: [Save] [Cancel] [+ Add Split]
     - ✅ Enter key: in field = save, on button = activate
     - ✅ Simple mode: Tab from Debit or Credit → save & new blank row
-    - ✅ Spec-driven implementation: `/design/specs/web/global/transaction-entry.md`
+    - ✅ Spec-driven implementation: `/design/specs/web/global/transaction-edit.md`
   - ✅ **Tab from last split credit → "Add Split" button → "Save" → "Cancel"**
   - ✅ Add/remove split entries (any number of debits or credits)
   - ✅ Save split transactions with multiple entries

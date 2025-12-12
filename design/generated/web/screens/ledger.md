@@ -1,7 +1,7 @@
 # Consolidation: Account Ledger
 
 **Route:** `/ledger/[accountId]`
-**Source:** `design/stories/web/03-entries.md`, `design/specs/web/global/transaction-entry.md`, `design/specs/web/global/account-autocomplete.md`
+**Source:** `design/stories/web/03-entries.md`, `design/specs/web/screens/ledger.md`, `design/specs/web/global/transaction-edit.md`, `design/specs/web/global/account-autocomplete.md`
 **Generated:** 2024-12-12
 
 ## Purpose

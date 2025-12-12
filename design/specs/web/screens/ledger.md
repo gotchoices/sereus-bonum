@@ -9,7 +9,7 @@
 Primary transaction entry interface for an account. Optimized for keyboard-centric rapid data entry with minimal mouse interaction.
 
 **References:**
-- **[Transaction Entry](../global/transaction-entry.md):** Detailed specs for simple and split transaction entry
+- **[Transaction Editor](../global/transaction-edit.md):** Reusable editor component for new entry and editing
 - **[Account Autocomplete](../global/account-autocomplete.md):** Detailed specs for account selection behavior
 
 ---
@@ -86,6 +86,36 @@ Assets : Savings : High Yield
 
 ---
 
+## New Transaction Entry
+
+The ledger always maintains a **blank entry row** at the bottom for entering new transactions.
+
+### Blank Row Behavior
+
+**Initial state:**
+- Empty fields: Date (defaults to today), Ref, Memo, Account, Debit, Credit
+- Appears as a single line at bottom of ledger
+- Visually distinct (lighter border or background)
+
+**User interaction:**
+- Focus/click on any field in blank row → Activates transaction editor on blank transaction
+- Editor appears in-place (same location, bottom of ledger)
+- Same component as editing existing transactions
+- See **[Transaction Editor](../global/transaction-edit.md)** for editor behavior
+
+**After save:**
+- New transaction created in database
+- Ledger refreshes with new transaction added
+- New blank entry row appears at bottom
+- Cursor moves to Date field of new blank row (ready for next entry)
+
+**After cancel:**
+- Blank row fields clear
+- Cursor leaves blank row
+- Row remains available for future entry
+
+---
+
 ## Account Hyperlinks
 
 All account names in the ledger should be clickable:
@@ -124,7 +154,7 @@ Expand to show child entries:
 
 ## Transaction Entry
 
-See **[Transaction Entry Spec](../global/transaction-entry.md)** for complete details on:
+See **[Transaction Editor](../global/transaction-edit.md)** for complete details on:
 - Simple mode (single offset account)
 - Split mode (multiple offset accounts)
 - Tab flow and keyboard navigation
@@ -234,7 +264,7 @@ Edit mode mirrors the ledger display - editable fields inline, looking like the 
 - **Split transactions:** Always show multi-line in edit mode (all entries visible), regardless of collapsed/expanded state in view
 - **Split button available:** Can convert simple transaction to split during edit
 - Same keyboard navigation as new entry
-- See **[Transaction Entry Spec](../global/transaction-entry.md)** for complete editor behavior
+- See **[Transaction Editor](../global/transaction-edit.md)** for complete editor behavior
 
 **Actions:**
 - **Esc key:** Cancel editing, discard changes

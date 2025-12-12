@@ -20,19 +20,31 @@
       ]
     },
     {
-      "source": "design/specs/web/global/transaction-entry.md",
-      "type": "screen-behavior",
+      "source": "design/specs/web/global/transaction-edit.md",
+      "type": "component",
       "targets": [
         {
           "path": "apps/web/src/routes/ledger/[accountId]/+page.svelte",
-          "type": "svelte-page"
+          "type": "svelte-page",
+          "note": "Ledger screen uses TransactionEditor component"
         }
       ],
       "dependencies": [
         {
           "path": "apps/web/src/routes/help/en/transaction-entry/+page.md",
           "type": "help-content",
-          "locale": "en"
+          "locale": "en",
+          "note": "Help content keeps user-facing name"
+        }
+      ]
+    },
+    {
+      "source": "design/specs/web/screens/ledger.md",
+      "type": "screen",
+      "targets": [
+        {
+          "path": "apps/web/src/routes/ledger/[accountId]/+page.svelte",
+          "type": "svelte-page"
         }
       ]
     }
