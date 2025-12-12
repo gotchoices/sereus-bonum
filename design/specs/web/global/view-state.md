@@ -1,102 +1,79 @@
 # Spec: View State Persistence
 
-**Scope:** App-wide pattern
-
 ## Principle
 
-When a user customizes how a view appears (expanded groups, column widths, scroll position, etc.), that customization should persist. The next time they visit the same view, it should look like it did when they left.
+When a user customizes how a view appears (expanded groups, selected report mode, date ranges, etc.), that customization should persist. The next time they visit the same view, it should look exactly like it did when they left.
 
----
+This allows users to:
+- Set up their preferred view once and have it remembered
+- Switch between entities without losing their customizations
+- Close and reopen the app without losing their settings
+- Work efficiently without repetitive setup
 
-## What to Persist
+## What Gets Saved
 
-| View State | Storage Key Pattern | Example |
-|------------|---------------------|---------|
-| Expand/collapse state | `bonum-{view}-expand-{contextId}` | `bonum-accounts-expand-entity-123` |
-| Column widths | `bonum-{view}-columns-{contextId}` | `bonum-ledger-columns-account-456` |
-| Sort order | `bonum-{view}-sort-{contextId}` | `bonum-catalog-sort` |
-| Scroll position | `bonum-{view}-scroll-{contextId}` | `bonum-accounts-scroll-entity-123` |
-| Selected tab/mode | `bonum-{view}-mode-{contextId}` | `bonum-accounts-mode-entity-123` |
-| Date range | `bonum-{view}-dates-{contextId}` | `bonum-accounts-dates-entity-123` |
+The app remembers these customizations:
 
----
+**Expand/Collapse State:**
+- Which account groups are expanded or collapsed
+- Applies per entity (different entities can have different states)
 
-## Storage Strategy
+**Report Modes:**
+- Which report mode is selected (Balance Sheet, Trial Balance, Income Statement)
+- Applies per entity
 
-**For MVP:** Use `localStorage`
-- Simple key-value pairs
-- JSON-serialized objects for complex state
-- Per-browser, not synced
+**Date Ranges:**
+- Selected start and end dates for period-based reports
+- Applies per entity
 
-**Future consideration:** Sync via Sereus
-- User preferences could sync across devices
-- Would require schema for UserPreference entity
+**Sort Order:**
+- How lists are sorted (by name, by date, by amount, etc.)
+- May be global or per-context depending on the view
 
----
+**Column Widths:**
+- Custom column widths if user resizes them
+- Applies per view type (not yet implemented)
 
-## Implementation Pattern
+**Scroll Position:**
+- Where the user scrolled to in a long list
+- May or may not persist depending on UX considerations
 
-```typescript
-// src/lib/stores/viewState.ts
+## Storage Location
 
-const STORAGE_PREFIX = 'bonum-';
+**For MVP:**
+- Saved in browser local storage
+- Persists across browser sessions (survives page refresh)
+- Separate per browser (not synced across devices)
+- Lost if browser data is cleared
 
-export function saveViewState<T>(key: string, state: T): void {
-  if (typeof localStorage === 'undefined') return;
-  localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(state));
-}
+**Future Enhancement:**
+- Could sync across devices via Sereus
+- Would allow same preferences on desktop and mobile
+- Requires UserPreference entity in schema
 
-export function loadViewState<T>(key: string, defaultValue: T): T {
-  if (typeof localStorage === 'undefined') return defaultValue;
-  const stored = localStorage.getItem(STORAGE_PREFIX + key);
-  if (!stored) return defaultValue;
-  try {
-    return JSON.parse(stored) as T;
-  } catch {
-    return defaultValue;
-  }
-}
+## Scoping
 
-export function clearViewState(key: string): void {
-  if (typeof localStorage === 'undefined') return;
-  localStorage.removeItem(STORAGE_PREFIX + key);
-}
-```
+Different views need different scoping:
 
----
+**Entity-Scoped:**
+- Accounts View expand state: Different per entity
+- Report mode selection: Different per entity
+- Date ranges: Different per entity
 
-## Usage Example: Accounts View
+**Global:**
+- Catalog expand state: Same across all usage
+- Settings preferences: Same everywhere
 
-```typescript
-// In accounts view component
-import { loadViewState, saveViewState } from '$lib/stores/viewState';
-
-// Load on mount
-const expandState = loadViewState(`accounts-expand-${entityId}`, {});
-
-// Save when user toggles
-function toggleGroup(groupId: string) {
-  expandState[groupId] = !expandState[groupId];
-  saveViewState(`accounts-expand-${entityId}`, expandState);
-}
-```
-
----
+**Account-Scoped:**
+- Ledger column widths: Different per account (future)
 
 ## Cleanup
 
-Consider periodic cleanup of orphaned keys:
-- When entity is deleted, remove its view state
-- Add a "Clear saved preferences" option in Settings
+**When Entity Deleted:**
+- Remove that entity's saved view state
+- Prevents orphaned preferences from cluttering storage
 
----
-
-## Scope by Context
-
-State should be scoped appropriately:
-- **Entity-scoped:** Accounts View expand state (different per entity)
-- **Global:** Catalog expand state (same across all usage)
-- **Account-scoped:** Ledger column widths (different per account)
-
-Use the `contextId` suffix to differentiate.
-
+**User Control:**
+- Settings screen includes "Clear saved preferences" option
+- Lets user reset to defaults if things get confusing
+- Clears all stored view state

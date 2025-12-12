@@ -54,13 +54,13 @@
   - ✅ Ctrl+Enter now works correctly (page-level handler)
   - ✅ All functionality verified against specs
   - **Ready for testing**
-- ⬜ `design/specs/web/global/backend.md` - SQLite mock backend
-- ⬜ `design/specs/web/global/export.md` - CSV/Excel export behavior
-- ⬜ `design/specs/web/global/view-state.md` - Persistence of UI states
-- ⬜ `design/specs/web/global/i18n.md` - Web i18n implementation
+- ✅ `design/specs/web/global/backend.md` - Cleaned: removed TypeScript code snippets, directory structures; kept WHAT/WHY/HOW from user perspective (121 → 77 lines)
+- ✅ `design/specs/web/global/export.md` - Cleaned: removed TypeScript code, implementation details, testing section; kept format descriptions, file structure, behavior (229 → 130 lines)
+- ✅ `design/specs/web/global/view-state.md` - Cleaned: removed TypeScript code examples; kept principle, what persists, scoping, cleanup (103 → 70 lines)
+- ✅ `design/specs/web/global/i18n.md` - Cleaned: removed TypeScript implementation, full dictionary, file structure; kept usage, MVP scope, future languages (130 → 70 lines)
 
 ### Screen Specs (Web)
-- ⬜ `design/specs/web/screens/accounts-view.md` - Balance Sheet/Trial Balance/Income Statement
+- ✅ `design/specs/web/screens/accounts-view.md` - Cleaned: removed TypeScript interfaces, SQL queries, backend signatures, calculation formulas; kept report modes, date handling, UI elements, user actions (340 → 180 lines)
 - ⬜ `design/specs/web/screens/catalog.md` - Account Groups catalog
 - ⬜ `design/specs/web/screens/search.md` - Transaction search
 - ⬜ `design/specs/web/screens/saved-reports-ux.md` - Saved reports UI
