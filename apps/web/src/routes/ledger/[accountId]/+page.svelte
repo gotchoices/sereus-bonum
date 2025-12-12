@@ -62,13 +62,19 @@
     splitEntries = [
       {
         id: crypto.randomUUID(),
-        accountId: newEntry.offsetAccountId || '',
-        accountSearch: newEntry.offsetSearch || '',
+        accountId: '',
+        accountSearch: '',
         debit: amountToBalance > 0 ? absAmount : '',
         credit: amountToBalance < 0 ? absAmount : '',
         note: '',
       }
     ];
+    
+    // Focus Debit field of main transaction line per spec
+    setTimeout(() => {
+      const debitInput = document.querySelector('.new-entry-row .col-debit input') as HTMLInputElement;
+      if (debitInput) debitInput.focus();
+    }, 50);
   }
   
   // Add a new split entry
@@ -495,6 +501,44 @@
       }
     }
   }
+  
+  // Auto-select text on focus (per spec: all fields)
+  function handleFocus(e: FocusEvent) {
+    const target = e.target as HTMLInputElement;
+    if (target && target.value) {
+      target.select();
+    }
+  }
+  
+  // Handle blur on Debit/Credit: clear the other field if this one has value
+  function handleDebitBlur() {
+    if (newEntry.debit) {
+      newEntry.credit = '';
+    }
+  }
+  
+  function handleCreditBlur() {
+    if (newEntry.credit) {
+      newEntry.debit = '';
+    }
+  }
+  
+  // Handle blur on split Debit/Credit
+  function handleSplitDebitBlur(splitId: string) {
+    const split = splitEntries.find(s => s.id === splitId);
+    if (split && split.debit) {
+      split.credit = '';
+      splitEntries = [...splitEntries];
+    }
+  }
+  
+  function handleSplitCreditBlur(splitId: string) {
+    const split = splitEntries.find(s => s.id === splitId);
+    if (split && split.credit) {
+      split.debit = '';
+      splitEntries = [...splitEntries];
+    }
+  }
 </script>
 
 <div class="ledger-page">
@@ -633,6 +677,7 @@
               <input 
                 type="date" 
                 bind:value={newEntry.date}
+                onfocus={handleFocus}
                 class="input-date"
               />
             </td>
@@ -640,6 +685,7 @@
               <input 
                 type="text" 
                 bind:value={newEntry.reference}
+                onfocus={handleFocus}
                 placeholder=""
                 class="input-ref"
               />
@@ -648,6 +694,7 @@
               <input 
                 type="text" 
                 bind:value={newEntry.memo}
+                onfocus={handleFocus}
                 placeholder=""
                 class="input-memo"
               />
@@ -700,9 +747,10 @@
                 type="text" 
                 bind:value={newEntry.debit}
                 onkeydown={handleAmountKeydown}
+                onfocus={handleFocus}
+                onblur={handleDebitBlur}
                 placeholder=""
                 class="input-amount"
-                disabled={!!newEntry.credit}
               />
             </td>
             <td class="col-credit">
@@ -710,9 +758,10 @@
                 type="text" 
                 bind:value={newEntry.credit}
                 onkeydown={handleAmountKeydown}
+                onfocus={handleFocus}
+                onblur={handleCreditBlur}
                 placeholder=""
                 class="input-amount"
-                disabled={!!newEntry.debit}
               />
             </td>
             <td class="col-balance"></td>
@@ -728,6 +777,7 @@
                   <input 
                     type="text" 
                     bind:value={split.note}
+                    onfocus={handleFocus}
                     placeholder={$t('ledger.note')}
                     class="input-split-note"
                   />
@@ -750,6 +800,8 @@
                   <input 
                     type="text" 
                     bind:value={split.debit}
+                    onfocus={handleFocus}
+                    onblur={() => handleSplitDebitBlur(split.id)}
                     onkeydown={(e) => {
                       // Enter saves split transaction
                       if (e.key === 'Enter') {
@@ -759,21 +811,37 @@
                     }}
                     placeholder=""
                     class="input-amount"
-                    disabled={!!split.credit}
                   />
                 </td>
                 <td class="col-credit">
                   <input 
                     type="text" 
                     bind:value={split.credit}
+                    onfocus={handleFocus}
+                    onblur={() => handleSplitCreditBlur(split.id)}
                     onkeydown={(e) => {
-                      // If this is the last split and user presses Tab, go to "Add Split" button
+                      // Tab from last split: check if balanced
                       if (e.key === 'Tab' && !e.shiftKey && i === splitEntries.length - 1) {
                         e.preventDefault();
-                        setTimeout(() => {
-                          const addSplitBtn = document.querySelector('.btn-add-split') as HTMLButtonElement;
-                          if (addSplitBtn) addSplitBtn.focus();
-                        }, 50);
+                        
+                        // Check if transaction is balanced
+                        const balance = Math.abs(getSplitBalance());
+                        
+                        if (balance < 1) {
+                          // Balanced: go to Save button
+                          setTimeout(() => {
+                            const saveBtn = document.querySelector('.btn-save-split') as HTMLButtonElement;
+                            if (saveBtn) saveBtn.focus();
+                          }, 50);
+                        } else {
+                          // Unbalanced: create new split line
+                          addSplitEntry();
+                          setTimeout(() => {
+                            const newSplitNote = document.querySelectorAll('.split-entry-row .input-split-note');
+                            const lastNote = newSplitNote[newSplitNote.length - 1] as HTMLInputElement;
+                            if (lastNote) lastNote.focus();
+                          }, 50);
+                        }
                       }
                       // Enter saves split transaction
                       if (e.key === 'Enter') {
@@ -783,7 +851,6 @@
                     }}
                     placeholder=""
                     class="input-amount"
-                    disabled={!!split.debit}
                   />
                 </td>
                 <td class="col-actions">
@@ -802,14 +869,14 @@
             <tr class="split-actions-row">
               <td colspan="7">
                 <div class="split-actions">
-                  <button class="btn-add-split" onclick={addSplitEntry} type="button">
-                    + {$t('ledger.add_split')}
-                  </button>
                   <button class="btn-save-split" onclick={saveSplitEntry} type="button">
                     {$t('ledger.save')}
                   </button>
                   <button class="btn-cancel-split" onclick={cancelSplit} type="button">
                     {$t('ledger.cancel')}
+                  </button>
+                  <button class="btn-add-split" onclick={addSplitEntry} type="button">
+                    + {$t('ledger.add_split')}
                   </button>
                 </div>
               </td>

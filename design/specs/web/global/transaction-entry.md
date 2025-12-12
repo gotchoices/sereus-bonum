@@ -1,5 +1,36 @@
 # Spec: Transaction Entry
 
+## General Rules
+- The user should be able to do multiple transactions in a row without fingers leaving the keyboard
+- This typically means data entry in fields and using tab key to advance and space key to activate selected buttons
+- Tab should advance to the next logical field where the user might want to enter data
+- A new blank transaction is created when the user tabs beyond the current entry
+- There is a "Current Account" which is the account we are currently viewing the ledger for
+
+## Simple Mode Rules
+- The user enters optionally ref and memo
+- The user enters an account.  This is the "offset account"
+- A tab takes us to the debit field
+- An amount may be entered.  Regardless, another tab takes us to the Credit field
+- An amount may be entered.  If so, it takes precidence and nulls out the Debit field if any exists.
+- A further tab completes the transaction and takes us to the next logical step
+  - If we were editing a previous transaction, this means just closing the edit
+  - If we were adding a new transaction, this takes us to a new transaction to edit
+
+## Split Mode Rules
+- Split mode is invoked by pressing the split button
+- The split button is only active if there is nothing in the account window of the primary (transaction) line
+- When entering split mode:
+  - Enter the Current Account into the account field of the primary line
+  - Advance to the Debit field of the primary line
+  - Open a new split line with the cursor in the first field of that line
+- Any split line that has neither a credit nor a debit yet entered (like the newly entered split line) will be pre-filled with the number that would balance the transaction
+- Now a tab out of Credit will advance to the first field of the next entry (split) line
+- If the user tabs into a debit or credit column that is already filled, the amount will be selected so that any typing of a number will replace the old value.
+- If the last split line balances the transaction, tabbing out of the credit column will close the edit
+- If the last split does not balance the transaction, tabbing out will create a new split line which will likewise be pre-filled with a balancing value.
+- Closing the edit of a newly added transaction will (like in a simple entry) position the cursor in the first field of a new, empty transaction
+
 ## Two Modes
 
 **Simple:** One offset account (two entries total: current account + one offset)

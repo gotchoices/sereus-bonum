@@ -134,6 +134,16 @@ Features implemented:
 - More screen space for data-heavy views
 - Persist state
 
+#### ⬜ UI Help Elements
+Help content exists at `/help/en/*` routes, needs UI access:
+- **Global:** Help icon (?) in header/menu → opens help index or search
+- **Contextual:** Info icons (ⓘ) next to complex fields → opens relevant help page
+- **Keyboard shortcut:** F1 or ? key → context-aware help
+- **First-time tips:** Dismissible tooltips for new features
+- Help pages already exist:
+  - `/help/en/account-autocomplete` (colon completion, search behavior)
+  - `/help/en/transaction-entry` (keyboard workflow, split mode)
+
 #### ⬜ Print/PDF Report Rendering
 From story 04:
 - Clean, printable layout
@@ -291,6 +301,15 @@ Framework decision: NativeScript-Svelte (primary), React Native (fallback)
     - If main account has Credit $123.45, first split defaults to Debit $123.45
     - If user changes first split to Debit $98, next split defaults to Debit $25.45
   - ✅ Tab flow in split mode: Debit/Credit → First split Note → Account → Debit → Credit → Next split
+  - ✅ **Transaction Entry per Spec (Complete):**
+    - ✅ Auto-select text on focus (all input fields)
+    - ✅ Debit/Credit mutual exclusion via blur (both always enabled)
+    - ✅ Split mode initial focus: Debit field of main transaction line
+    - ✅ Tab from last split Credit: if balanced → Save button, if unbalanced → auto-create new split
+    - ✅ Button order: [Save] [Cancel] [+ Add Split]
+    - ✅ Enter key: in field = save, on button = activate
+    - ✅ Simple mode: Tab from Debit or Credit → save & new blank row
+    - ✅ Spec-driven implementation: `/design/specs/web/global/transaction-entry.md`
   - ✅ **Tab from last split credit → "Add Split" button → "Save" → "Cancel"**
   - ✅ Add/remove split entries (any number of debits or credits)
   - ✅ Save split transactions with multiple entries
