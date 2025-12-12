@@ -104,18 +104,92 @@ Note | [Account] | Debit | Credit | [×]
 
 ## Editing Existing Transactions
 
-**Not MVP**
+Click transaction → expands in-place into editable form with active border.
 
-**Current:** Click transaction row → Logs entry ID to console
+**Simple transaction:**
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Date: [2024-12-10▼] Ref: [1234] Memo: [Grocery Store________]  │
+│                                                                 │
+│ Account: [Groceries ▼] [|]  Debit: [125.50] Credit: [_____]    │
+│                                                                 │
+│ [Save] [Cancel] [Delete]                                        │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-**Future:**
-- Click row → Load into entry form
-- Simple transaction → Simple mode
-- Split transaction → Split mode with all splits
-- Edit fields → Save or Cancel
+**Split transaction:**
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Date: [2024-12-12▼] Ref: [1236] Memo: [Bill payment________]   │
+│                                                                 │
+│ Checking Account    Debit: [______] Credit: [450.00]           │
+│                                                                 │
+│ Note: [Electric] [Utilities ▼] Debit: [150.00] Credit: [] [×]  │
+│ Note: [Internet] [Utilities ▼] Debit: [100.00] Credit: [] [×]  │
+│ Note: [Phone___] [Utilities ▼] Debit: [200.00] Credit: [] [×]  │
+│                                                                 │
+│ Balance: $0.00 ✓   [Add Split] [Save] [Cancel] [Delete]        │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+- Active border shows edit mode
+- Same keyboard navigation as new entry
+- [Delete] button with confirmation
+
+**Locked Transactions (Closed Periods):**
+```
+>  | 2024-01-10 | 1001 | Old transaction    | Expenses  | $50.00   | | $1,000.00
+>  | 2024-01-15 | 1002 | Another old one    | Utilities | $100.00  | | $900.00
+══════════════════════════════════════════════════════════════════════════════
+🔒 Transactions above this line are locked (period closed 2024-01-31)
+══════════════════════════════════════════════════════════════════════════════
+>  | 2024-02-01 | 1003 | Editable entry     | Groceries | $75.00   | | $825.00
+>  | 2024-02-05 | 1004 | Recent entry       | Gas       | $45.00   | | $780.00
+```
+
+- Separator line with 🔒 icon divides locked/editable transactions
+- Locked transactions slightly dimmed
+- Click locked transaction → tooltip "Cannot edit - period closed"
 
 ## Deleting Transactions
 
 **Not MVP**
 
 **Future:** Delete button in edit mode with confirmation
+
+---
+
+## Transaction Display (Collapsed vs Expanded)
+
+Each transaction can be collapsed (1 line) or expanded (transaction + entry lines).
+
+**Collapsed (default):**
+```
+>  | Date       | Ref  | Memo           | Account      | Debit    | Credit   | Balance
+>  | 2024-12-10 | 1234 | Grocery Store  | Groceries    | $125.50  |          | $5,234.00
+>  | 2024-12-11 | 1235 | Salary         | Salary Inc   |          | $2,500.00| $7,734.00
+>  | 2024-12-12 | 1236 | Bill payment   | [Multiple]   | $450.00  |          | $7,284.00
+```
+- `>` icon on left to expand
+- Shows net effect on current account
+- "[Multiple]" for splits with 3+ entries
+
+**Expanded:**
+```
+v  | Date       | Ref  | Memo           | Account              | Debit    | Credit   | Balance
+v  | 2024-12-10 | 1234 | Grocery Store  |                      |          |          | $5,234.00
+   |            |      |                | Checking Account     |          | $125.50  |
+   |            |      |                | Groceries            | $125.50  |          |
+
+v  | 2024-12-12 | 1236 | Bill payment   |                      |          |          | $7,284.00
+   |            |      |                | Checking Account     |          | $450.00  |
+   |            |      |                | Electric             | $150.00  |          |
+   |            |      |                | Internet             | $100.00  |          |
+   |            |      |                | Phone                | $200.00  |          |
+```
+- `v` icon on left to collapse
+- Transaction line: Date/Ref/Memo filled, Account/Debit/Credit empty, Balance shows
+- Entry lines: Date/Ref/Memo empty (shows indentation), Account/Debit/Credit filled
+- No balance on entry lines
+
+**Controls:** `[Expand All]` `[Collapse All]` buttons at top
