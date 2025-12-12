@@ -144,21 +144,146 @@ See **[Transaction Entry Spec](../global/transaction-entry.md)** for complete de
 
 ---
 
+## Transaction Display Modes
+
+Transactions can be **collapsed** (1 line) or **expanded** (multiple lines showing all entries).
+
+### Collapsed View (Default)
+
+```
+>  | Date       | Ref  | Memo           | Account      | Debit    | Credit   | Balance
+>  | 2024-12-10 | 1234 | Grocery Store  | Groceries    | $125.50  |          | $5,234.00
+>  | 2024-12-11 | 1235 | Salary         | Salary Inc   |          | $2,500.00| $7,734.00
+>  | 2024-12-12 | 1236 | Bill payment   | [Multiple]   | $450.00  |          | $7,284.00
+```
+
+- `>` icon on left to expand
+- Shows net effect on current account
+- Account column: offset account name, or "[Multiple]" for splits (3+ entries)
+
+### Expanded View
+
+```
+v  | Date       | Ref  | Memo           | Account              | Debit    | Credit   | Balance
+v  | 2024-12-10 | 1234 | Grocery Store  |                      |          |          | $5,234.00
+   |            |      |                | Checking Account     |          | $125.50  |
+   |            |      |                | Groceries            | $125.50  |          |
+
+v  | 2024-12-12 | 1236 | Bill payment   |                      |          |          | $7,284.00
+   |            |      |                | Checking Account     |          | $450.00  |
+   |            |      |                | Electric             | $150.00  |          |
+   |            |      |                | Internet             | $100.00  |          |
+   |            |      |                | Phone                | $200.00  |          |
+```
+
+- `v` icon on left to collapse
+- Transaction line: Date/Ref/Memo filled, Account/Debit/Credit empty, Balance shows
+- Entry lines: Date/Ref/Memo empty (indentation visible), Account/Debit/Credit filled
+- Entry lines have no balance column
+
+### Controls
+
+**Per-Transaction:**
+- Click `>` to expand individual transaction
+- Click `v` to collapse individual transaction
+
+**Toolbar Buttons:**
+- `[Expand All]` - Expands all transactions in current view
+- `[Collapse All]` - Collapses all to single lines
+
+**State Persistence:**
+- Expand/collapse state saved per account in localStorage
+- Option 1: Remember each transaction's state individually
+- Option 2 (simpler): Remember "expand all" vs "collapse all" setting only
+
+---
+
 ## Editing Existing Transactions
 
-**Current behavior (MVP):** Click transaction row logs entry ID (placeholder)
+Click any transaction → expands **in-place** into editable form with colored border.
 
-**Future behavior:** See [Transaction Entry Spec - Editing](../global/transaction-entry.md#editing-existing-transactions)
-- Click row to load into entry form
-- Edit fields, then Save or Cancel
-- Simple transactions load in simple mode
-- Split transactions load in split mode with all splits visible
+### Visual Treatment
+
+Edit mode mirrors the ledger display - editable fields inline, looking like the ledger view.
+
+**Simple transaction edit:**
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│   | [Date▼] | [Ref_] | [Memo___________] | [Account_____▼] [|] | [Debit__] | [Credit_] | Balance |  
+│   |                           [Esc=Cancel  Tab=Save  🗑️]                                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Split transaction edit:**
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│   | [Date▼] | [Ref_] | [Memo___________] | Checking Account    | [_____] | [450.00] | Balance |
+│   |         |        | Note: [Electric_] | [Utilities____▼]    | [150.00]| [_____]  |         | [×]
+│   |         |        | Note: [Internet_] | [Utilities____▼]    | [100.00]| [_____]  |         | [×]
+│   |         |        | Note: [Phone____] | [Utilities____▼]    | [200.00]| [_____]  |         | [×]
+│   |                                                                                              │
+│   |                     Balance: $0.00 ✓     [+ Split]  [Esc=Cancel  Tab=Save  🗑️]              │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Editing behavior:**
+- Colored border indicates edit mode
+- Transaction expands in-place (stays at its position in ledger)
+- Looks like ledger view, but fields are editable inputs
+- Context preserved (see surrounding transactions)
+- **Split transactions:** Always show multi-line in edit mode (all entries visible), regardless of collapsed/expanded state in view
+- **Split button available:** Can convert simple transaction to split during edit
+- Same keyboard navigation as new entry
+- See **[Transaction Entry Spec](../global/transaction-entry.md)** for complete editor behavior
+
+**Actions:**
+- **Esc key:** Cancel editing, discard changes
+- **Tab out** (from last field): Save transaction
+- **🗑️ icon:** Delete transaction (shows confirmation)
+- **On exit:** Returns to view mode, restoring previous display state (collapsed/expanded)
+
+Alternative: Traditional buttons `[Save] [Cancel] [Delete]` below the entry
+
+**Current status:** Click handler exists but only logs to console (not yet implemented)
+
+---
+
+## Locked Transactions
+
+Transactions in closed/reconciled periods cannot be edited.
+
+### Visual Separator
+
+```
+>  | 2024-01-10 | 1001 | Old transaction    | Expenses  | $50.00   | | $1,000.00
+>  | 2024-01-15 | 1002 | Another old one    | Utilities | $100.00  | | $900.00
+═══════════════════════════════════════🔒═══════════════════════════════════════
+>  | 2024-02-01 | 1003 | Editable entry     | Groceries | $75.00   | | $825.00
+>  | 2024-02-05 | 1004 | Recent entry       | Gas       | $45.00   | | $780.00
+```
+
+**Visual treatment:**
+- Separator line with 🔒 icon divides locked from editable transactions
+- Locked transactions (above line): Subtle tint to indicate read-only
+- Editable transactions (below line): Normal appearance
+
+**Behavior:**
+- Click locked transaction → Tooltip: "Cannot edit - period closed"
+- No edit mode entered
+- Can still expand to view transaction details
+- Can still navigate to linked accounts
+
+**When periods close:**
+- New separator line appears when period is closed/reconciled
+- Typically monthly or quarterly, controlled by user in settings
 
 ---
 
 ## Deleting Transactions
 
-**Not in MVP.** See [Transaction Entry Spec - Deleting](../global/transaction-entry.md#deleting-transactions) for future implementation.
+Available in edit mode via [Delete] button with confirmation dialog.
+
+**Not in MVP.** Future implementation.
 
 ---
 
