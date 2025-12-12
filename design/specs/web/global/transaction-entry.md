@@ -1,115 +1,63 @@
 # Spec: Transaction Entry
 
 ## General Rules
-- The user should be able to do multiple transactions in a row without fingers leaving the keyboard
-- This typically means data entry in fields and using tab key to advance and space key to activate selected buttons
-- Tab should advance to the next logical field where the user might want to enter data
-- A new blank transaction is created when the user tabs beyond the current entry
+
+- The user should be able to do multiple transactions in sequence without fingers leaving the keyboard
+- This typically means entering data into fields and using the tab key to advance and the Space (or possibly Enter) key to activate selected buttons
+- Tab should advance to the next logical/reasonable field where the user might want to enter data
+- When entering data, a new blank transaction is created when the user tabs beyond the current entry
+- Ideally, data entry should not require the user to look at the screen all the time in case they are reading data off a paper or separate screen
+- When tabbing into any field that contains a value, the text is automatically selected (allows quick replace by typing, or edit by using arrow keys)
 - There is a "Current Account" which is the account we are currently viewing the ledger for
-
-## Simple Mode Rules
-- The user enters optionally ref and memo
-- The user enters an account.  This is the "offset account"
-- A tab takes us to the debit field
-- An amount may be entered.  Regardless, another tab takes us to the Credit field
-- An amount may be entered.  If so, it takes precidence and nulls out the Debit field if any exists.
-- A further tab completes the transaction and takes us to the next logical step
-  - If we were editing a previous transaction, this means just closing the edit
-  - If we were adding a new transaction, this takes us to a new transaction to edit
-
-## Split Mode Rules
-- Split mode is invoked by pressing the split button
-- The split button is only active if there is nothing in the account window of the primary (transaction) line
-- When entering split mode:
-  - Enter the Current Account into the account field of the primary line
-  - Advance to the Debit field of the primary line
-  - Open a new split line with the cursor in the first field of that line
-- Any split line that has neither a credit nor a debit yet entered (like the newly entered split line) will be pre-filled with the number that would balance the transaction
-- Now a tab out of Credit will advance to the first field of the next entry (split) line
-- If the user tabs into a debit or credit column that is already filled, the amount will be selected so that any typing of a number will replace the old value.
-- If the last split line balances the transaction, tabbing out of the credit column will close the edit
-- If the last split does not balance the transaction, tabbing out will create a new split line which will likewise be pre-filled with a balancing value.
-- Closing the edit of a newly added transaction will (like in a simple entry) position the cursor in the first field of a new, empty transaction
-
-## Two Modes
-
-**Simple:** One offset account (two entries total: current account + one offset)
-**Split:** Multiple offset accounts (multiple entries: current account + multiple offsets)
-
-**Toggle:** Split button (`|`) or `Ctrl+Enter`
-
-## General Rules
-
-**Keyboard-first workflow:**
-- User should complete multiple transactions without leaving keyboard
-- Tab advances to next logical field
-- Space activates focused button
-- Consistent tab flow regardless of data (same number of fields every time)
-
-**Auto-select on Tab:**
-- When tabbing into any field that contains a value, select all text
-- Allows quick replace (start typing) or edit (arrow keys)
-- Applies to: Date, Ref, Memo, Account, Debit, Credit, Note
-
-**Current Account:**
-- The account whose ledger is being viewed
-- Appears in every transaction on this ledger
 
 ## Simple Mode
 
+The user enters a transaction with two accounts: the current account (the ledger being viewed) and one offset account.
+
+### How It Works
+
+- The user optionally enters ref and memo
+- The user enters an account. This is the "offset account"
+- A tab takes us to the debit field
+- An amount may be entered. Regardless, another tab takes us to the Credit field
+- An amount may be entered. If so, it takes precedence and nulls out the Debit field if any exists
+- A further tab completes the transaction and takes us to the next logical step:
+  - If we were editing a previous transaction, this means just closing the edit
+  - If we were adding a new transaction, this takes us to a new transaction to edit
+
 ### Layout
+
 ```
 Date | Ref | Memo | [Account] [|] | Debit | Credit
 ```
 
-### Tab Flow
-```
-Date → Ref → Memo → Account
-  If Account empty: → Split button (Space toggles split mode)
-  If Account filled: → Debit (skip split button)
-Debit → Credit → Tab saves and creates new blank row, cursor to Date
-```
+The split button (`|`) appears to the right of the Account input. It's only enabled when the Account field is empty.
 
-### Field Behavior
+### Requirements
 
-**Account:**
-- Uses AccountAutocomplete component
-- Required for transaction
-
-**Split Button:**
-- Position: Right of Account input
-- Enabled: Only when Account is empty
-- Disabled: When Account has value (grayed out)
-- Space/Enter: Toggles split mode
-
-**Debit and Credit:**
-- Both fields always enabled (consistent tab flow)
-- On blur: If field has value, clear the other field
-- Result: Only one can have value at a time, but tab count is consistent
-
-**Saving:**
-- Tab from Credit field: Saves transaction, creates new blank row, cursor to Date of new row
-- Enter in any field: Saves transaction if valid
-
-### Validation
-
-Required:
-- Date (valid date)
-- Account (selectedId set)
-- Debit OR Credit (exactly one must have value, not both, not neither)
+- Date must be a valid date
+- Account must be selected (not just typed text)
+- Either Debit OR Credit must have a value (not both, not neither)
+- When one field has a value and the user tabs away from it, the other field is cleared
 
 ## Split Mode
 
-### Entry Sequence
+The user enters a transaction with multiple accounts: the current account and multiple offset accounts.  There can be any number of debit and credit entries.
 
-1. User enters Date, Ref, Memo (optional)
-2. User clicks Split button (Account field must be empty)
-3. System enters split mode:
-   - Current Account appears in account field (disabled)
-   - New blank split row appears
-   - Cursor moves to **Debit field of main transaction line**
-4. User enters amount in Debit or Credit
-5. Tab advances to first split's Note field
+### How It Works
+
+- The user invokes split mode via the split button (when Account field is empty)
+- The split button is only active if there is nothing in the account field of the primary (transaction) line
+- When entering split mode:
+  - The Current Account is entered into the account field of the primary line (disabled/grayed out)
+  - The cursor advances to the Debit field of the primary line
+  - A new split entry line opens below the primary line
+- Any split entry line that has neither a credit nor a debit yet entered will be pre-filled with the amount that would balance the transaction
+- Tabbing out of the Credit field will advance to the first field of the next split entry line
+- If the user tabs into a debit or credit column that is already filled, the amount will be selected so that any typing of a number will replace the old value
+- If the last split entry line balances the transaction, tabbing out of the credit column goes to the Save button
+- If the last split entry line does not balance the transaction, tabbing out creates a new split entry line which will likewise be pre-filled with a balancing value
+- Closing the edit of a newly added transaction will (like in a simple entry) position the cursor in the first field of a new, empty transaction
 
 ### Layout
 
@@ -123,57 +71,21 @@ Note | [Account] | Debit | Credit | [×]
 [Save] [Cancel] [+ Add Split]
 ```
 
-### Tab Flow
+### Requirements
 
-```
-Date → Ref → Memo → Account (disabled, skipped) → Debit → Credit
-  → First split: Note → Account → Debit → Credit
-  → Next split: Note → Account → Debit → Credit
-  → (etc.)
-  → Last split Credit:
-      If unbalanced: Auto-creates new split line (cursor to Note)
-      If balanced: → Save button → Cancel button → Add Split button
-```
-
-**Enter key:**
-- In input field: Saves transaction if valid
-- On button: Activates that button
-
-### Auto-Balance
-
-**Any new split line gets pre-filled with amount needed to balance:**
-- Main account Debit $100 → First split pre-fills Credit $100
-- Main account Credit $100 → First split pre-fills Debit $100
-- If splits don't sum to balance → New split pre-fills appropriate column
-
-**User can override:**
-- Field is auto-selected (Issue 5)
-- Type to replace
-- Tab to accept and advance
-
-### Debit/Credit Behavior
-
-Same as Simple Mode:
-- Both fields always enabled
-- On blur: If field has value, clear the other field
-- Only one field can have value per split row
-
-### Validation
-
-Required:
-- Date (valid date)
-- Main account Debit OR Credit
-- Each split: Account (selectedId) + Debit OR Credit (exactly one)
-- Transaction must balance: Sum of all entries = $0.00 (±$0.01 tolerance)
-
-**Save button disabled if invalid**
+- Date must be a valid date
+- Main account must have either Debit OR Credit (not both, not neither)
+- Each split must have an account selected and either Debit OR Credit (not both, not neither)
+- Transaction must balance: Sum of all entries = $0.00 (within $0.01 tolerance)
+- When one field (Debit or Credit) has a value and the user tabs away from it, the other field is cleared
+- Save button is disabled until all requirements are met
 
 ## Actions
 
 **Save:**
-- Validates transaction
-- If valid: Saves, clears form, exits split mode, creates new blank row
-- If invalid: Shows inline errors, disables button
+- Validates the transaction
+- If valid: Saves, clears the form, exits split mode if active, creates a new blank row
+- If invalid: Shows inline errors, disables the button
 
 **Cancel:**
 - Exits split mode
@@ -182,9 +94,9 @@ Required:
 - Does not save
 
 **Add Split:**
-- Manually adds new split row
+- Manually adds a new split row
 - Pre-fills with balancing amount
-- Rarely used (usually auto-created by tabbing)
+- Rarely used (usually auto-created by tabbing when unbalanced)
 
 **Remove (×):**
 - Removes that split row

@@ -45,7 +45,7 @@
 
 ### Global Specs (Web)
 - ✅ `design/specs/web/global/account-autocomplete.md` - Cleaned: kept Rules only, removed Interface/Dropdown/Search/Keyboard/Validation sections (all redundant or technical)
-- ⬜ `design/specs/web/global/transaction-entry.md` - Clean up, preserve Rules section
+- ✅ `design/specs/web/global/transaction-entry.md` - Cleaned: consolidated duplicate sections, kept original Rules + visual layouts + Actions, removed redundant technical details (210 → 114 lines)
 - ⬜ `design/specs/web/global/backend.md` - SQLite mock backend
 - ⬜ `design/specs/web/global/export.md` - CSV/Excel export behavior
 - ⬜ `design/specs/web/global/view-state.md` - Persistence of UI states
