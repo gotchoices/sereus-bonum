@@ -2,11 +2,12 @@
 
 **Route:** `/ledger/[accountId]`
 **Source:** `design/stories/web/03-entries.md`, `design/specs/web/screens/ledger.md`, `design/specs/web/global/transaction-edit.md`, `design/specs/web/global/account-autocomplete.md`
-**Generated:** 2024-12-12
+**Generated:** 2024-12-12  
+**Updated:** 2024-12-12 (Added: transaction display modes, expand/collapse, in-place editing, locked transactions, view state persistence)
 
 ## Purpose
 
-Primary transaction entry interface for an account. Optimized for keyboard-centric rapid data entry without requiring constant visual attention to the screen.
+Primary transaction entry interface for an account. Displays existing transactions (collapsed or expanded) and provides an always-present blank row for rapid keyboard-centric transaction entry without requiring constant visual attention.
 
 ## Technical Requirements
 
@@ -42,6 +43,81 @@ Primary transaction entry interface for an account. Optimized for keyboard-centr
 - Transaction save → Updates ledger entries
 - Balance recalculation → Updates header display
 - Reactive updates → Notifies linked Accounts View
+
+### Transaction Display & Grouping
+
+**Transaction Grouping:**
+- Entries are grouped by `transactionId`
+- Each transaction group contains:
+  - Header data: date, reference, memo
+  - All entries for that transaction
+  - Derived state: isLocked, isExpanded
+
+**Display Modes:**
+1. **Collapsed (default):** Single line per transaction
+   - Shows: date, ref, memo, offset account (or "[Split]"), amounts, balance
+   - Expand button (▶) shown if transaction has multiple entries
+   - Click anywhere on line → enter edit mode (if not locked)
+
+2. **Expanded:** Transaction header + entry lines
+   - Header line: date, ref, memo, "[Split]", balance
+   - Entry lines (indented): note, account link, debit/credit amounts
+   - Collapse button (▼) on header line
+   - Click header → enter edit mode (if not locked)
+
+**Expand/Collapse Controls:**
+- Per-transaction expand button (▶/▼)
+- Toolbar: "Expand All" and "Collapse All" buttons
+- State persisted in localStorage per account (`viewState.expandedTransactions`)
+- `viewState.expandAll` overrides individual settings
+
+**Locked Transactions:**
+- Transactions before `closedDate` are locked (non-editable)
+- Visual separator line with lock icon (🔒) between locked and unlocked
+- Locked rows: dimmed opacity (0.7), muted color, no hover effect, no edit on click
+
+### In-Place Editing
+
+**Entering Edit Mode:**
+- Click on any transaction line (if not locked)
+- Expands transaction into edit container (blue border)
+- Loads transaction data into edit form
+- Shows: ✏️ icon, "Save", "Cancel", "Delete" buttons
+
+**Edit Container:**
+- Full-width inline editor at transaction's position in table
+- Blue border indicates active edit mode
+- Contains transaction editor component (currently placeholder)
+- Future: Full split editor with same behavior as new entry mode
+
+**Exiting Edit Mode:**
+- Save → Updates transaction, reloads ledger
+- Cancel → Discards changes, returns to view mode
+- Delete → Confirmation dialog, removes transaction
+- Escape key → Cancel edit mode
+
+**Delete Confirmation:**
+- Dialog: "Delete this transaction? This cannot be undone."
+- [Cancel] [Delete] buttons
+- Only shown for unlocked transactions
+
+### View State Persistence
+
+**Persisted State (localStorage):**
+```typescript
+interface LedgerViewState {
+  expandedTransactions: Record<string, boolean>; // Per-transaction
+  expandAll: boolean;                             // Global override
+  closedDate?: string;                            // Lock transactions before this date
+}
+```
+
+**Storage Key:** `viewState:ledger:{accountId}`
+
+**Behavior:**
+- Expand/collapse state remembered per transaction
+- `expandAll` flag remembered across sessions
+- `closedDate` sets locked transaction cutoff
 
 ### Account Autocomplete Implementation
 

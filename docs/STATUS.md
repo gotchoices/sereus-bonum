@@ -62,7 +62,20 @@
 ### Screen Specs (Web)
 - ✅ `design/specs/web/screens/accounts-view.md` - Cleaned: removed TypeScript interfaces, SQL queries, backend signatures, calculation formulas; kept report modes, date handling, UI elements, user actions (340 → 180 lines)
 - ✅ `design/specs/web/screens/catalog.md` - Cleaned: removed TypeScript interface, data model section; kept user actions, hierarchy, modals, context menu (119 → 165 lines)
-- ✅ `design/specs/web/screens/ledger.md` - Enhanced: added transaction display (collapsed/expanded), in-place editing, locked transactions, new entry workflow; references transaction-edit.md for component (189 → 338 lines)
+- ✅ `design/specs/web/screens/ledger.md` - Enhanced: added transaction display (collapsed/expanded), in-place editing, locked transactions, new entry workflow; references transaction-edit.md for component (189 → 344 lines)
+- ✅ **Ledger Implementation Updated:** `apps/web/src/routes/ledger/[accountId]/+page.svelte` - Added display modes, expand/collapse, edit mode, locked transactions (1218 → 1140 lines)
+  - ✅ Transaction grouping by transactionId
+  - ✅ Collapsed/expanded display modes with per-transaction toggle
+  - ✅ Expand All / Collapse All toolbar buttons
+  - ✅ In-place edit mode (placeholder for full editor)
+  - ✅ Delete transaction with confirmation
+  - ✅ Locked transaction separator (🔒) based on closedDate
+  - ✅ View state persistence (expand/collapse, expandAll)
+  - ✅ Escape key cancels edit/split modes
+  - ✅ Click-to-edit for unlocked transactions
+  - **Note:** Full transaction editor (edit existing with splits) is stubbed - to be implemented next
+- ✅ **Consolidation updated:** `design/generated/web/screens/ledger.md` - Added transaction grouping, display modes, edit mode, locked transactions, view state persistence sections
+- ✅ **i18n updated:** Added expand/collapse, editing, balance keys to `en.ts`
 - ✅ `design/specs/web/screens/search.md` - Cleaned: removed TypeScript interfaces, component architecture, data structures, i18n keys, styling details; kept display format, export behavior, navigation (206 → 176 lines)
 - ✅ `design/specs/web/screens/saved-reports-ux.md` - Cleaned: removed TypeScript interface, component structure, file paths, accessibility section; kept UI layout, phases, persistence, user actions (351 → 290 lines)
 
