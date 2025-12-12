@@ -61,15 +61,15 @@
 
 ### Screen Specs (Web)
 - ✅ `design/specs/web/screens/accounts-view.md` - Cleaned: removed TypeScript interfaces, SQL queries, backend signatures, calculation formulas; kept report modes, date handling, UI elements, user actions (340 → 180 lines)
-- ⬜ `design/specs/web/screens/catalog.md` - Account Groups catalog
-- ⬜ `design/specs/web/screens/search.md` - Transaction search
-- ⬜ `design/specs/web/screens/saved-reports-ux.md` - Saved reports UI
+- ✅ `design/specs/web/screens/catalog.md` - Cleaned: removed TypeScript interface, data model section; kept user actions, hierarchy, modals, context menu (119 → 165 lines)
+- ✅ `design/specs/web/screens/search.md` - Cleaned: removed TypeScript interfaces, component architecture, data structures, i18n keys, styling details; kept display format, export behavior, navigation (206 → 176 lines)
+- ✅ `design/specs/web/screens/saved-reports-ux.md` - Cleaned: removed TypeScript interface, component structure, file paths, accessibility section; kept UI layout, phases, persistence, user actions (351 → 290 lines)
 
 ### Shared Specs
-- ⬜ `design/specs/i18n.md` - Global i18n principles
-- ⬜ `design/specs/visual-balance-sheet.md` - VBS component behavior
-- ⬜ `design/specs/import-books.md` - GnuCash import format
-- ⬜ `design/specs/import-transactions.md` - Transaction import formats
+- ✅ `design/specs/i18n.md` - Already clean: user-focused principles, dictionary format, locale detection (53 lines, no changes needed)
+- ✅ `design/specs/visual-balance-sheet.md` - Cleaned: removed TypeScript interfaces, Svelte implementation code, data adapter, mobile fallback; kept visual structure, rings, colors, interactions, usage (294 → 185 lines)
+- ✅ `design/specs/import-books.md` - Cleaned: removed XML examples, SQL tables, technical observations, implementation details; kept workflow steps, user dialogs, mappings, error handling (179 → 270 lines)
+- ✅ `design/specs/import-transactions.md` - Cleaned: removed technical format details; expanded workflow with user dialogs, duplicate detection, categorization, error states (102 → 265 lines)
 
 ### Generated/Consolidations (Reference Only)
 - `design/specs/web/screens/ledger.md` - This appears to be a consolidation, should move to `design/generated/web/screens/`

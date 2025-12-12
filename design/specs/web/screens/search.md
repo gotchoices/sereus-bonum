@@ -1,205 +1,205 @@
-# Transaction Search Screen
+# Spec: Transaction Search
 
 **Route:** `/search`  
 **Story:** [06-search.md](../../../stories/web/06-search.md)  
 **Status:** Phase 1 (Show All) - In Development
 
----
-
 ## Purpose
 
-Provide a global view of all transactions across all entities to support debugging, data exploration, and (future) complex queries.
+Provide a global view of all transactions across all entities. Users can:
+- View all transactions in one place (not filtered to a single account)
+- Verify that books are balanced (total debits = total credits)
+- Debug data issues or find specific transactions
+- Export results for analysis in spreadsheet programs
 
----
+**Note:** This is cross-entity — transactions from all entities appear together.
 
-## Phase 1: Transaction Browser
+## Phase 1: Show All Transactions
 
-Show all transactions with full splits, debit/credit columns, and balance verification.
+This is the MVP implementation. Future phases will add filtering and search capabilities.
 
-### Header
-- **Title:** "Transaction Search"
-- **Primary Button:** "Show All Transactions" — loads all transactions across all entities
-- **Export Button:** 📥 "Export" (appears after transactions are loaded)
-  - Dropdown menu with options:
-    - 📄 Export to CSV
-    - 📊 Export to Excel (XLSX)
+### Initial State
 
-### Results Display Format
+Screen shows:
+- Title: "Transaction Search"
+- Large button: "Show All Transactions"
+- Empty message: "Click 'Show All Transactions' to view all entries."
 
-#### Transaction Header Row
-Each transaction is displayed as a header row with:
-- **Date** (YYYY-MM-DD or formatted)
-- **Entity** (which entity this transaction belongs to) — hyperlink to `/entities/[id]`
-- **Memo/Description** (transaction-level memo)
-- **Reference** (check number, invoice number, etc.)
+### After Loading Transactions
 
-Style: Bold or distinct background to separate from split rows
+**Button changes:**
+- "Show All Transactions" remains visible
+- Export button appears: 📥 "Export" with dropdown:
+  - 📄 Export to CSV
+  - 📊 Export to Excel
 
-#### Split Rows (Indented under header)
-Each entry in the transaction is displayed as a subordinate row:
-- **Account** — hyperlink to `/ledger/[accountId]`, showing full path on hover
-- **Debit** — amount in debit column (if entry amount > 0)
-- **Credit** — amount in credit column (if entry amount < 0, displayed as absolute value)
-- **Note** (entry-level note, if any)
+**Transaction Display:**
 
-Style: Indented or slightly subdued to indicate hierarchy
+Each transaction appears as a collapsible group:
 
-#### Key Requirements
-- **All transactions displayed as splits** — even simple 2-entry transactions show both entries as split rows (no "offset account" shortcut)
-- **Debit/Credit columns** — amounts always in correct column based on sign
-  - Positive amount → Debit column
-  - Negative amount → Credit column (absolute value)
-- **No running balance** — not applicable in cross-transaction view
-- **Expand/Collapse** — Optional for future, but for Phase 1, show all splits expanded by default
+```
+──────────────────────────────────────────────────────────
+2024-01-15 | Home Finance | Opening balances | Ref: —
+  Checking Account                        $50,000.00  |
+  Equity                                  |  $50,000.00
+──────────────────────────────────────────────────────────
+2024-01-16 | Home Finance | Grocery store | Ref: 1001
+  Checking Account                        |     $125.50
+  Groceries                                  $125.50  |
+──────────────────────────────────────────────────────────
+```
+
+**Transaction Header Row:**
+- Date (formatted per user's date preference)
+- Entity name (hyperlink to that entity's Accounts View)
+- Memo/Description
+- Reference (check #, invoice #, etc.) or "—" if empty
+- Visually distinct (bold or background color)
+
+**Split Entry Rows:**
+- Indented underneath transaction header
+- Account name (hyperlink to that account's ledger)
+  - Hover shows full account path tooltip
+- Debit amount (if positive) in left column
+- Credit amount (if negative, shown as positive) in right column
+- Entry-level note (if any) appears below or beside
+- All transactions show full splits (no shortcuts for 2-entry transactions)
+
+**Columns:**
+- Date | Entity | Memo | Ref | Account | Debit | Credit | Note
+
+**Key Visual Rules:**
+- **Debits always in Debit column** (right side of account name)
+- **Credits always in Credit column** (far right)
+- Never show an amount in both columns for same entry
+- Empty cells where no amount applies
 
 ### Totals Footer
 
-Display at the bottom:
-- **Left side:** Entry count (e.g., "42 entries")
-- **Right side:**
-  - **Total Debits:** Sum of all positive amounts
-  - **Total Credits:** Sum of absolute values of all negative amounts
-  - **Verification:** 
-    - ✓ **Balanced** (if debits = credits within 0.01 tolerance)
-    - ⚠ **Imbalance: $X.XX** (if debits ≠ credits)
+At the bottom of the transaction list:
 
-### Empty State
-- Message: "Click 'Show All Transactions' to view all entries."
+```
+──────────────────────────────────────────────────────────
+42 entries                    Total Debits:  $150,000.00
+                             Total Credits:  $150,000.00
+                             ✓ Balanced
+──────────────────────────────────────────────────────────
+```
 
-### Export Functionality
+**Shows:**
+- Entry count (left side)
+- Total of all debits (sum of positive amounts)
+- Total of all credits (sum of absolute values of negative amounts)
+- Balance status:
+  - **"✓ Balanced"** (green) if debits = credits (within $0.01)
+  - **"⚠ Imbalance: $X.XX"** (red) if debits ≠ credits
 
-**See:** [Export Specification](../global/export.md)
+**Purpose:** Verify data integrity — if imbalanced, indicates a data error.
 
-**File Formats:**
-- **CSV:** Plain text, comma-separated values
-- **Excel (XLSX):** Microsoft Excel format with formatted columns
+### Export Behavior
 
-**Filename:** `transactions-YYYY-MM-DD.{csv|xlsx}`
+**Trigger:** Click "Export" button
 
-**Amount Formatting:**
-- All amounts displayed as decimal with 2 decimal places
-- Example: 5000000 (stored in cents) → `50000.00` (exported)
+**Options:**
+- Export to CSV (universal, plain text)
+- Export to Excel (formatted, native Excel support)
 
-**Export Structure:**
+**Filename:** `transactions-YYYY-MM-DD.{csv|xlsx}` (current date)
+
+**Content:**
 - Header row with column names
-- Transaction header rows
-- Indented split rows
-- Totals row at bottom
-- Verification row (balanced/imbalance status)
+- Transaction header rows with date, entity, memo, reference
+- Indented split rows with account, debit, credit, note
+- Totals row: "Totals:" label, sum of debits, sum of credits
+- Verification row: "Balanced" or "Imbalance: $X.XX"
 
-**CSV Format:**
+**Amount Format:**
+- All amounts show as decimal with 2 decimal places
+- Example: $50,000.00 (not 5000000)
+- CSV: `50000.00`
+- Excel: `50,000.00` (with comma formatting)
+
+**CSV Example:**
 ```
 Date,Entity,Memo,Reference,Account,Debit,Credit,Note
 2024-01-15,Home Finance,Opening balances,,,,,
 ,,,,Checking Account,50000.00,,
 ,,,,Equity,,50000.00,
-,,,,Totals:,150000.00,150000.00,
+2024-01-16,Home Finance,Grocery store,1001,,,
+,,,,Checking Account,,125.50,
+,,,,Groceries,125.50,,
+,,,,Totals:,50125.50,50125.50,
 ,,,,Balanced,,,
 ```
 
-**Implementation:**
-- Uses native browser Blob API for CSV download
-- Uses `xlsx` library (SheetJS) for Excel generation
-- Handles special characters (quotes, commas) in CSV
-- Amounts formatted via `formatAmountForExport()` (divide by 100, 2 decimals)
-- Graceful fallback to CSV if Excel export fails
+**See also:** [Export Specification](../global/export.md) for detailed format rules.
 
----
+### Navigation Links
 
-## Future: Phase 2 (Query Builder)
+**Entity Names:**
+- Click entity name → navigates to `/entities/[id]` (Accounts View)
 
-- Visual query builder with field selection
-- AND/OR logic with grouping (indentation for sub-groups)
-- Operators: <, >, =, !=, contains, wildcard, regexp
-- Saved named searches with edit/delete
-- Export to CSV
+**Account Names:**
+- Click account name → navigates to `/ledger/[accountId]`
+- Hover shows tooltip with full account path (e.g., "Assets : Current Assets : Checking Account")
 
----
+### Error States
 
-## Component Architecture
-
-### `TransactionResultsTable.svelte` (Reusable)
-
-**Props:**
-```typescript
-{
-  entries: LedgerEntry[];        // Grouped by transaction
-  showEntity?: boolean = true;   // Show entity column in header
-  showTotals?: boolean = true;   // Show debit/credit totals footer
-  emptyMessage?: string;         // Custom empty state
-}
+**Failed to Load:**
+```
+Error loading transactions: [error message]
+[Retry] button
 ```
 
-**Usage:**
-- `/search` — all transactions, cross-entity
-- Future: reconciliation, report drill-downs
-
-### Data Structure
-
-Transactions should be grouped by `transactionId` before rendering:
-```typescript
-interface TransactionGroup {
-  transactionId: string;
-  date: string;
-  entityId: string;
-  entityName: string;
-  memo?: string;
-  reference?: string;
-  entries: Array<{
-    entryId: string;
-    accountId: string;
-    accountName: string;
-    accountPath: string;
-    amount: number;      // Raw amount (+ for debit, - for credit)
-    note?: string;
-  }>;
-}
+**No Transactions:**
+```
+No transactions found.
+Create your first transaction by visiting an account ledger.
 ```
 
----
+### Performance Considerations
 
-## Styling
+**Large Datasets:**
+- For hundreds of transactions, page may take a few seconds to load
+- Show loading spinner while fetching: "Loading transactions..."
+- Once loaded, display is instant (no pagination in MVP)
 
-- **Transaction header row:** Slightly bolder, distinct background (e.g., `--card-bg`)
-- **Split rows:** Indented (padding-left), lighter text for hierarchy
-- **Debit/Credit columns:** Right-aligned, tabular-nums font
-- **Totals footer:** Bold, distinct background, clear visual separation
+**Future Enhancement:** Pagination or virtual scrolling for thousands of transactions.
 
----
+## Phase 2: Query Builder (Future)
 
-## i18n Keys
+Not in MVP. Planned features:
 
-```typescript
-search: {
-  title: 'Transaction Search',
-  show_all: 'Show All Transactions',
-  empty: 'Click "Show All Transactions" to view all entries.',
-  date_col: 'Date',
-  entity_col: 'Entity',
-  memo_col: 'Memo',
-  ref_col: 'Ref',
-  account_col: 'Account',
-  debit_col: 'Debit',
-  credit_col: 'Credit',
-  note_col: 'Note',
-  total_entries: '{count} entries',
-  total_debits: 'Total Debits',
-  total_credits: 'Total Credits',
-  balanced: 'Balanced',
-  imbalance: 'Imbalance',
-}
-```
+**Visual Query Interface:**
+- Field selection dropdowns (Date, Entity, Account, Memo, Amount, etc.)
+- Comparison operators (<, >, =, !=, contains, wildcard)
+- AND/OR logic with grouping (parentheses)
+- Example: "(Account contains 'Checking' OR Account contains 'Savings') AND Amount > 1000"
 
----
+**Saved Searches:**
+- Name and save query configurations
+- Dropdown menu to load saved searches
+- Edit/delete saved searches
+- Example: "Large Cash Transactions", "Q4 Income Entries"
 
-## Acceptance Criteria
+**Date Range Filtering:**
+- From/To date pickers
+- Quick presets (This Month, Last Quarter, Year to Date)
 
-- ✅ All transactions displayed as transaction header + split rows
-- ✅ Debits in debit column, credits in credit column (absolute value)
-- ✅ Entity hyperlinks to Accounts View
-- ✅ Account hyperlinks to Ledger
-- ✅ Full account path on hover
-- ✅ Totals footer with balance verification
-- ✅ Imbalance displayed with exact amount if totals don't match
-- ✅ Works across multiple entities
+**Export Filtered Results:**
+- Export button exports only matching transactions
 
+## Reusable Component
+
+The transaction results table is designed to be reusable:
+- Used here for global search
+- Can be used in reconciliation workflows (future)
+- Can be used in report drill-downs (future)
+- Can show/hide entity column depending on context
+
+## Keyboard Shortcuts (Future)
+
+- Ctrl+F: Focus search/query builder
+- Ctrl+E: Open export menu
+- Enter on transaction: Expand/collapse splits
+- Arrow keys: Navigate between transactions

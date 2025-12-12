@@ -1,19 +1,26 @@
-# Saved Reports & Multi-Column UI/UX
+# Spec: Saved Reports & Multi-Column Reports
 
-**Status:** Spec for future implementation (UI hooks can be stubbed now)
+**Status:** Future feature (UI hooks stubbed for now)  
+**Story:** [04-reporting.md](../../../stories/web/04-reporting.md) (Alternative Paths F & G)
 
 ## Overview
 
-Two related features from Story 04:
-- **Saved Reports** (Alt G): Save/recall named report configurations
-- **Multi-Column Reports** (Alt F): Compare multiple periods side-by-side
-
----
+Two related features for the Accounts View:
+- **Saved Reports:** Save and recall named report configurations
+- **Multi-Column Reports:** Compare multiple periods side-by-side
 
 ## 1. Saved Reports
 
+### Purpose
+
+Users frequently view the same reports (e.g., "Year-End Balance Sheet", "Monthly P&L"). Saved Reports let them:
+- Save current view configuration (mode, dates, columns, settings) with a name
+- Quickly load saved configurations from a dropdown
+- Avoid repetitive setup for common reports
+
 ### UI Location
-**Accounts View header, right side:**
+
+Accounts View header, right side:
 
 ```
 ┌────────────────────────────────────────────────────────────┐
@@ -21,46 +28,38 @@ Two related features from Story 04:
 └────────────────────────────────────────────────────────────┘
 ```
 
-### Dropdown Menu (⭐ Reports)
+### Reports Dropdown
 
-**When clicked, shows:**
+Click "⭐ Reports" button to show menu:
 
 ```
-┌─────────────────────────────┐
-│ 💾 Save Current View...     │  ← Action button
-├─────────────────────────────┤
-│ 📊 Year-End Balance Sheet   │  ← Saved report
-│    BS • 2024-12-31          │     (mode + date preview)
-│                             │
-│ 📈 Quarterly P&L            │
-│    IS • Q1-Q4 2024 (4 cols) │
-│                             │
-│ 📋 Trial Balance (Current)  │
-│    TB • Today               │
-├─────────────────────────────┤
-│ 🗂️  Manage Reports...       │  ← Opens modal
-└─────────────────────────────┘
+┌─────────────────────────────────┐
+│ 💾 Save Current View...         │  ← Save action
+├─────────────────────────────────┤
+│ 📊 Year-End Balance Sheet       │  ← Saved report
+│    BS • 2024-12-31              │     (mode + date preview)
+│                                 │
+│ 📈 Quarterly P&L                │
+│    IS • Q1-Q4 2024 (4 cols)     │
+│                                 │
+│ 📋 Trial Balance (Current)      │
+│    TB • Today                   │
+├─────────────────────────────────┤
+│ 🗂️  Manage Reports...           │  ← Opens management modal
+└─────────────────────────────────┘
 ```
 
-### Dropdown Interactions
+**Actions:**
+- **Left-click saved report:** Loads that configuration immediately (view updates)
+- **Right-click saved report:** Shows context menu:
+  - Rename
+  - Update (save current settings over existing report)
+  - Duplicate
+  - Delete
 
-**Left-click on saved report:**
-- Loads that configuration (mode, dates, columns, expanded groups)
-- View immediately updates
+### Save Current View Dialog
 
-**Right-click on saved report:**
-```
-┌──────────────────┐
-│ Rename           │
-│ Update (Save)    │
-│ Duplicate        │
-│ Delete           │
-└──────────────────┘
-```
-
-### Save Dialog
-
-**When user clicks "💾 Save Current View...":**
+Click "💾 Save Current View..." to open:
 
 ```
 ┌─────────────────────────────────────┐
@@ -70,52 +69,77 @@ Two related features from Story 04:
 │ [Year-End Balance Sheet________]   │
 │                                     │
 │ Current settings:                   │
-│ • Mode: Balance Sheet              │
-│ • As of: 2024-12-31                │
-│ • Groups: 3 expanded               │
-│ • Columns: 1                       │
+│ • Mode: Balance Sheet               │
+│ • As of: 2024-12-31                 │
+│ • Groups: 3 expanded                │
+│ • Columns: 1                        │
 │                                     │
-│         [Cancel]  [Save]           │
+│         [Cancel]  [Save]            │
 └─────────────────────────────────────┘
 ```
 
-**If name already exists:**
-- Show warning: "Report 'XYZ' already exists. Overwrite?"
+**What Gets Saved:**
+- Report name (user-specified)
+- Report mode (Balance Sheet, Trial Balance, etc.)
+- Date(s) or date range
+- Number of columns and column names (if multi-column)
+- Variance setting (if enabled)
+- Selected account groups (for Custom mode)
+
+**What Does NOT Get Saved:**
+- Expanded/collapsed state of groups (too granular, changes frequently)
+
+**Duplicate Names:**
+If name already exists:
+- Warning: "Report 'XYZ' already exists. Overwrite?"
 - Options: [Cancel] [Save As New] [Overwrite]
 
 ### Manage Reports Modal
 
-**More detailed view for editing:**
+Click "🗂️ Manage Reports..." for detailed management:
 
 ```
 ┌─────────────────────────────────────────────────┐
 │ Manage Saved Reports                      [X]   │
 ├─────────────────────────────────────────────────┤
 │                                                 │
-│ 📊 Year-End Balance Sheet                      │
-│    BS • 2024-12-31 • 1 column                  │
-│    Created: 2024-03-15 • Last used: Today      │
-│    [Rename] [Duplicate] [Delete]               │
+│ 📊 Year-End Balance Sheet                       │
+│    BS • 2024-12-31 • 1 column                   │
+│    Created: 2024-03-15 • Last used: Today       │
+│    [Rename] [Duplicate] [Delete]                │
 │                                                 │
-│ ─────────────────────────────────────────────  │
+│ ─────────────────────────────────────────────   │
 │                                                 │
-│ 📈 Quarterly P&L                               │
-│    IS • 2024-01-01 to 2024-12-31 • 4 columns   │
-│    Created: 2024-02-10 • Last used: Yesterday  │
-│    [Rename] [Duplicate] [Delete]               │
+│ 📈 Quarterly P&L                                │
+│    IS • 2024-01-01 to 2024-12-31 • 4 columns    │
+│    Created: 2024-02-10 • Last used: Yesterday   │
+│    [Rename] [Duplicate] [Delete]                │
 │                                                 │
-│ ─────────────────────────────────────────────  │
+│ ─────────────────────────────────────────────   │
 │                                                 │
-│                                    [Close]      │
+│                                    [Close]       │
 └─────────────────────────────────────────────────┘
 ```
 
----
+**Shows:**
+- All saved reports with details
+- Creation and last-used dates
+- Quick actions per report
+- Click report name to load it
+- Click action buttons to rename/duplicate/delete
 
 ## 2. Multi-Column Reports
 
+### Purpose
+
+Compare multiple time periods side-by-side on the same report. Examples:
+- Income Statement: Q1, Q2, Q3, Q4 (4 columns)
+- Balance Sheet: This Year, Last Year (2 columns)
+- Monthly comparison: Jan through Dec (12 columns)
+
 ### UI Location
-**Next to date picker, when available:**
+
+Date picker area expands to show multiple columns:
 
 ```
 ┌──────────────────────────────────────────────────────┐
@@ -133,22 +157,20 @@ Two related features from Story 04:
 
 ### Add Column Button
 
-**Visual design:**
-```
-[+]  ← Compact icon-only button (28x28px), next to date picker
-```
+**Visual:** Small `[+]` icon button (28x28px), positioned to the right of date picker
 
-**Rationale:** Small size keeps layout clean and doesn't push date picker out of alignment with the numbers column below.
+**Why small?** Keeps layout clean and doesn't push date picker out of alignment with numbers column below.
 
-**On click:**
+**On Click:**
 - Adds new column to the right
-- New column gets default dates (current year)
-- Max 12 columns (story requirement)
-- After reaching max, button disables with tooltip: "Maximum 12 columns"
+- New column gets default dates (e.g., current year or month)
+- Max 12 columns (per Story 04)
+- After max reached, button disables with tooltip: "Maximum 12 columns"
 
 ### Column Header
 
-**Each column shows:**
+Each column shows:
+
 ```
 ┌───────────────┐
 │ Column 2  [X] │  ← Name (editable) + remove button
@@ -160,192 +182,169 @@ Two related features from Story 04:
 └───────────────┘
 ```
 
-**Column name:**
+**Column Name:**
 - Default: "Column 1", "Column 2", etc.
-- Click to rename: "Q1 2024", "Jan", "Last Year", etc.
+- Click to edit: "Q1 2024", "Jan", "Last Year", etc.
 - Saved with report configuration
 
-**Remove button (X):**
+**Remove Button [X]:**
 - Removes that column
-- First column cannot be removed (disable button)
-- Shifts remaining columns left
+- First column cannot be removed (button disabled)
+- Remaining columns shift left
 
-### Variance Columns
+### Account Data Display
 
-**Checkbox below columns:**
+Below the column headers, account balances appear in columns:
+
+```
+┌─────────────────┬─────────┬─────────┬─────────┐
+│ Account         │   Q1    │   Q2    │   Q3    │
+├─────────────────┼─────────┼─────────┼─────────┤
+│ 💰 Assets       │ $50,000 │ $55,000 │ $60,000 │
+│   Cash & Bank   │  $5,000 │  $7,000 │  $8,000 │
+│   Receivables   │ $10,000 │ $12,000 │ $15,000 │
+│   ...           │   ...   │   ...   │   ...   │
+└─────────────────┴─────────┴─────────┴─────────┘
+```
+
+**Layout:**
+- Account names on left (sticky when scrolling)
+- One data column per period
+- Right-aligned amounts
+- Tabular number formatting
+
+### Variance Columns (Optional)
+
+Checkbox below column headers:
 ```
 ☐ Show variance columns ($ and %)
 ```
 
-**When checked, inserts variance columns between data columns:**
+When checked, inserts variance columns between data columns:
 
 ```
-┌─────────┬──────────┬─────────┬──────────┬─────────┐
-│ Column 1│ $ Change │ % Change│ Column 2 │...      │
-├─────────┼──────────┼─────────┼──────────┼─────────┤
-│ $50,000 │  +$5,000 │  +10%   │ $55,000  │         │
-│ $30,000 │  -$2,000 │  -6.7%  │ $28,000  │         │
-└─────────┴──────────┴─────────┴──────────┴─────────┘
+┌──────────┬─────────┬──────────┬─────────┬─────────┐
+│ Account  │ Column 1│ $ Change │ % Change│ Column 2│
+├──────────┼─────────┼──────────┼─────────┼─────────┤
+│ Revenue  │ $50,000 │  +$5,000 │  +10.0% │ $55,000 │
+│ Expenses │ $30,000 │  -$2,000 │   -6.7% │ $28,000 │
+└──────────┴─────────┴──────────┴─────────┴─────────┘
 ```
 
-**Variance calculation:**
-- $ Change = Column(n) - Column(n-1)
-- % Change = (Column(n) - Column(n-1)) / |Column(n-1)| × 100
-- Positive = green, Negative = red
-- First column has no variance (nothing to compare)
+**Variance Calculation:**
+- **$ Change:** Column(n) - Column(n-1)
+- **% Change:** [(Column(n) - Column(n-1)) / |Column(n-1)|] × 100
+- **Color coding:** Green for positive change, red for negative
+- **First column:** No variance (nothing to compare against)
 
 ### Responsive Behavior
 
-**Too many columns to fit:**
-- Horizontal scroll
-- Column headers sticky on scroll
-- Account names sticky on left
+**Too Many Columns:**
+- Horizontal scrollbar appears
+- Column headers stick to top when scrolling vertically
+- Account names stick to left when scrolling horizontally
 
 **Export:**
 - All columns export to separate spreadsheet columns
 - Variance columns included if shown
+- See [Export Spec](../global/export.md) for details
 
----
+## 3. Persistence
 
-## 3. Persistence & Scope
+### Automatic View State (Per Entity)
 
-### View State (Automatic)
-Persisted per entity in localStorage:
+Saved in browser local storage per entity:
 - Current mode
 - Current dates (all columns)
-- Expanded groups
+- Expanded/collapsed groups
 - Column names
 - Variance checkbox state
 
 **Key:** `bonum-accounts-view-state-{entityId}`
 
-### Saved Reports (Explicit)
-Persisted globally (not per-entity) in localStorage:
+**Behavior:** When you leave and return to an entity, view looks exactly as you left it.
+
+### Saved Reports (Global)
+
+Saved in browser local storage (shared across all entities):
 - Report name
 - Mode
 - Dates (all columns)
 - Column count & names
 - Variance setting
 - Selected account groups (for Custom mode)
-- Does NOT save expanded groups (too granular)
 
 **Key:** `bonum-saved-reports`
 
-**Structure:**
-```typescript
-interface SavedReport {
-  id: string;
-  name: string;
-  mode: ReportMode;
-  columns: Array<{
-    name: string;
-    startDate?: string;
-    endDate: string;
-  }>;
-  showVariance: boolean;
-  selectedGroups?: string[];  // For Custom mode
-  createdAt: string;
-  lastUsedAt: string;
-}
-```
-
----
+**Behavior:** Saved reports are available from any entity.
 
 ## 4. Implementation Phases
 
-### Phase 1: UI Hooks (Stub Now)
-- ✅ Add "⭐ Reports" button to header (disabled, tooltip: "Coming soon")
-- ✅ Add "+ Add Column" button (disabled, tooltip: "Multi-column view coming soon")
-- ✅ Add empty SavedReports store
-- ✅ Add placeholder functions: `saveReport()`, `loadReport()`, `addColumn()`
+This feature will be built in phases:
 
-### Phase 2: Single Save/Load (Later)
-- Implement save dialog
-- Implement load from dropdown
+### Phase 1: UI Hooks (Current - Stubbed)
+- "⭐ Reports" button present but disabled
+- Tooltip: "Coming soon"
+- "+ Add Column" button present but disabled
+- Tooltip: "Multi-column view coming soon"
+- Placeholder functions in code
+
+### Phase 2: Single-Column Save/Load
+- Save dialog working
+- Load from dropdown working
 - Basic rename/delete
 - Single column only (no multi-column yet)
 
-### Phase 3: Multi-Column (Later)
+### Phase 3: Multi-Column Support
 - Enable "+ Add Column" button
 - Column management (add/remove/rename)
-- Responsive layout (horizontal scroll)
+- Responsive layout with scroll
 - Export multi-column to CSV/Excel
 
-### Phase 4: Variance & Advanced (Later)
+### Phase 4: Variance & Advanced Features
 - Variance columns ($ and %)
 - Manage Reports modal
 - Usage tracking (last used, most used)
-- Report templates (default set)
+- Default report templates
 
----
-
-## 5. UI Component Structure
-
-**New files to create (when implementing):**
-
-```
-src/lib/components/
-  SavedReportsDropdown.svelte    - Main dropdown UI
-  SaveReportDialog.svelte         - Save/rename dialog
-  ManageReportsModal.svelte       - Full management interface
-  ColumnPicker.svelte             - Multi-column date inputs
-  VarianceColumn.svelte           - Variance display logic
-
-src/lib/stores/
-  savedReports.ts                 - Global saved reports store
-```
-
-**Integration points:**
-- `entities/[id]/+page.svelte` header section
-- Date picker area (for multi-column)
-
----
-
-## 6. Edge Cases & Validation
+## 5. Edge Cases
 
 ### Saved Reports
-- Duplicate names: warn and offer "Save As New"
-- Max 50 saved reports (or unlimited?)
-- Export/import saved reports (JSON file)
-- Sync across devices (future: via Sereus)
+- **Maximum reports:** No hard limit, but UI may get long (consider search/filter)
+- **Duplicate names:** Warn and offer options (save as new / overwrite)
+- **Export/Import:** Future: export saved reports as JSON file for backup or sharing
 
 ### Multi-Column
-- Minimum 1 column (cannot remove all)
-- Maximum 12 columns (story requirement)
-- Date validation: startDate ≤ endDate
-- Overlapping date ranges: allowed (for comparison)
-- Column width: fixed 150px or dynamic?
+- **Minimum columns:** 1 (cannot remove all)
+- **Maximum columns:** 12 (per story requirement)
+- **Date validation:** Start date must be ≤ end date
+- **Overlapping dates:** Allowed (useful for comparisons)
+- **Performance:** Multiple columns = multiple data queries (may be slow with large datasets)
 
-### Performance
-- Large datasets + 12 columns = 12 SQL queries
-- Consider: single query with UNION for all date ranges
-- Loading indicator per column vs global
+### Persistence
+- **Browser local storage limits:** ~5-10MB depending on browser
+- **Clear data:** User can clear browser data, losing all saved reports
+- **Future sync:** Saved reports could sync via Sereus across devices
 
----
+## 6. Future Enhancements
 
-## 7. Accessibility
+**Report Sharing:**
+- Generate shareable link to a report configuration
+- Others can view (read-only) or import into their own saved reports
 
-- Keyboard navigation through columns (Tab, Arrow keys)
-- Screen reader announces: "Column 1 of 4", "Variance between Q1 and Q2"
-- High contrast for variance colors
-- Focus management in modals
+**Scheduled Reports:**
+- Auto-generate reports on schedule
+- Email or download PDF
 
----
+**Report Templates:**
+- Pre-configured common reports (Year-End Package, Tax Prep, etc.)
+- Import standard templates
 
-## 8. Future Enhancements
+**Advanced Comparisons:**
+- Actual vs Budget
+- Actual vs Forecast
+- Period-over-period with automatic date calculation
 
-- **Report sharing:** Generate shareable link
-- **Scheduled reports:** Auto-generate on schedule (email PDF)
-- **Report templates:** Pre-configured common reports
-- **Comparison types:** Period-over-period, actual vs budget, actual vs forecast
-- **Drill-down from variance:** Click variance to see transaction differences
-
----
-
-## Notes
-
-- This spec covers UI/UX only
-- Backend changes documented in `accounts-view.md` (SQL for date ranges)
-- Export format documented in `global/export.md` (multi-column CSV/Excel)
-- See Story 04 for user requirements
-
+**Drill-Down:**
+- Click variance amount to see transaction-level differences
+- Shows which transactions changed between periods
