@@ -37,6 +37,37 @@
 
 ---
 
+## Review Specs for Appeus Compliance
+
+**Goal:** Clean up specs to be human-centric (user-observable behavior only). Remove technical details that can be derived by agents from stories + human rules. Technical details belong in consolidations, not specs.
+
+**Process:** For each spec, review all sections. If a technical detail can be unambiguously derived from the human-centric rules, delete it. If not, enhance the rules to be clear enough that it CAN be derived.
+
+### Global Specs (Web)
+- ✅ `design/specs/web/global/account-autocomplete.md` - Cleaned: kept Rules only, removed Interface/Dropdown/Search/Keyboard/Validation sections (all redundant or technical)
+- ⬜ `design/specs/web/global/transaction-entry.md` - Clean up, preserve Rules section
+- ⬜ `design/specs/web/global/backend.md` - SQLite mock backend
+- ⬜ `design/specs/web/global/export.md` - CSV/Excel export behavior
+- ⬜ `design/specs/web/global/view-state.md` - Persistence of UI states
+- ⬜ `design/specs/web/global/i18n.md` - Web i18n implementation
+
+### Screen Specs (Web)
+- ⬜ `design/specs/web/screens/accounts-view.md` - Balance Sheet/Trial Balance/Income Statement
+- ⬜ `design/specs/web/screens/catalog.md` - Account Groups catalog
+- ⬜ `design/specs/web/screens/search.md` - Transaction search
+- ⬜ `design/specs/web/screens/saved-reports-ux.md` - Saved reports UI
+
+### Shared Specs
+- ⬜ `design/specs/i18n.md` - Global i18n principles
+- ⬜ `design/specs/visual-balance-sheet.md` - VBS component behavior
+- ⬜ `design/specs/import-books.md` - GnuCash import format
+- ⬜ `design/specs/import-transactions.md` - Transaction import formats
+
+### Generated/Consolidations (Reference Only)
+- `design/specs/web/screens/ledger.md` - This appears to be a consolidation, should move to `design/generated/web/screens/`
+
+---
+
 ## Backlog (Priority Order)
 
 ### High Priority (MVP Blockers)
