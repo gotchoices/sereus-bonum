@@ -1,27 +1,32 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { t } from '$lib/i18n';
-  import { settings, type Theme, type DateFormat, type AccountDisplay } from '$lib/stores/settings';
+  import { settings, type Theme, type DateFormat, type AccountDisplay, type TransactionSortOrder } from '$lib/stores/settings';
   import { getDateFormatPreview } from '$lib/utils/formatDate';
   
   // Local state for form
   let theme = $state<Theme>('system');
   let dateFormat = $state<DateFormat>('US');
   let accountDisplay = $state<AccountDisplay>('name');
+  let transactionSortOrder = $state<TransactionSortOrder>('oldest');
   let hideNegativeSigns = $state(false); // Simplified: single toggle for Equity + Income
   
   // Date format preview
   let datePreview = $derived(getDateFormatPreview(dateFormat));
   
-  // Load settings on mount
+  // Load settings on mount and sync with store
   onMount(() => {
     settings.load();
-    const currentSettings = $state.snapshot($settings);
-    theme = currentSettings.theme;
-    dateFormat = currentSettings.dateFormat;
-    accountDisplay = currentSettings.accountDisplay;
+  });
+  
+  // Sync local state with store reactively
+  $effect(() => {
+    theme = $settings.theme;
+    dateFormat = $settings.dateFormat;
+    accountDisplay = $settings.accountDisplay;
+    transactionSortOrder = $settings.transactionSortOrder;
     // Simplified: if either equity or income is reversed, toggle is on
-    hideNegativeSigns = currentSettings.signReversal.equity || currentSettings.signReversal.income;
+    hideNegativeSigns = $settings.signReversal.equity || $settings.signReversal.income;
   });
   
   // Auto-save on change
@@ -35,6 +40,10 @@
   
   function handleAccountDisplayChange() {
     settings.setAccountDisplay(accountDisplay);
+  }
+  
+  function handleTransactionSortOrderChange() {
+    settings.setTransactionSortOrder(transactionSortOrder);
   }
   
   function handleSignReversalChange() {
@@ -96,6 +105,15 @@
         <option value="name">{$t('settings.account_display_name')}</option>
         <option value="path">{$t('settings.account_display_path')}</option>
         <option value="code-name">{$t('settings.account_display_code_name')}</option>
+      </select>
+    </div>
+    
+    <!-- Transaction Sort Order -->
+    <div class="setting-row">
+      <label class="setting-label" for="transaction-sort-select">{$t('settings.transaction_sort_order')}</label>
+      <select id="transaction-sort-select" bind:value={transactionSortOrder} onchange={handleTransactionSortOrderChange}>
+        <option value="oldest">{$t('settings.transaction_sort_oldest')}</option>
+        <option value="newest">{$t('settings.transaction_sort_newest')}</option>
       </select>
     </div>
   </section>

@@ -39,6 +39,8 @@ Global application settings and user preferences.
 │ │ Date Format:         [US ▼]  12/10/2025   │  │
 │ ├────────────────────────────────────────────┤  │
 │ │ Account Display:     [Name only ▼]         │  │
+│ ├────────────────────────────────────────────┤  │
+│ │ Transaction Sort:    [Oldest first ▼]      │  │
 │ └────────────────────────────────────────────┘  │
 │                                                  │
 │ ┌────────────────────────────────────────────┐  │
@@ -99,6 +101,15 @@ Global application settings and user preferences.
 - Applies to: Ledger, autocomplete, search results
 - Does NOT apply to: Accounts View (always shows hierarchy)
 - Stored in: `localStorage: bonum-account-display`
+
+**Transaction Sort Order**
+- Radio buttons:
+  - Oldest first: Chronological order (oldest transaction at top)
+  - Newest first: Reverse chronological (most recent transaction at top)
+- Default: Oldest first
+- Applies to: All account ledgers
+- Stored in: `localStorage: bonum-transaction-sort`
+- Changes apply immediately when viewing ledgers
 
 ### 2. Accounting Preferences
 

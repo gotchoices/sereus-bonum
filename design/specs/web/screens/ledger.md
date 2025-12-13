@@ -68,13 +68,19 @@ Any entry that accepts an account uses [auto complete](../global/account-autocom
 
 ## New Transaction Entry
 
-The ledger always maintains a **blank entry row** at the bottom for entering new transactions.
+The ledger always maintains a **blank entry row** for entering new transactions.
+
+**Position:** The blank entry row position depends on the transaction sort order (see [Settings](./settings.md#transaction-sort-order)):
+- **Oldest first** (default): Blank entry appears at the **bottom** of the ledger
+- **Newest first**: Blank entry appears at the **top** of the ledger (after the fixed header)
+
+This ensures the blank entry is always at the natural insertion point for the current sort order.
 
 ### Blank Row Behavior
 
 **Initial state:**
 - Empty fields: Date (defaults to today), Ref, Memo, Account, Debit, Credit
-- Appears as a single line at bottom of ledger
+- Appears as a single line at top or bottom (depending on sort order)
 - Not stored in the backend until populated
 
 **User interaction:**
@@ -135,6 +141,14 @@ See **[Transaction Editor](../global/transaction-edit.md)** for complete details
 
 Transactions can be **collapsed** (1 line) or **expanded** (multiple lines showing all entries).
 The column headers shown below are part of the fixed header, not the transaction itself.
+
+### Sort Order
+
+Transaction list order is controlled by user preference in **[Settings](./settings.md#transaction-sort-order)**:
+- **Oldest first** (default): Chronological order, oldest transaction at top
+- **Newest first**: Reverse chronological, most recent transaction at top
+
+The sort order persists across sessions and applies to all account ledgers.
 
 ### Collapsed View (Default)
 

@@ -184,6 +184,7 @@ class QuereusDataService implements DataService {
     startDate?: string;
     endDate?: string;
     limit?: number;
+    sortOrder?: 'oldest' | 'newest';
   }): Promise<LedgerEntry[]> {
     throw new Error(NOT_IMPLEMENTED);
   }

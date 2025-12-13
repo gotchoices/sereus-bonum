@@ -688,6 +688,7 @@ class SqliteDataService implements DataService {
     startDate?: string;
     endDate?: string;
     limit?: number;
+    sortOrder?: 'oldest' | 'newest';
   }): Promise<LedgerEntry[]> {
     // Get all entries for this account with transaction data
     let sql = `
@@ -715,7 +716,13 @@ class SqliteDataService implements DataService {
       params.push(options.endDate);
     }
     
-    sql += ' ORDER BY t.date ASC, t.created_at ASC';
+    // Apply sort order (default: oldest first)
+    const sortOrder = options?.sortOrder || 'oldest';
+    if (sortOrder === 'newest') {
+      sql += ' ORDER BY t.date DESC, t.created_at DESC';
+    } else {
+      sql += ' ORDER BY t.date ASC, t.created_at ASC';
+    }
     
     if (options?.limit) {
       sql += ' LIMIT ?';

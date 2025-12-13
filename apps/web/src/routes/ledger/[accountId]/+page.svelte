@@ -6,9 +6,11 @@
   import { log } from '$lib/logger';
   import { entities } from '$lib/stores/entities';
   import { accounts, accountGroups } from '$lib/stores/accounts';
+  import { settings } from '$lib/stores/settings';
   import { loadViewState, saveViewState } from '$lib/stores/viewState';
   import { getDataService, type LedgerEntry, type Account, type Unit, type AccountGroup, type Entity } from '$lib/data';
   import AccountAutocomplete from '$lib/components/AccountAutocomplete.svelte';
+  import { formatDate as formatDateUtil } from '$lib/utils/formatDate';
   
   // Route param
   let accountId = $derived($page.params.accountId);
@@ -129,34 +131,38 @@
       
       const dataService = await getDataService();
       
-      // Load account
-      account = $accounts.find(a => a.id === accountId) || null;
+      // Load account directly from backend (not from store)
+      account = await dataService.getAccount(accountId);
       if (!account) {
         error = 'Account not found';
+        loading = false;
         return;
       }
       
-      // Load entity
-      entity = $entities.find(e => e.id === account!.entityId) || null;
+      // Load entity directly from backend
+      entity = await dataService.getEntity(account.entityId);
       
       // Load unit
       const units = await dataService.getUnits();
       unit = units.find(u => u.code === account!.unit) || null;
       
-      // Load account group (for path)
+      // Load account group directly from backend (for path)
       log.data.debug('[Ledger] Account accountGroupId:', account.accountGroupId);
-      log.data.debug('[Ledger] Available groups:', $accountGroups.length);
       if (account.accountGroupId) {
-        accountGroup = $accountGroups.find(g => g.id === account!.accountGroupId) || null;
-        log.data.debug('[Ledger] Found accountGroup:', accountGroup?.name);
+        accountGroup = await dataService.getAccountGroup(account.accountGroupId);
+        log.data.debug('[Ledger] Loaded accountGroup:', accountGroup?.name);
       } else {
         log.data.warn('[Ledger] Account has no accountGroupId');
+        accountGroup = null;
       }
       
       // Load ledger entries
-      entries = await dataService.getLedgerEntries(accountId);
+      // Pass sort order from settings
+      entries = await dataService.getLedgerEntries(accountId, {
+        sortOrder: $settings.transactionSortOrder
+      });
       
-      log.data.info('[Ledger] Loaded', entries.length, 'entries for account', accountId);
+      log.data.info('[Ledger] Loaded', entries.length, 'entries for account', accountId, 'sorted:', $settings.transactionSortOrder);
     } catch (e) {
       log.data.error('[Ledger] Load failed:', e);
       error = e instanceof Error ? e.message : 'Failed to load ledger';
@@ -202,6 +208,11 @@
   function formatAmount(amount: number): string {
     const divisor = unit?.displayDivisor ?? 100;
     return (amount / divisor).toFixed(2);
+  }
+  
+  // Format date according to user preference
+  function formatDate(dateStr: string): string {
+    return formatDateUtil(dateStr, $settings.dateFormat);
   }
   
   // Toggle expand/collapse
@@ -619,6 +630,34 @@
             </tr>
           {/if}
           
+          <!-- New Entry Row (top position when newest first) -->
+          {#if $settings.transactionSortOrder === 'newest'}
+            <!-- Blank entry row (not yet activated) -->
+            <tr 
+              class="new-entry-row blank-entry-row" 
+              onclick={activateNewEntry}
+              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activateNewEntry(); } }}
+              tabindex="0"
+              role="button"
+              aria-label={$t('ledger.enter_new_transaction')}
+            >
+              <td class="col-expand"></td>
+              <td class="col-date">
+                <span class="placeholder">{new Date().toISOString().split('T')[0]}</span>
+              </td>
+              <td class="col-ref">
+                <span class="placeholder"></span>
+              </td>
+              <td class="col-memo">
+                <span class="placeholder">{$t('ledger.enter_new_transaction')}</span>
+              </td>
+              <td class="col-offset"></td>
+              <td class="col-debit"></td>
+              <td class="col-credit"></td>
+              <td class="col-balance"></td>
+            </tr>
+          {/if}
+          
           {#each transactions as txn, idx (txn.transactionId)}
             <!-- Locked separator -->
             {#if hasLockedTransactions && idx === firstUnlockedIndex}
@@ -896,7 +935,7 @@
                       ▼
                     </button>
                   </td>
-                  <td class="col-date">{txn.date}</td>
+                  <td class="col-date">{formatDate(txn.date)}</td>
                   <td class="col-ref">{txn.reference ?? ''}</td>
                   <td class="col-memo">{txn.memo ?? ''}</td>
                   <td class="col-offset"></td>
@@ -993,7 +1032,7 @@
                       ▶
                     </button>
                   </td>
-                  <td class="col-date">{txn.date}</td>
+                  <td class="col-date">{formatDate(txn.date)}</td>
                   <td class="col-ref">{txn.reference ?? ''}</td>
                   <td class="col-memo">{txn.memo ?? ''}</td>
                   <td class="col-offset">
@@ -1025,8 +1064,9 @@
             {/if}
           {/each}
           
-          <!-- New Entry Row -->
-          {#if isNewEntry && editingTransactionId === 'new' && editingData}
+          <!-- New Entry Row (position depends on sort order) -->
+          {#if $settings.transactionSortOrder === 'oldest'}
+            {#if isNewEntry && editingTransactionId === 'new' && editingData}
             {#if editingData.splits.length === 1}
               <!-- NEW ENTRY: Simple Mode - Single row -->
               <tr class="edit-simple-row new-entry-row">
@@ -1291,6 +1331,7 @@
               <td class="col-credit"></td>
               <td class="col-balance"></td>
             </tr>
+          {/if}
           {/if}
         </tbody>
       </table>

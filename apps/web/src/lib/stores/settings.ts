@@ -10,6 +10,7 @@ import { browser } from '$app/environment';
 export type Theme = 'light' | 'dark' | 'system';
 export type DateFormat = 'US' | 'EU' | 'ISO';
 export type AccountDisplay = 'code' | 'name' | 'path' | 'code-name';
+export type TransactionSortOrder = 'oldest' | 'newest';
 
 export interface SignReversal {
   equity: boolean;
@@ -22,6 +23,7 @@ export interface AppSettings {
   language: string;
   dateFormat: DateFormat;
   accountDisplay: AccountDisplay;
+  transactionSortOrder: TransactionSortOrder;
   signReversal: SignReversal;
 }
 
@@ -30,6 +32,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   language: 'en',
   dateFormat: 'US',
   accountDisplay: 'name',
+  transactionSortOrder: 'oldest',
   signReversal: {
     equity: false,
     income: false,
@@ -55,6 +58,7 @@ function createSettingsStore() {
       const language = localStorage.getItem('bonum-language') || DEFAULT_SETTINGS.language;
       const dateFormat = (localStorage.getItem('bonum-date-format') as DateFormat) || DEFAULT_SETTINGS.dateFormat;
       const accountDisplay = (localStorage.getItem('bonum-account-display') as AccountDisplay) || DEFAULT_SETTINGS.accountDisplay;
+      const transactionSortOrder = (localStorage.getItem('bonum-transaction-sort') as TransactionSortOrder) || DEFAULT_SETTINGS.transactionSortOrder;
       
       let signReversal = DEFAULT_SETTINGS.signReversal;
       try {
@@ -71,6 +75,7 @@ function createSettingsStore() {
         language,
         dateFormat,
         accountDisplay,
+        transactionSortOrder,
         signReversal,
       });
       
@@ -116,6 +121,16 @@ function createSettingsStore() {
       update(s => ({ ...s, accountDisplay: display }));
       if (browser) {
         localStorage.setItem('bonum-account-display', display);
+      }
+    },
+    
+    /**
+     * Set transaction sort order
+     */
+    setTransactionSortOrder: (order: TransactionSortOrder) => {
+      update(s => ({ ...s, transactionSortOrder: order }));
+      if (browser) {
+        localStorage.setItem('bonum-transaction-sort', order);
       }
     },
     

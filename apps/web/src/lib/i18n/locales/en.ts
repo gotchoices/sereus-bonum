@@ -211,6 +211,10 @@ export default {
     account_display_name: 'Name only',
     account_display_path: 'Full path',
     account_display_code_name: 'Code: Name',
+    // Transaction sort order
+    transaction_sort_order: 'Transaction Sort',
+    transaction_sort_oldest: 'Oldest first',
+    transaction_sort_newest: 'Newest first',
     // Sign reversal (simplified)
     hide_negative_signs: 'Equity/Income',
     hide_negative_signs_note: 'Hide negative signs. By default, Equity and Income show as negative (accounting convention). Check this to display them as positive numbers.',

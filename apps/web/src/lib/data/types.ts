@@ -269,6 +269,7 @@ export interface DataService {
     startDate?: string;
     endDate?: string;
     limit?: number;
+    sortOrder?: 'oldest' | 'newest';
   }): Promise<LedgerEntry[]>;
   
   // Account search (for autocomplete)

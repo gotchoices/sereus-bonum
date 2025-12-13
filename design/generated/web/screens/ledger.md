@@ -165,7 +165,12 @@ Transactions before the closed date cannot be edited.
 
 ### Blank Entry Row
 
-Always present at bottom of ledger:
+**Position:** Changes based on transaction sort order:
+- **Oldest first** (default): Appears at **bottom** of ledger
+- **Newest first**: Appears at **top** of ledger (after header)
+
+This ensures the blank entry is always at the natural insertion point.
+
 ```
    | [Date   ] | [Ref] | [Memo         ] | [Account   ] [|] | [Debit  ] | [Credit ] |
 ```
