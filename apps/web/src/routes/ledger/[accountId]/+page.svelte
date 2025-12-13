@@ -144,8 +144,13 @@
       unit = units.find(u => u.code === account!.unit) || null;
       
       // Load account group (for path)
-      if (account.groupId) {
-        accountGroup = $accountGroups.find(g => g.id === account!.groupId) || null;
+      log.data.debug('[Ledger] Account accountGroupId:', account.accountGroupId);
+      log.data.debug('[Ledger] Available groups:', $accountGroups.length);
+      if (account.accountGroupId) {
+        accountGroup = $accountGroups.find(g => g.id === account!.accountGroupId) || null;
+        log.data.debug('[Ledger] Found accountGroup:', accountGroup?.name);
+      } else {
+        log.data.warn('[Ledger] Account has no accountGroupId');
       }
       
       // Load ledger entries
@@ -169,7 +174,15 @@
   
   // Get full account path
   function getAccountPath(): string {
-    if (!account || !accountGroup) return account?.name || '';
+    if (!account) {
+      log.ui.debug('[Ledger] getAccountPath: no account');
+      return '';
+    }
+    
+    if (!accountGroup) {
+      log.ui.debug('[Ledger] getAccountPath: no accountGroup, account:', account.name, 'groupId:', account.groupId);
+      return account.name;
+    }
     
     const parts: string[] = [];
     let current: AccountGroup | null = accountGroup;
@@ -180,7 +193,9 @@
     }
     
     parts.push(account.name);
-    return parts.join(' : ');
+    const fullPath = parts.join(' : ');
+    log.ui.debug('[Ledger] getAccountPath:', fullPath);
+    return fullPath;
   }
   
   // Format amount
@@ -344,7 +359,10 @@
   
   // Activate new entry mode
   function activateNewEntry() {
-    if (editingTransactionId) return; // Already editing
+    if (editingTransactionId) {
+      log.ui.warn('[Ledger] Already editing:', editingTransactionId);
+      return;
+    }
     
     log.ui.info('[Ledger] Activating new entry mode');
     isNewEntry = true;
@@ -364,6 +382,8 @@
         note: '',
       }],
     };
+    log.ui.debug('[Ledger] New entry editingData:', editingData);
+    log.ui.debug('[Ledger] Splits length:', editingData.splits.length);
   }
   
   // Save edit or create new
@@ -613,108 +633,62 @@
             
             <!-- Transaction in edit mode -->
             {#if editingTransactionId === txn.transactionId && editingData}
-              <!-- Edit mode: Transaction metadata row -->
-              <tr class="edit-metadata-row">
-                <td class="col-expand"></td>
-                <td class="col-date">
-                  <input 
-                    type="date" 
-                    bind:value={editingData.date}
-                    onfocus={handleFocus}
-                    class="edit-input"
-                  />
-                </td>
-                <td class="col-ref">
-                  <input 
-                    type="text" 
-                    bind:value={editingData.reference}
-                    placeholder={$t('ledger.ref')}
-                    onfocus={handleFocus}
-                    class="edit-input"
-                  />
-                </td>
-                <td class="col-memo">
-                  <input 
-                    type="text" 
-                    bind:value={editingData.memo}
-                    placeholder={$t('ledger.memo')}
-                    onfocus={handleFocus}
-                    class="edit-input"
-                  />
-                </td>
-                <td class="col-offset"></td>
-                <td class="col-debit"></td>
-                <td class="col-credit"></td>
-                <td class="col-balance"></td>
-              </tr>
-              
-              <!-- Edit mode: Current account entry row -->
-              <tr class="edit-entry-row edit-current-account">
-                <td class="col-expand"></td>
-                <td class="col-date"></td>
-                <td class="col-ref"></td>
-                <td class="col-memo"></td>
-                <td class="col-offset">
-                  <a href="/ledger/{accountId}" class="current-account-link">
-                    {account?.name ?? ''}
-                  </a>
-                </td>
-                <td class="col-debit">
-                  <input 
-                    type="number" 
-                    step="0.01" 
-                    bind:value={editingData.currentAccountDebit}
-                    placeholder="0.00"
-                    onblur={handleCurrentDebitBlur}
-                    onfocus={handleFocus}
-                    class="edit-input edit-amount"
-                  />
-                </td>
-                <td class="col-credit">
-                  <input 
-                    type="number" 
-                    step="0.01" 
-                    bind:value={editingData.currentAccountCredit}
-                    placeholder="0.00"
-                    onblur={handleCurrentCreditBlur}
-                    onfocus={handleFocus}
-                    class="edit-input edit-amount"
-                  />
-                </td>
-                <td class="col-balance"></td>
-              </tr>
-              
-              <!-- Edit mode: Split entry rows -->
-              {#each editingData.splits as split (split.id)}
-                <tr class="edit-entry-row edit-split-entry">
+              {#if editingData.splits.length === 1}
+                <!-- SIMPLE MODE: Single row entry -->
+                <tr class="edit-simple-row">
                   <td class="col-expand"></td>
-                  <td class="col-date"></td>
-                  <td class="col-ref"></td>
+                  <td class="col-date">
+                    <input 
+                      type="date" 
+                      bind:value={editingData.date}
+                      onfocus={handleFocus}
+                      class="edit-input"
+                    />
+                  </td>
+                  <td class="col-ref">
+                    <input 
+                      type="text" 
+                      bind:value={editingData.reference}
+                      placeholder={$t('ledger.ref')}
+                      onfocus={handleFocus}
+                      class="edit-input"
+                    />
+                  </td>
                   <td class="col-memo">
                     <input 
                       type="text" 
-                      bind:value={split.note}
-                      placeholder={$t('ledger.note')}
+                      bind:value={editingData.memo}
+                      placeholder={$t('ledger.memo')}
                       onfocus={handleFocus}
                       class="edit-input"
                     />
                   </td>
                   <td class="col-offset">
-                    <AccountAutocomplete
-                      entityId={account?.entityId ?? ''}
-                      bind:value={split.accountSearch}
-                      bind:selectedId={split.accountId}
-                      disabled={false}
-                      onfocus={handleFocus}
-                    />
+                    <div class="simple-account-field">
+                      <AccountAutocomplete
+                        entityId={account?.entityId ?? ''}
+                        bind:value={editingData.splits[0].accountSearch}
+                        bind:selectedId={editingData.splits[0].accountId}
+                        disabled={false}
+                        onfocus={handleFocus}
+                      />
+                      <button 
+                        class="split-toggle-btn"
+                        onclick={addSplitEntry}
+                        title="Convert to split transaction"
+                        disabled={!editingData.splits[0].accountId}
+                      >
+                        |
+                      </button>
+                    </div>
                   </td>
                   <td class="col-debit">
                     <input 
                       type="number" 
                       step="0.01" 
-                      bind:value={split.debit}
-                      placeholder="0.00"
-                      onblur={() => handleSplitDebitBlur(split.id)}
+                      bind:value={editingData.currentAccountDebit}
+                      placeholder=""
+                      onblur={handleCurrentDebitBlur}
                       onfocus={handleFocus}
                       class="edit-input edit-amount"
                     />
@@ -723,52 +697,187 @@
                     <input 
                       type="number" 
                       step="0.01" 
-                      bind:value={split.credit}
-                      placeholder="0.00"
-                      onblur={() => handleSplitCreditBlur(split.id)}
+                      bind:value={editingData.currentAccountCredit}
+                      placeholder=""
+                      onblur={handleCurrentCreditBlur}
                       onfocus={handleFocus}
                       class="edit-input edit-amount"
                     />
                   </td>
-                  <td class="col-balance">
-                    {#if editingData.splits.length > 1}
-                      <button 
-                        class="btn-remove-split" 
-                        onclick={() => removeSplitEntry(split.id)}
-                        title={$t('ledger.remove_split')}
-                      >
-                        ×
-                      </button>
-                    {/if}
+                  <td class="col-balance"></td>
+                </tr>
+                
+                <!-- Simple mode actions -->
+                <tr class="edit-actions-row">
+                  <td colspan="8">
+                    <div class="edit-actions-container">
+                      <div class="edit-actions-left">
+                        <button class="btn-primary" onclick={saveEdit}>{$t('common.save')}</button>
+                        <button class="btn-secondary" onclick={cancelEdit}>{$t('common.cancel')}</button>
+                        <button class="btn-danger" onclick={() => deleteTransaction(txn.transactionId)}>{$t('common.delete')}</button>
+                      </div>
+                    </div>
                   </td>
                 </tr>
-              {/each}
-              
-              <!-- Edit mode: Actions footer row -->
-              <tr class="edit-actions-row">
-                <td colspan="8">
-                  <div class="edit-actions-container">
-                    <div class="edit-actions-left">
-                      <button class="btn-primary" onclick={saveEdit}>{$t('common.save')}</button>
-                      <button class="btn-secondary" onclick={cancelEdit}>{$t('common.cancel')}</button>
-                      <button class="btn-secondary" onclick={addSplitEntry}>+ {$t('ledger.add_split')}</button>
-                      <button class="btn-danger" onclick={() => deleteTransaction(txn.transactionId)}>{$t('common.delete')}</button>
-                    </div>
-                    {#if editingData.splits.length > 1}
-                      {@const totals = getEditTotals()}
-                      <div class="edit-totals-right">
-                        <span class="total-amount">{unit?.symbol ?? ''}{totals.debits.toFixed(2)}</span>
-                        <span class="total-amount">{unit?.symbol ?? ''}{totals.credits.toFixed(2)}</span>
-                        {#if Math.abs(totals.balance) <= 1}
-                          <span class="balanced">{unit?.symbol ?? ''}0.00 ✓</span>
-                        {:else}
-                          <span class="imbalanced">{unit?.symbol ?? ''}{formatAmount(totals.balance)} ⚠</span>
-                        {/if}
+              {:else}
+                <!-- SPLIT MODE: Multiple rows -->
+                <!-- Transaction metadata row -->
+                <tr class="edit-metadata-row">
+                  <td class="col-expand"></td>
+                  <td class="col-date">
+                    <input 
+                      type="date" 
+                      bind:value={editingData.date}
+                      onfocus={handleFocus}
+                      class="edit-input"
+                    />
+                  </td>
+                  <td class="col-ref">
+                    <input 
+                      type="text" 
+                      bind:value={editingData.reference}
+                      placeholder={$t('ledger.ref')}
+                      onfocus={handleFocus}
+                      class="edit-input"
+                    />
+                  </td>
+                  <td class="col-memo">
+                    <input 
+                      type="text" 
+                      bind:value={editingData.memo}
+                      placeholder={$t('ledger.memo')}
+                      onfocus={handleFocus}
+                      class="edit-input"
+                    />
+                  </td>
+                  <td class="col-offset"></td>
+                  <td class="col-debit"></td>
+                  <td class="col-credit"></td>
+                  <td class="col-balance"></td>
+                </tr>
+                
+                <!-- Current account entry row -->
+                <tr class="edit-entry-row edit-current-account">
+                  <td class="col-expand"></td>
+                  <td class="col-date"></td>
+                  <td class="col-ref"></td>
+                  <td class="col-memo"></td>
+                  <td class="col-offset">
+                    <a href="/ledger/{accountId}" class="current-account-link" title={getAccountPath()}>
+                      {account?.name ?? ''}
+                    </a>
+                  </td>
+                  <td class="col-debit">
+                    <input 
+                      type="number" 
+                      step="0.01" 
+                      bind:value={editingData.currentAccountDebit}
+                      placeholder=""
+                      onblur={handleCurrentDebitBlur}
+                      onfocus={handleFocus}
+                      class="edit-input edit-amount"
+                    />
+                  </td>
+                  <td class="col-credit">
+                    <input 
+                      type="number" 
+                      step="0.01" 
+                      bind:value={editingData.currentAccountCredit}
+                      placeholder=""
+                      onblur={handleCurrentCreditBlur}
+                      onfocus={handleFocus}
+                      class="edit-input edit-amount"
+                    />
+                  </td>
+                  <td class="col-balance"></td>
+                </tr>
+                
+                <!-- Split entry rows -->
+                {#each editingData.splits as split (split.id)}
+                  <tr class="edit-entry-row edit-split-entry">
+                    <td class="col-expand"></td>
+                    <td class="col-date"></td>
+                    <td class="col-ref"></td>
+                    <td class="col-memo">
+                      <input 
+                        type="text" 
+                        bind:value={split.note}
+                        placeholder={$t('ledger.note')}
+                        onfocus={handleFocus}
+                        class="edit-input"
+                      />
+                    </td>
+                    <td class="col-offset">
+                      <AccountAutocomplete
+                        entityId={account?.entityId ?? ''}
+                        bind:value={split.accountSearch}
+                        bind:selectedId={split.accountId}
+                        disabled={false}
+                        onfocus={handleFocus}
+                      />
+                    </td>
+                    <td class="col-debit">
+                      <input 
+                        type="number" 
+                        step="0.01" 
+                        bind:value={split.debit}
+                        placeholder=""
+                        onblur={() => handleSplitDebitBlur(split.id)}
+                        onfocus={handleFocus}
+                        class="edit-input edit-amount"
+                      />
+                    </td>
+                    <td class="col-credit">
+                      <input 
+                        type="number" 
+                        step="0.01" 
+                        bind:value={split.credit}
+                        placeholder=""
+                        onblur={() => handleSplitCreditBlur(split.id)}
+                        onfocus={handleFocus}
+                        class="edit-input edit-amount"
+                      />
+                    </td>
+                    <td class="col-balance">
+                      {#if editingData.splits.length > 1}
+                        <button 
+                          class="btn-remove-split" 
+                          onclick={() => removeSplitEntry(split.id)}
+                          title={$t('ledger.remove_split')}
+                        >
+                          ×
+                        </button>
+                      {/if}
+                    </td>
+                  </tr>
+                {/each}
+                
+                <!-- Split mode actions footer -->
+                <tr class="edit-actions-row">
+                  <td colspan="8">
+                    <div class="edit-actions-container">
+                      <div class="edit-actions-left">
+                        <button class="btn-primary" onclick={saveEdit}>{$t('common.save')}</button>
+                        <button class="btn-secondary" onclick={cancelEdit}>{$t('common.cancel')}</button>
+                        <button class="btn-secondary" onclick={addSplitEntry}>+ {$t('ledger.add_split')}</button>
+                        <button class="btn-danger" onclick={() => deleteTransaction(txn.transactionId)}>{$t('common.delete')}</button>
                       </div>
-                    {/if}
-                  </div>
-                </td>
-              </tr>
+                      {#if true}
+                        {@const totals = getEditTotals()}
+                        <div class="edit-totals-right">
+                          <span class="total-amount">{unit?.symbol ?? ''}{totals.debits.toFixed(2)}</span>
+                          <span class="total-amount">{unit?.symbol ?? ''}{totals.credits.toFixed(2)}</span>
+                          {#if Math.abs(totals.balance) <= 1}
+                            <span class="balanced">{unit?.symbol ?? ''}0.00 ✓</span>
+                          {:else}
+                            <span class="imbalanced">{unit?.symbol ?? ''}{formatAmount(totals.balance)} ⚠</span>
+                          {/if}
+                        </div>
+                      {/if}
+                    </div>
+                  </td>
+                </tr>
+              {/if}
             {:else}
               <!-- View mode: Collapsed or Expanded -->
               {#if txn.isExpanded}
@@ -809,7 +918,9 @@
                     <td class="col-ref"></td>
                     <td class="col-memo">{entry.note ?? ''}</td>
                     <td class="col-offset">
-                      {account?.name}
+                      <a href="/ledger/{accountId}" title={getAccountPath()}>
+                        {account?.name}
+                      </a>
                     </td>
                     <td class="col-debit amount">
                       {entry.amount > 0 ? formatAmount(entry.amount) : ''}
@@ -916,106 +1027,62 @@
           
           <!-- New Entry Row -->
           {#if isNewEntry && editingTransactionId === 'new' && editingData}
-            <!-- New entry in edit mode -->
-            <tr class="edit-metadata-row new-entry-row">
-              <td class="col-expand"></td>
-              <td class="col-date">
-                <input 
-                  type="date" 
-                  bind:value={editingData.date}
-                  onfocus={handleFocus}
-                  class="edit-input"
-                />
-              </td>
-              <td class="col-ref">
-                <input 
-                  type="text" 
-                  bind:value={editingData.reference}
-                  placeholder={$t('ledger.ref')}
-                  onfocus={handleFocus}
-                  class="edit-input"
-                />
-              </td>
-              <td class="col-memo">
-                <input 
-                  type="text" 
-                  bind:value={editingData.memo}
-                  placeholder={$t('ledger.memo')}
-                  onfocus={handleFocus}
-                  class="edit-input"
-                />
-              </td>
-              <td class="col-offset"></td>
-              <td class="col-debit"></td>
-              <td class="col-credit"></td>
-              <td class="col-balance"></td>
-            </tr>
-            
-            <tr class="edit-entry-row edit-current-account new-entry-row">
-              <td class="col-expand"></td>
-              <td class="col-date"></td>
-              <td class="col-ref"></td>
-              <td class="col-memo"></td>
-              <td class="col-offset">
-                <a href="/ledger/{accountId}" class="current-account-link">
-                  {account?.name ?? ''}
-                </a>
-              </td>
-              <td class="col-debit">
-                <input 
-                  type="number" 
-                  step="0.01" 
-                  bind:value={editingData.currentAccountDebit}
-                  placeholder="0.00"
-                  onblur={handleCurrentDebitBlur}
-                  onfocus={handleFocus}
-                  class="edit-input edit-amount"
-                />
-              </td>
-              <td class="col-credit">
-                <input 
-                  type="number" 
-                  step="0.01" 
-                  bind:value={editingData.currentAccountCredit}
-                  placeholder="0.00"
-                  onblur={handleCurrentCreditBlur}
-                  onfocus={handleFocus}
-                  class="edit-input edit-amount"
-                />
-              </td>
-              <td class="col-balance"></td>
-            </tr>
-            
-            {#each editingData.splits as split (split.id)}
-              <tr class="edit-entry-row edit-split-entry new-entry-row">
+            {#if editingData.splits.length === 1}
+              <!-- NEW ENTRY: Simple Mode - Single row -->
+              <tr class="edit-simple-row new-entry-row">
                 <td class="col-expand"></td>
-                <td class="col-date"></td>
-                <td class="col-ref"></td>
+                <td class="col-date">
+                  <input 
+                    type="date" 
+                    bind:value={editingData.date}
+                    onfocus={handleFocus}
+                    class="edit-input"
+                  />
+                </td>
+                <td class="col-ref">
+                  <input 
+                    type="text" 
+                    bind:value={editingData.reference}
+                    placeholder={$t('ledger.ref')}
+                    onfocus={handleFocus}
+                    class="edit-input"
+                  />
+                </td>
                 <td class="col-memo">
                   <input 
                     type="text" 
-                    bind:value={split.note}
-                    placeholder={$t('ledger.note')}
+                    bind:value={editingData.memo}
+                    placeholder={$t('ledger.memo')}
                     onfocus={handleFocus}
                     class="edit-input"
                   />
                 </td>
                 <td class="col-offset">
-                  <AccountAutocomplete
-                    entityId={account?.entityId ?? ''}
-                    bind:value={split.accountSearch}
-                    bind:selectedId={split.accountId}
-                    disabled={false}
-                    onfocus={handleFocus}
-                  />
+                  <div class="simple-account-field">
+                    <AccountAutocomplete
+                      entityId={account?.entityId ?? ''}
+                      bind:value={editingData.splits[0].accountSearch}
+                      bind:selectedId={editingData.splits[0].accountId}
+                      disabled={false}
+                      onfocus={handleFocus}
+                    />
+                    <button 
+                      class="split-toggle-btn"
+                      onclick={addSplitEntry}
+                      title="Convert to split transaction"
+                      disabled={!editingData.splits[0].accountId}
+                    >
+                      |
+                    </button>
+                  </div>
                 </td>
                 <td class="col-debit">
                   <input 
                     type="number" 
                     step="0.01" 
-                    bind:value={split.debit}
-                    placeholder="0.00"
-                    onblur={() => handleSplitDebitBlur(split.id)}
+                    bind:value={editingData.currentAccountDebit}
+                    placeholder=""
+                    onblur={handleCurrentDebitBlur}
                     onfocus={handleFocus}
                     class="edit-input edit-amount"
                   />
@@ -1024,53 +1091,191 @@
                   <input 
                     type="number" 
                     step="0.01" 
-                    bind:value={split.credit}
-                    placeholder="0.00"
-                    onblur={() => handleSplitCreditBlur(split.id)}
+                    bind:value={editingData.currentAccountCredit}
+                    placeholder=""
+                    onblur={handleCurrentCreditBlur}
                     onfocus={handleFocus}
                     class="edit-input edit-amount"
                   />
                 </td>
-                <td class="col-balance">
-                  {#if editingData.splits.length > 1}
-                    <button 
-                      class="btn-remove-split" 
-                      onclick={() => removeSplitEntry(split.id)}
-                      title={$t('ledger.remove_split')}
-                    >
-                      ×
-                    </button>
-                  {/if}
+                <td class="col-balance"></td>
+              </tr>
+              
+              <!-- Simple mode actions (new entry) -->
+              <tr class="edit-actions-row new-entry-row">
+                <td colspan="8">
+                  <div class="edit-actions-container">
+                    <div class="edit-actions-left">
+                      <button class="btn-primary" onclick={saveEdit}>{$t('common.save')}</button>
+                      <button class="btn-secondary" onclick={cancelEdit}>{$t('common.cancel')}</button>
+                    </div>
+                  </div>
                 </td>
               </tr>
-            {/each}
-            
-            <tr class="edit-actions-row new-entry-row">
-              <td colspan="8">
-                <div class="edit-actions-container">
-                  <div class="edit-actions-left">
-                    <button class="btn-primary" onclick={saveEdit}>{$t('common.save')}</button>
-                    <button class="btn-secondary" onclick={cancelEdit}>{$t('common.cancel')}</button>
-                    <button class="btn-secondary" onclick={addSplitEntry}>+ {$t('ledger.add_split')}</button>
-                  </div>
-                  {#if editingData.splits.length > 1}
-                    {@const totals = getEditTotals()}
-                    <div class="edit-totals-right">
-                      <span class="total-amount">{unit?.symbol ?? ''}{totals.debits.toFixed(2)}</span>
-                      <span class="total-amount">{unit?.symbol ?? ''}{totals.credits.toFixed(2)}</span>
-                      {#if Math.abs(totals.balance) <= 1}
-                        <span class="balanced">{unit?.symbol ?? ''}0.00 ✓</span>
-                      {:else}
-                        <span class="imbalanced">{unit?.symbol ?? ''}{formatAmount(totals.balance)} ⚠</span>
-                      {/if}
+            {:else}
+              <!-- NEW ENTRY: Split Mode - Multiple rows -->
+              <tr class="edit-metadata-row new-entry-row">
+                <td class="col-expand"></td>
+                <td class="col-date">
+                  <input 
+                    type="date" 
+                    bind:value={editingData.date}
+                    onfocus={handleFocus}
+                    class="edit-input"
+                  />
+                </td>
+                <td class="col-ref">
+                  <input 
+                    type="text" 
+                    bind:value={editingData.reference}
+                    placeholder={$t('ledger.ref')}
+                    onfocus={handleFocus}
+                    class="edit-input"
+                  />
+                </td>
+                <td class="col-memo">
+                  <input 
+                    type="text" 
+                    bind:value={editingData.memo}
+                    placeholder={$t('ledger.memo')}
+                    onfocus={handleFocus}
+                    class="edit-input"
+                  />
+                </td>
+                <td class="col-offset"></td>
+                <td class="col-debit"></td>
+                <td class="col-credit"></td>
+                <td class="col-balance"></td>
+              </tr>
+              
+              <tr class="edit-entry-row edit-current-account new-entry-row">
+                <td class="col-expand"></td>
+                <td class="col-date"></td>
+                <td class="col-ref"></td>
+                <td class="col-memo"></td>
+                <td class="col-offset">
+                  <a href="/ledger/{accountId}" class="current-account-link" title={getAccountPath()}>
+                    {account?.name ?? ''}
+                  </a>
+                </td>
+                <td class="col-debit">
+                  <input 
+                    type="number" 
+                    step="0.01" 
+                    bind:value={editingData.currentAccountDebit}
+                    placeholder=""
+                    onblur={handleCurrentDebitBlur}
+                    onfocus={handleFocus}
+                    class="edit-input edit-amount"
+                  />
+                </td>
+                <td class="col-credit">
+                  <input 
+                    type="number" 
+                    step="0.01" 
+                    bind:value={editingData.currentAccountCredit}
+                    placeholder=""
+                    onblur={handleCurrentCreditBlur}
+                    onfocus={handleFocus}
+                    class="edit-input edit-amount"
+                  />
+                </td>
+                <td class="col-balance"></td>
+              </tr>
+              
+              {#each editingData.splits as split (split.id)}
+                <tr class="edit-entry-row edit-split-entry new-entry-row">
+                  <td class="col-expand"></td>
+                  <td class="col-date"></td>
+                  <td class="col-ref"></td>
+                  <td class="col-memo">
+                    <input 
+                      type="text" 
+                      bind:value={split.note}
+                      placeholder={$t('ledger.note')}
+                      onfocus={handleFocus}
+                      class="edit-input"
+                    />
+                  </td>
+                  <td class="col-offset">
+                    <AccountAutocomplete
+                      entityId={account?.entityId ?? ''}
+                      bind:value={split.accountSearch}
+                      bind:selectedId={split.accountId}
+                      disabled={false}
+                      onfocus={handleFocus}
+                    />
+                  </td>
+                  <td class="col-debit">
+                    <input 
+                      type="number" 
+                      step="0.01" 
+                      bind:value={split.debit}
+                      placeholder=""
+                      onblur={() => handleSplitDebitBlur(split.id)}
+                      onfocus={handleFocus}
+                      class="edit-input edit-amount"
+                    />
+                  </td>
+                  <td class="col-credit">
+                    <input 
+                      type="number" 
+                      step="0.01" 
+                      bind:value={split.credit}
+                      placeholder=""
+                      onblur={() => handleSplitCreditBlur(split.id)}
+                      onfocus={handleFocus}
+                      class="edit-input edit-amount"
+                    />
+                  </td>
+                  <td class="col-balance">
+                    {#if editingData.splits.length > 1}
+                      <button 
+                        class="btn-remove-split" 
+                        onclick={() => removeSplitEntry(split.id)}
+                        title={$t('ledger.remove_split')}
+                      >
+                        ×
+                      </button>
+                    {/if}
+                  </td>
+                </tr>
+              {/each}
+              
+              <tr class="edit-actions-row new-entry-row">
+                <td colspan="8">
+                  <div class="edit-actions-container">
+                    <div class="edit-actions-left">
+                      <button class="btn-primary" onclick={saveEdit}>{$t('common.save')}</button>
+                      <button class="btn-secondary" onclick={cancelEdit}>{$t('common.cancel')}</button>
+                      <button class="btn-secondary" onclick={addSplitEntry}>+ {$t('ledger.add_split')}</button>
                     </div>
-                  {/if}
-                </div>
-              </td>
-            </tr>
+                    {#if true}
+                      {@const totals = getEditTotals()}
+                      <div class="edit-totals-right">
+                        <span class="total-amount">{unit?.symbol ?? ''}{totals.debits.toFixed(2)}</span>
+                        <span class="total-amount">{unit?.symbol ?? ''}{totals.credits.toFixed(2)}</span>
+                        {#if Math.abs(totals.balance) <= 1}
+                          <span class="balanced">{unit?.symbol ?? ''}0.00 ✓</span>
+                        {:else}
+                          <span class="imbalanced">{unit?.symbol ?? ''}{formatAmount(totals.balance)} ⚠</span>
+                        {/if}
+                      </div>
+                    {/if}
+                  </div>
+                </td>
+              </tr>
+            {/if}
           {:else}
             <!-- Blank entry row (not yet activated) -->
-            <tr class="new-entry-row blank-entry-row" onclick={activateNewEntry}>
+            <tr 
+              class="new-entry-row blank-entry-row" 
+              onclick={activateNewEntry}
+              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activateNewEntry(); } }}
+              tabindex="0"
+              role="button"
+              aria-label={$t('ledger.enter_new_transaction')}
+            >
               <td class="col-expand"></td>
               <td class="col-date">
                 <span class="placeholder">{new Date().toISOString().split('T')[0]}</span>
@@ -1310,18 +1515,62 @@
     font-style: italic;
   }
   
-  /* Edit mode rows */
+  /* Edit mode rows - unified blue border */
+  .edit-simple-row,
   .edit-metadata-row,
-  .edit-entry-row {
-    background: var(--surface-hover);
+  .edit-entry-row,
+  .edit-actions-row {
+    background: var(--surface-hover, #f9f9f9) !important;
+    position: relative;
   }
   
+  /* First row in edit group gets top border */
+  .edit-simple-row,
   .edit-metadata-row {
-    border-left: 4px solid var(--primary-color);
+    border: 2px solid var(--primary-color, #0066cc);
+    border-bottom: none;
   }
   
+  /* Middle rows get left/right borders only */
   .edit-entry-row {
-    border-left: 4px solid var(--primary-color);
+    border-left: 2px solid var(--primary-color, #0066cc);
+    border-right: 2px solid var(--primary-color, #0066cc);
+    border-bottom: none;
+  }
+  
+  /* Last row (actions) gets bottom border */
+  .edit-actions-row {
+    border: 2px solid var(--primary-color, #0066cc);
+    border-top: none;
+  }
+  
+  .simple-account-field {
+    display: flex;
+    gap: 0.25rem;
+    align-items: center;
+  }
+  
+  .split-toggle-btn {
+    background: var(--surface-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 0.375rem 0.5rem;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: bold;
+    min-width: 28px;
+    height: 34px;
+    color: var(--text-primary);
+  }
+  
+  .split-toggle-btn:hover:not(:disabled) {
+    background: var(--surface-hover);
+    border-color: var(--primary-color);
+  }
+  
+  .split-toggle-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
   
   .edit-current-account {
@@ -1329,9 +1578,8 @@
   }
   
   .edit-actions-row td {
-    padding: 0;
-    border-left: 4px solid var(--primary-color);
-    background: var(--surface-hover);
+    padding: 0 !important;
+    background: var(--surface-hover, #f9f9f9) !important;
   }
   
   /* Edit inputs */
@@ -1361,6 +1609,17 @@
     font-family: 'Courier New', monospace;
   }
   
+  /* Hide spinners on number inputs */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+  
   .edit-input.edit-input-wide {
     min-width: 300px;
   }
@@ -1382,18 +1641,21 @@
   
   /* Actions footer */
   .edit-actions-container {
-    display: flex;
+    display: flex !important;
     justify-content: space-between;
     align-items: center;
     padding: 0.75rem 1rem;
     background: var(--surface-secondary);
     border-top: 1px solid var(--border-color);
     gap: 2rem;
+    min-height: 50px;
   }
   
   .edit-actions-left {
-    display: flex;
+    display: flex !important;
     gap: 0.5rem;
+    flex-shrink: 0;
+    flex-wrap: wrap;
   }
   
   .edit-totals-right {
@@ -1429,6 +1691,9 @@
   .btn-primary,
   .btn-secondary,
   .btn-danger {
+    display: inline-block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
     padding: 0.5rem 1rem;
     border-radius: 4px;
     font-size: 0.875rem;
@@ -1439,31 +1704,31 @@
   }
   
   .btn-primary {
-    background: var(--primary-color);
+    background: var(--primary-color, #0066cc);
     color: white;
   }
   
   .btn-primary:hover {
-    background: var(--primary-color-hover);
+    background: var(--primary-color-hover, #0052a3);
   }
   
   .btn-secondary {
-    background: var(--surface-secondary);
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
+    background: var(--surface-secondary, #f5f5f5);
+    color: var(--text-primary, #000);
+    border: 1px solid var(--border-color, #ccc);
   }
   
   .btn-secondary:hover {
-    background: var(--surface-hover);
+    background: var(--surface-hover, #e8e8e8);
   }
   
   .btn-danger {
-    background: var(--danger-color);
+    background: var(--danger-color, #dc3545);
     color: white;
   }
   
   .btn-danger:hover {
-    background: var(--danger-color-hover);
+    background: var(--danger-color-hover, #bd2130);
   }
   
   /* Loading/Error states */
@@ -1500,8 +1765,11 @@
     border-top: 2px dashed var(--border-color);
   }
   
-  .blank-entry-row:hover {
+  .blank-entry-row:hover,
+  .blank-entry-row:focus {
     background: var(--surface-hover);
+    outline: 2px solid var(--primary-color);
+    outline-offset: -2px;
   }
   
   .blank-entry-row .placeholder {
