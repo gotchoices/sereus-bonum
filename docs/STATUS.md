@@ -92,7 +92,7 @@
     - Expand/collapse buttons now functional
     - "Expand All" / "Collapse All" now work
     - State persistence still functional
-  - ✅ **IMPLEMENTED:** Full inline transaction editor (2024-12-12)
+  - ✅ **IMPLEMENTED:** Full inline transaction editor (2024-12-13)
     - Click any unlocked transaction → full inline editor appears
     - Shows date, ref, memo, current account (read-only), and offset entries
     - Supports simple transactions (single offset) and split transactions (multiple entries)
@@ -102,13 +102,14 @@
     - Save updates transaction metadata (date, ref, memo)
     - Cancel discards changes
     - Delete with confirmation
-    - **UI Layout per spec (updated 2024-12-12):**
+    - **UI Layout per updated specs (2024-12-13):**
       - Actions footer: Single line under entry table
       - Left side: [Save] [Cancel] [+ Split] [Delete] buttons
-      - Right side: Debits total, Credits total, Balance (✓ green when balanced, ⚠ red when imbalanced)
-    - **Debug logging:** Added extensive logging to diagnose data loading issues
+      - Right side (split mode only): Debits total, Credits total, Balance (✓ green when balanced, ⚠ red when imbalanced)
+      - Simple mode: No totals shown (auto-balances with single offset)
+    - **Debug logging:** Extensive logging to diagnose data loading issues
     - **Limitation:** Currently updates only transaction metadata, not individual entries (requires additional DataService methods)
-    - Editor mirrors new entry form for consistency
+    - **Regenerated:** Consolidation and implementation updated per refined specs (2024-12-13)
 - ✅ **Consolidation updated:** `design/generated/web/screens/ledger.md` - Added transaction grouping, display modes, edit mode, locked transactions, view state persistence sections
 - ✅ **i18n updated:** Added expand/collapse, editing, balance keys to `en.ts`
 - ✅ `design/specs/web/screens/search.md` - Cleaned: removed TypeScript interfaces, component architecture, data structures, i18n keys, styling details; kept display format, export behavior, navigation (206 → 176 lines)

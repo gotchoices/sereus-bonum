@@ -1,317 +1,490 @@
-# Consolidation: Account Ledger
+# Consolidation: Account Ledger Screen
 
-**Route:** `/ledger/[accountId]`
-**Source:** `design/stories/web/03-entries.md`, `design/specs/web/screens/ledger.md`, `design/specs/web/global/transaction-edit.md`, `design/specs/web/global/account-autocomplete.md`
-**Generated:** 2024-12-12
+**Route:** `/ledger/[accountId]`  
+**Component:** `apps/web/src/routes/ledger/[accountId]/+page.svelte`  
+**Generated:** 2024-12-13  
+**Sources:**
+- Story 03 (Transaction Entry)
+- Story 02 (GnuCash Import, step 9.7)
+- `design/specs/web/screens/ledger.md`
+- `design/specs/web/global/transaction-edit.md`
+- `design/specs/web/global/account-autocomplete.md`
+
+---
 
 ## Purpose
 
-Primary transaction entry interface for an account. Displays existing transactions (collapsed or expanded) and provides an always-present blank row for rapid keyboard-centric transaction entry without requiring constant visual attention.
+Primary transaction entry and viewing interface for a single account. Displays account ledger with running balance, supports rapid keyboard-centric data entry, transaction editing, and expansion/collapse of transaction details.
 
-## Technical Requirements
+---
 
-### Components Structure
+## Page Structure
 
-**Main Page:** `apps/web/src/routes/ledger/[accountId]/+page.svelte`
-- Uses `AccountAutocomplete.svelte` component for all account selection
-- Implements both simple and split transaction entry modes
-- Manages transaction state, validation, and persistence
+### Layout Components
 
-**Reusable Component:** `apps/web/src/lib/components/AccountAutocomplete.svelte`
-- Encapsulates account search, filtering, keyboard navigation
-- Implements colon completion logic
-- Provides consistent behavior across all account inputs
-- Props: `entityId`, `value` (bind), `selectedId` (bind), `placeholder`, `disabled`, `onselect` callback
+1. **Fixed Header** (does not scroll)
+   - Back link to Accounts View
+   - Entity and account context
+   - Account balance
+   - Column headers (single row, not repeated)
 
-### Data Flow
+2. **Scrollable Transaction List**
+   - Existing transactions (collapsed or expanded)
+   - Locked transaction separator (if applicable)
+   - New entry row (always at bottom)
 
-**Inputs:**
-- Route param: `accountId` (from URL)
-- Account details (name, type, unit, parent path)
-- Ledger entries for this account
-- Entity's full account tree (for autocomplete)
-- Running balance
+3. **State Management**
+   - Per-account view state in localStorage
+   - Expand/collapse state
+   - Expand-all toggle state
+   - Closed date (for locked transactions)
 
-**State Management:**
-- Simple mode: `{ date, ref, memo, offsetAccountId, debit, credit }`
-- Split mode: adds array of `{ note, accountId, debit, credit }` entries
-- Auto-balance calculation on split entry changes
-- Real-time validation (balanced = sum of all entries = $0.00 ± $0.01)
+---
 
-**Outputs:**
-- Transaction save → Updates ledger entries
-- Balance recalculation → Updates header display
-- Reactive updates → Notifies linked Accounts View
+## Header Section
 
-### Transaction Display & Grouping
+### Back Link
+```
+← Back to Accounts View
+```
+- Returns to `/entities/{entityId}`
+- Standard navigation link
 
-**Transaction Grouping:**
-- Entries are grouped by `transactionId`
-- Each transaction group contains:
-  - Header data: date, reference, memo
-  - All entries for that transaction
-  - Derived state: isLocked, isExpanded
+### Context Line
+**Left side:**
+```
+Home Finance > Assets : Current Assets : Checking 1010
+```
+Format:
+- Entity name (lighter, smaller)
+- Full account path with separators
+- Account code (if present)
 
-**Display Modes:**
-1. **Collapsed (default):** Single line per transaction
-   - Shows: date, ref, memo, offset account (or "[Split]"), amounts, balance
-   - Expand button (▶) shown if transaction has multiple entries
-   - Click anywhere on line → enter edit mode (if not locked)
+**Right side:**
+```
+USD $12,345.67
+```
+- Unit symbol
+- Current account balance (updates on transaction changes)
 
-2. **Expanded:** Transaction header + entry lines
-   - Header line: date, ref, memo, "[Split]", balance
-   - Entry lines (indented): note, account link, debit/credit amounts
-   - Collapse button (▼) on header line
-   - Click header → enter edit mode (if not locked)
-
-**Expand/Collapse Controls:**
-- Per-transaction expand button (▶/▼)
-- Toolbar: "Expand All" and "Collapse All" buttons
-- State persisted in localStorage per account (`viewState.expandedTransactions`)
-- `viewState.expandAll` overrides individual settings
-
-**Locked Transactions:**
-- Transactions before `closedDate` are locked (non-editable)
-- Visual separator line with lock icon (🔒) between locked and unlocked
-- Locked rows: dimmed opacity (0.7), muted color, no hover effect, no edit on click
-
-### In-Place Editing
-
-**Entering Edit Mode:**
-- Click on any transaction line (if not locked)
-- Expands transaction into edit container (blue border)
-- Loads transaction data into edit form
-- Shows: ✏️ icon, full inline editor with entry table and actions footer
-
-**Edit Container:**
-- Full-width inline editor at transaction's position in table
-- Blue border (2px solid primary-color) indicates active edit mode
-- Contains transaction editor matching new entry form
-- **Main line:** Date, Ref, Memo, Current Account (disabled), Debit, Credit
-- **Split lines:** Note, Account (autocomplete), Debit, Credit, Remove (×) button
-- **Actions footer (single line):**
-  - **Left side:** [Save] [Cancel] [+ Split] [Delete] buttons
-  - **Right side:** Debits total, Credits total, Balance (✓ green or ⚠ red)
-
-**Editing Behavior:**
-- Simple transactions: Shows main entry + one offset entry
-- Split transactions: Shows main entry + all split entries (always expanded in edit mode)
-- Can add/remove splits during editing
-- Auto-balance calculation with visual feedback
-- Debit/Credit mutual exclusion via blur handlers
-- Auto-select text on focus for easy editing
-
-**Exiting Edit Mode:**
-- Save → Updates transaction, reloads ledger
-- Cancel → Discards changes, returns to view mode
-- Delete → Confirmation dialog, removes transaction
-- Escape key → Cancel edit mode
-
-**Delete Confirmation:**
-- Dialog: "Delete this transaction? This cannot be undone."
-- [Cancel] [Delete] buttons
-- Only shown for unlocked transactions
-
-**Debug Logging:**
-- Extensive logging added to diagnose data loading issues
-- Logs transaction structure, split entries, loaded data
-
-### View State Persistence
-
-**Persisted State (localStorage):**
-```typescript
-interface LedgerViewState {
-  expandedTransactions: Record<string, boolean>; // Per-transaction
-  expandAll: boolean;                             // Global override
-  closedDate?: string;                            // Lock transactions before this date
-}
+### Column Headers (Single Row)
+```
+>  | Date       | Ref  | Memo           | Account      | Debit    | Credit   | Balance
 ```
 
-**Storage Key:** `viewState:ledger:{accountId}`
+**Columns:**
+- `>`: Expand/collapse icon (clicking header icon toggles all)
+- Date: Transaction date
+- Ref: Reference/check number
+- Memo: Transaction description
+- Account: Offset account name (or `[Split]` indicator)
+- Debit: Debit amount (if applicable)
+- Credit: Credit amount (if applicable)
+- Balance: Running balance after transaction
+
+**Note:** These headers are never repeated within transactions or editors - all rows align with these columns.
+
+---
+
+## Transaction Display
+
+### Collapsed View (Default)
+
+Single line per transaction:
+```
+>  | 2024-12-10 | 1234 | Grocery Store  | Groceries    | $125.50  |          | $5,234.00
+>  | 2024-12-11 | 1235 | Salary         | Salary Inc   |          | $2,500.00| $7,734.00
+>  | 2024-12-12 | 1236 | Bill payment   | [Split]      | $450.00  |          | $7,284.00
+```
+
+**Visual elements:**
+- `>` icon: Click to expand
+- Account column shows:
+  - Offset account name (for simple transactions)
+  - `[Split]` indicator (for split transactions with 3+ entries)
+- Balance column shows running balance
+- Hover on account name shows full path in tooltip
+
+### Expanded View
+
+Transaction header + entry lines:
+```
+v  | 2024-12-12 | 1236 | Bill payment   |                      |          |          | $7,284.00
+   |            |      |                | Checking Account     |          | $450.00  |
+   |            |      |                | Electric             | $150.00  |          |
+   |            |      |                | Internet             | $100.00  |          |
+   |            |      |                | Phone                | $200.00  |          |
+```
+
+**Structure:**
+- Transaction header line: Date/Ref/Memo filled, Balance shows, Account/Debit/Credit empty
+- Entry lines: Date/Ref/Memo empty (visual indentation), Account/Debit/Credit filled
+- First entry: Current account (the one being viewed)
+- Subsequent entries: Offset accounts or splits
+- Entry lines have no balance value
+
+**Controls:**
+- Click `v` to collapse
+- Clicking header `>` icon: Expands/collapses all transactions
+
+### State Persistence
+
+Saved per account in localStorage:
+- `expandAll`: Boolean (all expanded vs. all collapsed)
+- Individual transaction expansion not persisted (respects expandAll state on reload)
+- `closedDate`: Date for locked transaction separator
+
+---
+
+## Locked Transactions
+
+Transactions before the closed date cannot be edited.
+
+### Visual Separator
+
+```
+>  | 2024-01-10 | 1001 | Old transaction    | Expenses  | $50.00   |          | $1,000.00
+>  | 2024-01-15 | 1002 | Another old one    | Utilities | $100.00  |          | $900.00
+═══════════════════════════════════════🔒═══════════════════════════════════════
+>  | 2024-02-01 | 1003 | Editable entry     | Groceries | $75.00   |          | $825.00
+```
+
+**Visual treatment:**
+- Separator line with 🔒 icon
+- Transactions above: Subtle tint (dimmed)
+- Transactions below: Normal appearance
 
 **Behavior:**
-- Expand/collapse state remembered per transaction
-- `expandAll` flag remembered across sessions
-- `closedDate` sets locked transaction cutoff
+- Click locked transaction: No response (or tooltip: "Cannot edit - period closed")
+- Can still expand to view details
+- Can still click account links to navigate
 
-### Account Autocomplete Implementation
+---
 
-**Search & Filter:**
-- Case-insensitive match on: account name, code, group name, type name, full path
-- Sort priority: exact name match > path starts with query > name starts > type starts > contains anywhere
-- Display: full account path in dropdown
-- Limit: max 10 results, scrollable
+## New Transaction Entry
 
-**Keyboard Behaviors:**
-- **Tab:** Selects highlighted result, fills full path, advances focus to next field
-- **Enter:** Selects highlighted result, fills full path, stays in same field
-- **Escape:** Closes dropdown without selection
-- **Up/Down arrows:** Move highlight in dropdown
-- **Left/Right arrows:** Normal text cursor movement
-- **Colon (`:`):** Completes highlighted result through longest matching path element (never completes final account name)
-- **Auto-select:** When tabbing into populated field, select all text
+### Blank Entry Row
 
-**Colon Completion Logic:**
-1. Use currently highlighted dropdown result (default = top, or arrow-key selected)
-2. Find longest path element in that result containing current search text
-3. Complete through that element plus trailing ` : `
-4. Never complete the final account name (no colon after it)
-
-Example: Search "land" → highlighted "Assets : Land Holdings : Building A" → press `:` → completes to "Assets : Land Holdings : "
-
-**Validation:**
-- Must have valid `selectedId` (not just text) before save
-- Tab away without selection → clear input and `selectedId`
-
-### Transaction Entry Modes
-
-**Simple Mode:**
-- Fields: Date, Ref, Memo, Account (autocomplete), Debit, Credit
-- Split button: right of Account input, enabled only when Account empty
-- Debit/Credit: both always enabled (consistent tab flow), on blur clears other field
-- Tab from Credit → saves transaction, creates new blank row, cursor to Date
-
-**Split Mode:**
-- Triggered by split button click or Ctrl+Enter keyboard shortcut (when Account empty)
-- Page-level keyboard handler: `onkeydown={handlePageKeydown}` on ledger-page div
-- Main line: Date, Ref, Memo, Current Account (disabled/read-only), Debit, Credit
-- Split entries: each has Note, Account (autocomplete), Debit, Credit, Remove (×)
-- Initial focus: Debit field of main transaction line
-- Auto-balance: new split rows pre-fill appropriate Debit or Credit with balancing amount
-- Tab flow: main Debit/Credit → first split Note → Account → Debit → Credit → next split
-- Last split Credit: if balanced → Save button, if unbalanced → auto-create new split
-- Buttons: [Save] [Cancel] [+ Add Split]
-
-### Validation Rules
-
-**Simple Mode:**
-- Date: valid date
-- Account: selectedId must be set
-- Amount: exactly one of Debit OR Credit (not both, not neither)
-
-**Split Mode:**
-- Date: valid date
-- Main line: Debit OR Credit
-- Each split: selectedId + Debit OR Credit
-- Balance: sum of all entries = $0.00 (±$0.01 tolerance)
-- Save button disabled until valid
-
-### Layout Structure
-
+Always present at bottom of ledger:
 ```
-┌─ Header ────────────────────────────────────────────────────────┐
-│ ← Entity Name                                                    │
-│ Account Path: Full path with colons                              │
-│ Account Code: [code] | Unit: [USD]                               │
-│ Balance: $X,XXX.XX                                                │
-└──────────────────────────────────────────────────────────────────┘
-
-┌─ Ledger Table ──────────────────────────────────────────────────┐
-│ Date | Ref | Memo | Offset | Debit | Credit | Balance |          │
-│───────────────────────────────────────────────────────────────────│
-│ (existing transactions...)                                        │
-│ (new entry row...)                                                │
-└──────────────────────────────────────────────────────────────────┘
+   | [Date   ] | [Ref] | [Memo         ] | [Account   ] [|] | [Debit  ] | [Credit ] |
 ```
 
-**Split Mode Layout Addition:**
+**Behavior:**
+- Click or focus any field: Activates transaction editor
+- Editor appears inline (same table row)
+- Uses transaction-edit component
+- On save: Creates transaction, refreshes ledger, new blank row appears, focus moves to Date of new blank row
+- On cancel: Clears fields, blank row remains
+
+---
+
+## Editing Existing Transactions
+
+### Entry to Edit Mode
+
+- Click any unlocked transaction (collapsed or expanded)
+- Transaction expands inline into edit container
+- Blue border (2px solid primary-color) indicates edit mode
+
+### Edit Container Layout
+
+The editor aligns with the ledger table columns. Fields are positioned to match the column headers above.
+
+**Simple Transaction Edit:**
 ```
-┌─ Split Entry ───────────────────────────────────────────────────┐
-│ Main: Date | Ref | Memo | [Current Acct] | Debit | Credit       │
-│                                                                   │
-│ Splits: Note | [Account] | Debit | Credit | [×]                  │
-│        Note | [Account] | Debit | Credit | [×]                   │
-│        (Balance: $0.00 ✓)                                         │
-│        [Save] [Cancel] [+ Add Split]                              │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-### Event Handlers
-
-**Simple Mode:**
-- `onKeyDown` (Debit/Credit): Tab → `saveEntry()` then focus Date of next row
-- `onKeyDown` (Debit/Credit): Enter → `saveEntry()`
-- `onBlur` (Debit): if value, clear Credit
-- `onBlur` (Credit): if value, clear Debit
-- `onFocus` (any field with value): select all text
-- Split button `onClick`: `initSplitMode()`
-
-**Split Mode:**
-- `onKeyDown` (main Debit/Credit): Tab → focus first split Note
-- `onKeyDown` (split Credit, last split): Tab → check balance, if balanced focus Save button, else `addSplitEntry()`
-- `onKeyDown` (any field): Enter → `saveSplitEntry()` if valid
-- `onBlur` (split Debit): if value, clear split Credit
-- `onBlur` (split Credit): if value, clear split Debit
-- `onFocus` (any field with value): select all text
-- Remove button `onClick`: `removeSplitEntry(splitId)`
-- Add Split button `onClick`: `addSplitEntry()`
-- Save button `onClick`: `saveSplitEntry()`
-- Cancel button `onClick`: `cancelSplit()`
-
-### Data Service Calls
-
-```typescript
-// Load ledger
-const account = await dataService.getAccount(accountId);
-const entity = await dataService.getEntity(account.entityId);
-const entries = await dataService.getLedgerEntries(accountId);
-const balance = await dataService.getAccountBalance(accountId);
-
-// Save transaction (simple)
-await dataService.createTransaction({
-  date,
-  reference,
-  memo,
-  entries: [
-    { accountId: currentAccountId, debit: amount, credit: 0 },
-    { accountId: offsetAccountId, debit: 0, credit: amount }
-  ]
-});
-
-// Save transaction (split)
-await dataService.createTransaction({
-  date,
-  reference,
-  memo,
-  entries: [
-    { accountId: currentAccountId, debit/credit },
-    ...splitEntries.map(split => ({
-      accountId: split.accountId,
-      note: split.note,
-      debit: split.debit,
-      credit: split.credit
-    }))
-  ]
-});
+┌──────────────────────────────────────────────────────────────────────────────┐
+│   | [Date▼] | [Ref_] | [Memo___________] | [Account_____▼] [|] | [Debit__] | [Credit_] |
+│   | [Save] [+ Split] [Cancel] [Delete]                                        |
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Navigation
+**Actions Footer (Simple):**
+- Left: [Save] [+ Split] [Cancel] [Delete] buttons
+- Right: No totals (simple transactions auto-balance, no validation needed)
 
-**Entry Points:**
-- From Accounts View: click account name → `/ledger/[accountId]`
-- From split detail: click split account → `/ledger/[splitAccountId]`
+**Split Transaction Edit:**
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│   | [Date▼] | [Ref_] | [Memo___________] | [Checking_____▼] | [Debit__] | [Credit_] |
+│   |         |        | Note: [Electric_] | [Utilities____▼] | [150.00 ] | [       ] | [×]
+│   |         |        | Note: [Internet_] | [Business_____▼] | [100.00 ] | [       ] | [×]
+│   |         |        | Note: [Phone____] | [Telecom______▼] | [200.00 ] | [       ] | [×]
+│   ───────────────────────────────────────────────────────────────────────────
+│   | [Save] [+ Split] [Cancel] [Delete]       Debits: $450.00  Credits: $450.00  Balance: $0.00 ✓ |
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Actions Footer (Split):**
+- Left: [Save] [+ Split] [Cancel] [Delete] buttons
+- Right: Debits total, Credits total, Balance with indicator
+  - Green ✓ when $0.00
+  - Red ⚠ and amount when imbalanced
+
+**Main Transaction Line:**
+- Date, Ref, Memo: Editable
+- Current Account: Pre-filled, disabled/grayed (viewing ledger for this account)
+- Debit/Credit: Amount for current account entry
+
+**Split Entry Lines:**
+- Note: Optional description for this split
+- Account: Autocomplete for offset account
+- Debit/Credit: Amount fields (only one can have value)
+- Remove `[×]`: Removes split line (minimum 1 split required)
+
+### Edit Behavior
+
+**Visual:**
+- Blue border around edit container
+- All fields align with column headers
+- Looks like ledger view, but fields are editable inputs
+- Context preserved (see surrounding transactions)
+
+**Functionality:**
+- Simple transactions: Main line + one offset
+- Split transactions: Always show all entries in edit mode (even if collapsed in view mode)
+- Can convert simple → split via `[+ Split]` button
+- Auto-balance calculation for splits
+- Debit/Credit mutual exclusion (blur clears other field)
+- Auto-select text on focus for quick editing
+
+**Actions:**
+- **Save:** Validates, updates transaction, exits edit mode, refreshes ledger
+- **Cancel:** Discards changes, exits edit mode, restores view
+- **+ Split:** Adds new split entry line
+- **Delete:** Shows confirmation, deletes transaction, refreshes ledger
+- **Esc key:** Same as Cancel
 
 **Exit:**
-- Back link → returns to Accounts View for current entity
+- Returns to view mode
+- Restores previous display state (collapsed/expanded as it was before editing)
 
-### Future Features (Not MVP)
+---
 
-**Click-to-Edit:**
-- Click existing transaction row → load into entry form
-- Simple transaction → simple mode
-- Split transaction → split mode with all splits
-- Save/Cancel to complete edit
+## Transaction Editor Component
 
-**Delete:**
-- Delete button in edit mode with confirmation dialog
+Behavior defined in `design/specs/web/global/transaction-edit.md`:
+- Two modes: Simple (one offset) and Split (multiple offsets)
+- Keyboard navigation optimized for rapid entry
+- Tab flow through fields
+- Auto-balance calculation
+- Validation rules
+- Debit/Credit mutual exclusion
+- Ctrl+Enter toggles split mode
 
-## Acceptance Criteria
+The editor component is mode-agnostic (doesn't know if it's new entry or edit). The ledger screen provides transaction data and handles save/cancel/delete callbacks.
 
-- [ ] Can enter multiple simple transactions without leaving keyboard
-- [ ] Can enter split transactions with auto-balance assistance
-- [ ] Offset account autocomplete filters and sorts correctly
-- [ ] Colon completion works for partial path entry
-- [ ] Tab flow is consistent and completes transactions correctly
-- [ ] Balance updates in real-time
-- [ ] Transaction validation prevents unbalanced or incomplete entries
-- [ ] Linked Accounts View updates when entries are made
+---
+
+## Account Autocomplete
+
+All account input fields use the autocomplete component defined in `design/specs/web/global/account-autocomplete.md`:
+
+**Features:**
+- Type to search, filters by relevance
+- Colon `:` for progressive path completion
+- Tab/Enter to select (Tab also advances focus)
+- Arrow keys navigate dropdown
+- Escape closes dropdown
+- Max 10 results displayed
+- Shows full path in dropdown for disambiguation
+- Validation: Must have selectedId, not just text
+
+---
+
+## Account Hyperlinks
+
+All account names displayed are clickable:
+
+**Locations:**
+- Offset account in transaction rows (collapsed view)
+- Account names in expanded entry lines
+- Split entry account names (when expanded)
+
+**Behavior:**
+- Click: Navigate to `/ledger/{accountId}` (standard navigation)
+- Hover: Tooltip shows full account path
+- Ctrl/Cmd+Click: Opens in new window (browser default)
+
+**Display:**
+- Shows account name only (not full path)
+- Uses HTML `title` attribute for hover tooltip with full path
+- Example: `<a href="/ledger/123" title="Expenses : Operating : Utilities : Electric">Electric</a>`
+
+---
+
+## Data Fetching
+
+### On Page Load
+1. Load account details (entity ID, name, path, code, unit)
+2. Load entity details (for header context)
+3. Load unit details (symbol, divisor)
+4. Load ledger entries for account
+5. Load view state from localStorage (expand/collapse, closed date)
+
+### On Transaction Save/Delete
+- Refresh ledger entries
+- Update account balance in header
+- Maintain scroll position
+- Restore expand/collapse state
+
+### Running Balance
+- Calculated by backend SQL query
+- Each entry includes `runningBalance` field
+- Displayed in Balance column
+- Updates on page reload (not real-time within session)
+
+---
+
+## Keyboard Shortcuts
+
+**Global (page-level):**
+- Ctrl+Enter: Toggle split mode (when in transaction editor)
+
+**Within Transaction Editor:**
+- Tab: Advance through fields, save from last field
+- Enter: Save transaction (from input field), activate button (on button)
+- Escape: Cancel edit
+- Space: Activate button (on split button or action buttons)
+- Arrow keys: Navigate in account autocomplete dropdown
+- Colon `:`: Progressive path completion in account autocomplete
+
+---
+
+## Validation & Error Handling
+
+### Transaction Validation
+- Date: Required, must be valid date
+- Account: Required, must have selectedId (simple mode or each split)
+- Amount: One of Debit OR Credit required (not both, not neither)
+- Balance: Split transactions must sum to $0.00 (within $0.01 tolerance)
+
+### Visual Feedback
+- Invalid fields: Red border or highlight
+- Balance indicator (splits): ✓ or ⚠ with amount
+- Save button: Disabled until valid
+- Inline error messages below invalid fields
+
+### Error States
+- Account not found: Show error, prevent save
+- Backend save failure: Show error toast, keep editor open with data
+- Network error: Show retry option
+
+---
+
+## Dependencies
+
+### Components
+- `AccountAutocomplete.svelte`: Account selection with search and path completion
+- `TransactionEditor.svelte`: (Future) Extracted inline editor component
+- Currently: Inline editor within ledger page component
+
+### Stores
+- `entities`: Entity data
+- `accounts`: Account data (for autocomplete)
+- `viewState`: Per-account UI state (expand/collapse, closed date)
+
+### Services
+- `DataService.getLedgerEntries(accountId)`: Fetch transactions for account
+- `DataService.createTransaction(transaction)`: Save new transaction
+- `DataService.updateTransaction(transactionId, updates)`: Update existing transaction
+- `DataService.deleteTransaction(transactionId)`: Delete transaction
+- `DataService.searchAccounts(entityId, query)`: For autocomplete
+
+### Libraries
+- `sql.js`: SQLite backend (mock mode)
+- Svelte 5: Runes mode (`$state`, `$derived`, `$effect`)
+
+---
+
+## Current Implementation Status
+
+**✅ Implemented:**
+- Fixed header with back link, context, balance
+- Column headers (single row)
+- Transaction list with expand/collapse
+- Collapsed/expanded view modes
+- Locked transaction separator
+- New entry row at bottom
+- Full inline transaction editor (simple and split modes)
+- Click-to-edit for existing transactions
+- Blue border in edit mode
+- Actions footer (buttons left, totals right for splits)
+- Auto-balance calculation
+- Debit/Credit mutual exclusion
+- Account autocomplete with colon completion
+- Account hyperlinks with hover tooltips
+- View state persistence (expand/collapse, closed date)
+- Delete with confirmation
+- Keyboard navigation (Tab, Enter, Escape, Ctrl+Enter)
+
+**⚠️ Known Limitations:**
+- Save function updates transaction metadata only (date, ref, memo)
+- Does not yet update individual entry amounts/accounts
+- Requires additional DataService methods: `updateEntry`, `deleteEntry`, `createEntry`
+- Running balance not real-time (requires page refresh)
+
+**🐛 Outstanding Issues:**
+- Split entry data not loading correctly into editor (investigation in progress)
+- Debug logging added to diagnose data loading
+
+**🔜 Future Enhancements:**
+- Extract transaction editor into separate component
+- Real-time balance updates
+- Undo/redo support
+- Transaction search within ledger
+- Keyboard shortcuts summary (Help dialog)
+- Transaction templates (recurring entries)
+
+---
+
+## Testing Notes
+
+**Manual Test Cases:**
+1. Load ledger → Verify header, columns, transactions display
+2. Expand transaction → Verify shows all entries correctly
+3. Click transaction → Verify edit mode with blue border
+4. Edit simple transaction → Save → Verify updates
+5. Convert simple → split → Add splits → Save → Verify
+6. Edit split transaction → Modify amounts → Verify balance indicator
+7. Delete transaction → Confirm → Verify removed
+8. Cancel edit → Verify no changes
+9. Tab through new entry → Verify rapid entry workflow
+10. Lock transaction (set closed date) → Verify separator, dimming, no edit
+11. Account autocomplete → Type, colon completion, tab select → Verify
+12. Account hyperlinks → Click → Verify navigation
+13. Expand all / Collapse all → Verify state persists
+14. Reload page → Verify view state restored
+
+**Browser Console:**
+- Check for debug logging when entering edit mode
+- Verify transaction data structure
+- Verify editingData structure
+- Check for errors during save/delete
+
+---
+
+## Future Architecture
+
+**Component Extraction:**
+```
+ledger/[accountId]/+page.svelte
+├── LedgerHeader.svelte (entity, account, balance)
+├── TransactionList.svelte (view mode)
+│   ├── TransactionRow.svelte (collapsed)
+│   └── TransactionExpanded.svelte (expanded)
+└── TransactionEditor.svelte (new/edit mode)
+    ├── AccountAutocomplete.svelte (already extracted)
+    └── SplitEntryRow.svelte (repeating split lines)
+```
+
+**State Management:**
+- Consider Svelte store for ledger data (reactive updates)
+- WebSocket or polling for multi-user real-time updates
+- Optimistic UI updates with rollback on error
+
+**Performance:**
+- Virtual scrolling for large ledgers (1000+ transactions)
+- Lazy load transactions (pagination or infinite scroll)
+- Debounce autocomplete queries
+- Memoize balance calculations

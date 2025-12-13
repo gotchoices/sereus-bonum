@@ -162,6 +162,7 @@ export default {
     balance: 'Balance',
     save: 'Save',
     cancel: 'Cancel',
+    enter_new_transaction: 'Click to enter new transaction...',
   },
   
   search: {
