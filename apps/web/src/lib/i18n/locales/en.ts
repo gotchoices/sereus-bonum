@@ -200,7 +200,7 @@ export default {
     review_mapping: 'Review Account Mapping',
     accounts_found: 'Accounts found',
     transactions_found: 'Transactions found',
-    mapping_placeholder: 'Account mapping interface will be implemented here',
+    review_accounts: 'Review the accounts below. All accounts will be imported into your new entity.',
     complete_import: 'Complete Import',
     import_complete: 'Import Complete!',
     entity_created: 'Entity "{name}" has been created.',

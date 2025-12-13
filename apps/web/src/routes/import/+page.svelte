@@ -74,20 +74,14 @@
     
     error = null;
     step = 'processing';
-    progress = 0;
-    statusMessage = 'Reading file...';
+    statusMessage = 'Parsing file...';
     
     try {
-      progress = 10;
-      statusMessage = 'Parsing file format...';
-      
       // Parse file using import service
       parsedData = await importService.parseFile(selectedFile);
-      progress = 60;
       
       accountCount = parsedData.accounts.length;
       transactionCount = parsedData.transactions.length;
-      statusMessage = `Found ${accountCount} accounts, ${transactionCount} transactions`;
       
       log.ui.info('[Import] Parse complete:', { 
         accounts: accountCount, 
@@ -95,16 +89,13 @@
         commodities: parsedData.commodities.length 
       });
       
-      progress = 100;
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
+      // Go directly to mapping
       step = 'mapping';
       
     } catch (err) {
       log.ui.error('[Import] Error processing file:', err);
       error = `Failed to process file: ${err instanceof Error ? err.message : 'Unknown error'}`;
       step = 'upload';
-      progress = 0;
     }
   }
   
@@ -235,7 +226,7 @@
       </div>
       
     {:else if step === 'mapping'}
-      <!-- Step 3: Account Mapping (placeholder) -->
+      <!-- Step 3: Account Mapping -->
       <div class="dialog dialog-wide">
         <div class="dialog-header">
           <h2>{$t('import.review_mapping')}</h2>
@@ -243,10 +234,59 @@
         
         <div class="dialog-body">
           <div class="mapping-summary">
-            <p>✓ {$t('import.accounts_found')}: {accountCount}</p>
-            <p>✓ {$t('import.transactions_found')}: {transactionCount}</p>
-            <p class="help-text">{$t('import.mapping_placeholder')}</p>
+            <div class="summary-stats">
+              <div class="stat-item">
+                <span class="stat-label">Accounts:</span>
+                <span class="stat-value">{accountCount}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">Transactions:</span>
+                <span class="stat-value">{transactionCount}</span>
+              </div>
+              {#if parsedData}
+                <div class="stat-item">
+                  <span class="stat-label">Commodities:</span>
+                  <span class="stat-value">{parsedData.commodities.length}</span>
+                </div>
+              {/if}
+            </div>
+            <p class="help-text">{$t('import.review_accounts')}</p>
           </div>
+          
+          {#if parsedData}
+            <div class="accounts-preview">
+              <div class="accounts-header">
+                <div class="col-source">Source Account</div>
+                <div class="col-type">Type</div>
+                <div class="col-guid">GUID</div>
+              </div>
+              <div class="accounts-list">
+                {#each parsedData.accounts.slice(0, 20) as account}
+                  <div class="account-row">
+                    <div class="col-source">
+                      <span class="account-name">{account.name}</span>
+                      {#if account.code}
+                        <span class="account-code">({account.code})</span>
+                      {/if}
+                    </div>
+                    <div class="col-type">
+                      <span class="account-type">{account.type}</span>
+                    </div>
+                    <div class="col-guid">
+                      <span class="account-guid">{account.guid.substring(0, 8)}...</span>
+                    </div>
+                  </div>
+                {/each}
+                {#if parsedData.accounts.length > 20}
+                  <div class="account-row more-accounts">
+                    <div class="col-source">
+                      <span class="text-muted">... and {parsedData.accounts.length - 20} more accounts</span>
+                    </div>
+                  </div>
+                {/if}
+              </div>
+            </div>
+          {/if}
           
           {#if error}
             <div class="error-message">{error}</div>
@@ -479,14 +519,97 @@
   }
   
   .mapping-summary {
-    padding: 1.5rem;
-    background: var(--surface-secondary);
-    border-radius: 4px;
+    margin-bottom: 1.5rem;
   }
   
-  .mapping-summary p {
-    margin: 0.5rem 0;
-    font-size: 1rem;
+  .summary-stats {
+    display: flex;
+    gap: 2rem;
+    padding: 1rem 1.5rem;
+    background: var(--surface-secondary);
+    border-radius: 4px;
+    margin-bottom: 1rem;
+  }
+  
+  .stat-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  
+  .stat-label {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+  }
+  
+  .stat-value {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--primary-color);
+  }
+  
+  .accounts-preview {
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  
+  .accounts-header {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1.5fr;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: var(--surface-secondary);
+    border-bottom: 2px solid var(--border-color);
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+  }
+  
+  .accounts-list {
+    max-height: 400px;
+    overflow-y: auto;
+  }
+  
+  .account-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1.5fr;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border-light);
+  }
+  
+  .account-row:hover:not(.more-accounts) {
+    background: var(--surface-hover, #f9f9f9);
+  }
+  
+  .account-row.more-accounts {
+    grid-template-columns: 1fr;
+    font-style: italic;
+  }
+  
+  .account-name {
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+  
+  .account-code {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    margin-left: 0.5rem;
+  }
+  
+  .account-type {
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-family: monospace;
+  }
+  
+  .account-guid {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-family: monospace;
   }
   
   .success-message {
