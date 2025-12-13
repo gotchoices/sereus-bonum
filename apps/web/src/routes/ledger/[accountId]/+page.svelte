@@ -233,11 +233,17 @@
         currentAccountDebit: mainEntry.amount > 0 ? formatAmount(mainEntry.amount) : '',
         currentAccountCredit: mainEntry.amount < 0 ? formatAmount(Math.abs(mainEntry.amount)) : '',
         splits: mainEntry.splitEntries.map(split => {
-          log.ui.debug('[Ledger] Loading split:', split);
+          log.ui.debug('[Ledger] Loading split entry:', {
+            entryId: split.entryId,
+            accountId: split.accountId,
+            accountName: split.accountName,
+            accountPath: split.accountPath,
+            amount: split.amount
+          });
           return {
             id: split.entryId,
             accountId: split.accountId,
-            accountSearch: split.accountName,
+            accountSearch: split.accountName || '',
             debit: split.amount > 0 ? formatAmount(split.amount) : '',
             credit: split.amount < 0 ? formatAmount(Math.abs(split.amount)) : '',
             note: split.note || '',
@@ -627,15 +633,19 @@
                     class="edit-input"
                   />
                 </td>
-                <td class="col-memo" colspan="5">
+                <td class="col-memo">
                   <input 
                     type="text" 
                     bind:value={editingData.memo}
                     placeholder={$t('ledger.memo')}
                     onfocus={handleFocus}
-                    class="edit-input edit-input-wide"
+                    class="edit-input"
                   />
                 </td>
+                <td class="col-offset"></td>
+                <td class="col-debit"></td>
+                <td class="col-credit"></td>
+                <td class="col-balance"></td>
               </tr>
               
               <!-- Edit mode: Current account entry row -->
@@ -645,12 +655,9 @@
                 <td class="col-ref"></td>
                 <td class="col-memo"></td>
                 <td class="col-offset">
-                  <input 
-                    type="text" 
-                    value={account?.name ?? ''}
-                    disabled
-                    class="edit-input edit-disabled"
-                  />
+                  <a href="/ledger/{accountId}" class="current-account-link">
+                    {account?.name ?? ''}
+                  </a>
                 </td>
                 <td class="col-debit">
                   <input 
@@ -695,7 +702,7 @@
                   <td class="col-offset">
                     <AccountAutocomplete
                       entityId={account?.entityId ?? ''}
-                      bind:search={split.accountSearch}
+                      bind:value={split.accountSearch}
                       bind:selectedId={split.accountId}
                       disabled={false}
                       onfocus={handleFocus}
@@ -750,11 +757,8 @@
                     {#if editingData.splits.length > 1}
                       {@const totals = getEditTotals()}
                       <div class="edit-totals-right">
-                        <span class="total-label">{$t('ledger.debits_total')}:</span>
                         <span class="total-amount">{unit?.symbol ?? ''}{totals.debits.toFixed(2)}</span>
-                        <span class="total-label">{$t('ledger.credits_total')}:</span>
                         <span class="total-amount">{unit?.symbol ?? ''}{totals.credits.toFixed(2)}</span>
-                        <span class="total-label">{$t('ledger.balance')}:</span>
                         {#if Math.abs(totals.balance) <= 1}
                           <span class="balanced">{unit?.symbol ?? ''}0.00 ✓</span>
                         {:else}
@@ -932,15 +936,19 @@
                   class="edit-input"
                 />
               </td>
-              <td class="col-memo" colspan="5">
+              <td class="col-memo">
                 <input 
                   type="text" 
                   bind:value={editingData.memo}
                   placeholder={$t('ledger.memo')}
                   onfocus={handleFocus}
-                  class="edit-input edit-input-wide"
+                  class="edit-input"
                 />
               </td>
+              <td class="col-offset"></td>
+              <td class="col-debit"></td>
+              <td class="col-credit"></td>
+              <td class="col-balance"></td>
             </tr>
             
             <tr class="edit-entry-row edit-current-account new-entry-row">
@@ -949,12 +957,9 @@
               <td class="col-ref"></td>
               <td class="col-memo"></td>
               <td class="col-offset">
-                <input 
-                  type="text" 
-                  value={account?.name ?? ''}
-                  disabled
-                  class="edit-input edit-disabled"
-                />
+                <a href="/ledger/{accountId}" class="current-account-link">
+                  {account?.name ?? ''}
+                </a>
               </td>
               <td class="col-debit">
                 <input 
@@ -998,7 +1003,7 @@
                 <td class="col-offset">
                   <AccountAutocomplete
                     entityId={account?.entityId ?? ''}
-                    bind:search={split.accountSearch}
+                    bind:value={split.accountSearch}
                     bind:selectedId={split.accountId}
                     disabled={false}
                     onfocus={handleFocus}
@@ -1051,11 +1056,8 @@
                   {#if editingData.splits.length > 1}
                     {@const totals = getEditTotals()}
                     <div class="edit-totals-right">
-                      <span class="total-label">{$t('ledger.debits_total')}:</span>
                       <span class="total-amount">{unit?.symbol ?? ''}{totals.debits.toFixed(2)}</span>
-                      <span class="total-label">{$t('ledger.credits_total')}:</span>
                       <span class="total-amount">{unit?.symbol ?? ''}{totals.credits.toFixed(2)}</span>
-                      <span class="total-label">{$t('ledger.balance')}:</span>
                       {#if Math.abs(totals.balance) <= 1}
                         <span class="balanced">{unit?.symbol ?? ''}0.00 ✓</span>
                       {:else}
@@ -1165,7 +1167,7 @@
   .ledger-container {
     flex: 1;
     overflow-y: auto;
-    padding: 1rem;
+    padding: 0;
   }
   
   /* Table */
@@ -1178,13 +1180,14 @@
   .ledger-table thead {
     position: sticky;
     top: 0;
-    background: var(--surface-secondary);
+    background: var(--surface-primary);
     z-index: 10;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   }
   
   .ledger-table th {
     text-align: left;
-    padding: 0.75rem 0.5rem;
+    padding: 0.75rem 1rem;
     border-bottom: 2px solid var(--border-color);
     font-weight: 600;
     color: var(--text-muted);
@@ -1193,7 +1196,7 @@
   }
   
   .ledger-table td {
-    padding: 0.5rem;
+    padding: 0.5rem 1rem;
     border-bottom: 1px solid var(--border-light);
   }
   
@@ -1508,5 +1511,17 @@
   
   .new-entry-row {
     border-left: 4px solid var(--success-color);
+  }
+  
+  /* Current account link */
+  .current-account-link {
+    color: var(--text-muted);
+    text-decoration: none;
+    font-style: italic;
+  }
+  
+  .current-account-link:hover {
+    text-decoration: underline;
+    color: var(--primary-color);
   }
 </style>
