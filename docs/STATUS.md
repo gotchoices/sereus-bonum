@@ -343,6 +343,47 @@ From story 04 (Alt D):
 
 ---
 
+## AI-Assisted Features
+
+### Strategy
+**Integration:** Vercel AI SDK (`ai` npm package) - TypeScript toolkit for structured AI output
+**Approach:** Story-driven design → lightweight specs for UI → implementation
+**Provider:** User-supplied API key (OpenAI/Anthropic/Google) in Settings
+
+### 🔄 Planned AI Assistance Use Cases
+
+#### Phase 1: Stories & Core Infrastructure
+- ⬜ **Story:** New user needs help setting up account structure
+- ⬜ **Story:** User unsure how to create starting balances
+- ⬜ **Story:** User needs help categorizing transactions
+- ⬜ **Story:** User unsure how to handle amortization/capitalization
+- ⬜ **Story:** User mapping 100+ accounts during GnuCash import
+- ⬜ Add AI provider settings (API key, provider choice, auto-apply confidence threshold)
+- ⬜ Create AI service wrapper (`lib/ai/wizard.ts`)
+- ⬜ Build reusable `AIWizardBubble.svelte` component (floating assistant)
+
+#### Phase 2: Import Account Mapping (First Implementation)
+- ⬜ Implement `generateObject()` for account mapping suggestions
+- ⬜ UI: Show AI suggestions with confidence indicators (🟢 High, 🟡 Medium, 🔴 Low)
+- ⬜ UI: Manual override dropdowns for low-confidence mappings
+- ⬜ Store `gnucash_guid` in account table for future import detection
+- ⬜ Complete import flow: parse → AI suggest → user review → create accounts/transactions
+
+#### Phase 3: Additional AI Assistance
+- ⬜ Context-aware help bubble on any screen
+- ⬜ Transaction categorization suggestions
+- ⬜ Setup wizard for new users
+
+### Prerequisites
+- ✅ Virtual scrolling (for large imports) - See "Medium Priority" section
+- ✅ Import parser complete (GnuCash XML)
+- ⬜ Schema: Add `gnucash_guid TEXT` column to `account` table
+- ⬜ Schema: Add `gnucash_guid TEXT` column to `entry` table (for transaction deduplication)
+
+**Note:** Stories come first, specs minimal (UI pattern only). AI wizard is reusable across all use cases.
+
+---
+
 ## Production Backend (Sereus Integration)
 
 ### ⬜ Quereus Backend Implementation
