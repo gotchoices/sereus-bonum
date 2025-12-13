@@ -92,7 +92,23 @@
     - Expand/collapse buttons now functional
     - "Expand All" / "Collapse All" now work
     - State persistence still functional
-  - **Note:** Full transaction editor (edit existing with splits) is stubbed - to be implemented next
+  - ✅ **IMPLEMENTED:** Full inline transaction editor (2024-12-12)
+    - Click any unlocked transaction → full inline editor appears
+    - Shows date, ref, memo, current account (read-only), and offset entries
+    - Supports simple transactions (single offset) and split transactions (multiple entries)
+    - Auto-balance calculation with visual indicator
+    - Add/remove split entries dynamically
+    - Debit/Credit mutual exclusion
+    - Save updates transaction metadata (date, ref, memo)
+    - Cancel discards changes
+    - Delete with confirmation
+    - **UI Layout per spec (updated 2024-12-12):**
+      - Actions footer: Single line under entry table
+      - Left side: [Save] [Cancel] [+ Split] [Delete] buttons
+      - Right side: Debits total, Credits total, Balance (✓ green when balanced, ⚠ red when imbalanced)
+    - **Debug logging:** Added extensive logging to diagnose data loading issues
+    - **Limitation:** Currently updates only transaction metadata, not individual entries (requires additional DataService methods)
+    - Editor mirrors new entry form for consistency
 - ✅ **Consolidation updated:** `design/generated/web/screens/ledger.md` - Added transaction grouping, display modes, edit mode, locked transactions, view state persistence sections
 - ✅ **i18n updated:** Added expand/collapse, editing, balance keys to `en.ts`
 - ✅ `design/specs/web/screens/search.md` - Cleaned: removed TypeScript interfaces, component architecture, data structures, i18n keys, styling details; kept display format, export behavior, navigation (206 → 176 lines)

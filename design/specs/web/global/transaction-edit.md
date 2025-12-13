@@ -2,7 +2,11 @@
 
 **Purpose:** Reusable component for editing transactions (new or existing). The component is mode-agnostic - it doesn't know or care whether it's editing a new blank transaction or an existing one. The consumer (ledger screen, import review, etc.) provides the transaction data and handles the results.
 
-**See [Ledger Screen](../screens/ledger.md)** for screen-level concerns: where the editor appears, new entry workflow, edit mode entry/exit.
+**See [Ledger Screen](../screens/ledger.md)** for display context:
+- How editor appears in ledger (inline, aligned with table columns)
+- Column headers (not repeated within editor)
+- Visual treatment (colored border, alignment with surrounding transactions)
+- New entry vs edit mode workflows
 
 ---
 
@@ -42,18 +46,16 @@ The editor operates in one of two modes. User can switch between modes during ed
 
 Edit a transaction with two entries: the current account and one offset account.
 
-**Layout:**
-```
-Date | Ref | Memo | [Account] [|] | Debit | Credit
-```
+**Fields (in tab order):**
+1. Date (required): Date picker
+2. Ref (optional): Reference/check number
+3. Memo (optional): Transaction description
+4. Account (required): Offset account - uses **[Account Autocomplete](./account-autocomplete.md)**
+5. Split button `[|]`: Converts to split mode (enabled only when Account field is empty)
+6. Debit (one required): Amount field
+7. Credit (one required): Amount field
 
-**Fields:**
-- Date (required): Date picker
-- Ref (optional): Reference/check number
-- Memo (optional): Transaction description
-- Account (required): Offset account - uses **[Account Autocomplete](./account-autocomplete.md)**
-- Split button `[|]`: Converts to split mode (enabled only when Account field is empty)
-- Debit/Credit (one required): Amount fields
+**Note:** The consumer (e.g., ledger screen) determines visual layout and alignment. See [Ledger Screen](../screens/ledger.md) for how fields are positioned within the table structure.
 
 **Validation:**
 - Date must be valid
@@ -69,18 +71,26 @@ Date | Ref | Memo | [Account] [|] | Debit | Credit
 
 Edit a transaction with multiple entries: the current account and multiple offset accounts.
 
-**Layout:**
-```
-Main transaction line:
-Date | Ref | Memo | [Current Account (disabled)] | Debit | Credit
+**Main Transaction Fields:**
+1. Date (required): Date picker
+2. Ref (optional): Reference/check number
+3. Memo (optional): Transaction description
+4. Current Account (display only): Disabled/grayed, shows account being viewed
+5. Debit (one required): Amount for current account
+6. Credit (one required): Amount for current account
 
-Split rows (one or more):
-Note | [Account] | Debit | Credit | [×]
-```
+**Split Entry Fields (repeating):**
+1. Note (optional): Description for this entry
+2. Account (required): Offset account with autocomplete
+3. Debit (one required): Amount field
+4. Credit (one required): Amount field
+5. Remove `[×]`: Button to delete this split (mouse-only)
 
 **Entry to Split Mode:**
 - Click split button `[|]` (when Account field is empty in simple mode)
 - OR: Component receives transaction with 3+ entries
+
+**Note:** See [Ledger Screen](../screens/ledger.md) for how split fields are positioned and aligned within the table structure.
 
 **When Entering Split Mode:**
 - Current Account is entered into the account field of the main line (disabled/grayed out)

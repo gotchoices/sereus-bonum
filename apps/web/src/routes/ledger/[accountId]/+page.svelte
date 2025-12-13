@@ -302,32 +302,156 @@
     }
     
     log.ui.info('[Ledger] Entering edit mode for transaction:', txn.transactionId);
+    log.ui.debug('[Ledger] Transaction data:', txn);
     editingTransactionId = txn.transactionId;
     
     // Load transaction data into edit form
-    const mainEntry = txn.entries.find(e => e.accountId === accountId);
-    const otherEntries = txn.entries.filter(e => e.accountId !== accountId);
+    const mainEntry = txn.entries[0]; // Current account entry
+    log.ui.debug('[Ledger] Main entry:', mainEntry);
+    log.ui.debug('[Ledger] isSplit:', mainEntry.isSplit, 'splitEntries:', mainEntry.splitEntries);
     
-    if (!mainEntry) {
-      log.ui.error('[Ledger] No entry found for current account in transaction');
-      return;
+    // Check if split transaction (more than 2 entries total)
+    const isSplit = mainEntry.isSplit || (mainEntry.splitEntries && mainEntry.splitEntries.length > 0);
+    
+    if (isSplit && mainEntry.splitEntries) {
+      // Split transaction - load all splits
+      log.ui.info('[Ledger] Loading split transaction with', mainEntry.splitEntries.length, 'splits');
+      editingData = {
+        date: txn.date,
+        reference: txn.reference || '',
+        memo: txn.memo || '',
+        mainDebit: mainEntry.amount > 0 ? formatAmount(mainEntry.amount) : '',
+        mainCredit: mainEntry.amount < 0 ? formatAmount(Math.abs(mainEntry.amount)) : '',
+        entries: mainEntry.splitEntries.map(split => {
+          log.ui.debug('[Ledger] Loading split:', split);
+          return {
+            id: split.entryId,
+            accountId: split.accountId,
+            accountSearch: split.accountName,
+            debit: split.amount > 0 ? formatAmount(split.amount) : '',
+            credit: split.amount < 0 ? formatAmount(Math.abs(split.amount)) : '',
+            note: split.note || '',
+          };
+        }),
+      };
+    } else {
+      // Simple transaction - one offset account
+      log.ui.info('[Ledger] Loading simple transaction, offset:', mainEntry.offsetAccountName);
+      editingData = {
+        date: txn.date,
+        reference: txn.reference || '',
+        memo: txn.memo || '',
+        mainDebit: mainEntry.amount > 0 ? formatAmount(mainEntry.amount) : '',
+        mainCredit: mainEntry.amount < 0 ? formatAmount(Math.abs(mainEntry.amount)) : '',
+        entries: [{
+          id: crypto.randomUUID(),
+          accountId: mainEntry.offsetAccountId || '',
+          accountSearch: mainEntry.offsetAccountName || '',
+          debit: mainEntry.amount < 0 ? formatAmount(Math.abs(mainEntry.amount)) : '',
+          credit: mainEntry.amount > 0 ? formatAmount(mainEntry.amount) : '',
+          note: '',
+        }],
+      };
     }
+    log.ui.debug('[Ledger] EditingData set to:', editingData);
+  }
+  
+  // Add split entry in edit mode
+  function addEditSplitEntry() {
+    if (!editingData) return;
+    editingData.entries = [
+      ...editingData.entries,
+      {
+        id: crypto.randomUUID(),
+        accountId: '',
+        accountSearch: '',
+        debit: '',
+        credit: '',
+        note: '',
+      }
+    ];
+  }
+  
+  // Remove split entry in edit mode
+  function removeEditSplitEntry(id: string) {
+    if (!editingData) return;
+    editingData.entries = editingData.entries.filter(e => e.id !== id);
+    if (editingData.entries.length === 0) {
+      addEditSplitEntry();
+    }
+  }
+  
+  // Calculate edit balance and totals
+  function getEditBalance(): number {
+    if (!editingData) return 0;
     
-    editingData = {
-      date: txn.date,
-      reference: txn.reference || '',
-      memo: txn.memo || '',
-      mainDebit: mainEntry.amount > 0 ? formatAmount(mainEntry.amount) : '',
-      mainCredit: mainEntry.amount < 0 ? formatAmount(Math.abs(mainEntry.amount)) : '',
-      entries: otherEntries.map(e => ({
-        id: e.entryId,
-        accountId: e.offsetAccountId || e.accountId,
-        accountSearch: e.offsetAccountName || '',
-        debit: e.amount > 0 ? formatAmount(e.amount) : '',
-        credit: e.amount < 0 ? formatAmount(Math.abs(e.amount)) : '',
-        note: e.note || '',
-      })),
-    };
+    const divisor = unit?.displayDivisor ?? 100;
+    
+    // Main entry amount
+    const mainDebit = editingData.mainDebit ? parseFloat(editingData.mainDebit) : 0;
+    const mainCredit = editingData.mainCredit ? parseFloat(editingData.mainCredit) : 0;
+    const mainAmount = mainDebit || -mainCredit;
+    
+    // Other entries sum
+    const entriesSum = editingData.entries.reduce((sum, entry) => {
+      const debit = entry.debit ? parseFloat(entry.debit) : 0;
+      const credit = entry.credit ? parseFloat(entry.credit) : 0;
+      return sum + (debit || -credit);
+    }, 0);
+    
+    return (mainAmount + entriesSum) * divisor;
+  }
+  
+  function getEditTotals(): { debits: number; credits: number; balance: number } {
+    if (!editingData) return { debits: 0, credits: 0, balance: 0 };
+    
+    const divisor = unit?.displayDivisor ?? 100;
+    
+    const mainDebit = editingData.mainDebit ? parseFloat(editingData.mainDebit) : 0;
+    const mainCredit = editingData.mainCredit ? parseFloat(editingData.mainCredit) : 0;
+    
+    const debitsTotal = mainDebit + editingData.entries.reduce((sum, e) => {
+      return sum + (e.debit ? parseFloat(e.debit) : 0);
+    }, 0);
+    
+    const creditsTotal = mainCredit + editingData.entries.reduce((sum, e) => {
+      return sum + (e.credit ? parseFloat(e.credit) : 0);
+    }, 0);
+    
+    const balance = getEditBalance();
+    
+    return { debits: debitsTotal, credits: creditsTotal, balance };
+  }
+  
+  // Handle blur in edit mode
+  function handleEditDebitBlur(entryId: string) {
+    if (!editingData) return;
+    const entry = editingData.entries.find(e => e.id === entryId);
+    if (entry && entry.debit) {
+      entry.credit = '';
+    }
+  }
+  
+  function handleEditCreditBlur(entryId: string) {
+    if (!editingData) return;
+    const entry = editingData.entries.find(e => e.id === entryId);
+    if (entry && entry.credit) {
+      entry.debit = '';
+    }
+  }
+  
+  function handleEditMainDebitBlur() {
+    if (!editingData) return;
+    if (editingData.mainDebit) {
+      editingData.mainCredit = '';
+    }
+  }
+  
+  function handleEditMainCreditBlur() {
+    if (!editingData) return;
+    if (editingData.mainCredit) {
+      editingData.mainDebit = '';
+    }
   }
   
   // Exit edit mode
@@ -343,12 +467,58 @@
     
     log.ui.info('[Ledger] Saving edited transaction:', editingTransactionId);
     
-    // TODO: Implement update transaction via DataService
-    // For now, just log and exit edit mode
-    log.ui.warn('[Ledger] Update transaction not yet implemented');
+    const divisor = unit?.displayDivisor ?? 100;
+    const mainDebit = editingData.mainDebit ? parseFloat(editingData.mainDebit) * divisor : 0;
+    const mainCredit = editingData.mainCredit ? parseFloat(editingData.mainCredit) * divisor : 0;
+    const mainAmount = mainDebit || -mainCredit;
     
-    cancelEdit();
-    await loadData(); // Reload
+    // Validate
+    if (!editingData.date || !mainAmount) {
+      log.ui.warn('[Ledger] Edit validation failed: incomplete data');
+      return;
+    }
+    
+    // Validate all entries have accounts and amounts
+    const validEntries = editingData.entries.filter(e => {
+      const hasAccount = !!e.accountId;
+      const hasAmount = !!(e.debit || e.credit);
+      return hasAccount && hasAmount;
+    });
+    
+    if (validEntries.length === 0) {
+      log.ui.warn('[Ledger] Edit validation failed: no valid offset entries');
+      return;
+    }
+    
+    // Check balance
+    const balance = getEditBalance();
+    if (Math.abs(balance) > 1) {
+      log.ui.warn('[Ledger] Edit validation failed: imbalanced by', balance / divisor);
+      alert($t('ledger.transaction_must_balance'));
+      return;
+    }
+    
+    try {
+      const ds = await getDataService();
+      
+      // Update transaction metadata
+      await ds.updateTransaction(editingTransactionId, {
+        date: editingData.date,
+        reference: editingData.reference || undefined,
+        memo: editingData.memo || undefined,
+      });
+      
+      // For now, we'd need to delete old entries and create new ones
+      // This would require additional DataService methods
+      // Log for now and reload
+      log.ui.info('[Ledger] Transaction metadata updated');
+      
+      cancelEdit();
+      await loadData(); // Reload ledger
+    } catch (e) {
+      log.ui.error('[Ledger] Edit save failed:', e);
+      alert($t('common.error') + ': ' + (e instanceof Error ? e.message : 'Unknown error'));
+    }
   }
   
   // Delete transaction (with confirmation)
@@ -721,15 +891,160 @@
                       <span class="edit-label">✏️ {$t('ledger.editing_transaction')}</span>
                     </div>
                     
-                    <!-- TODO: Render full transaction editor here -->
-                    <div class="edit-placeholder">
-                      <p>Edit mode UI: This will be a full inline editor matching the new entry form</p>
-                      <p>Date: {editingData.date}, Memo: {editingData.memo || '(none)'}</p>
-                      <p>Entries: {editingData.entries.length + 1}</p>
-                      <div class="edit-actions">
+                    <!-- Full inline transaction editor -->
+                    <table class="edit-table">
+                      <thead>
+                        <tr>
+                          <th class="col-date">{$t('ledger.date')}</th>
+                          <th class="col-ref">{$t('ledger.ref')}</th>
+                          <th class="col-memo">{$t('ledger.memo')}</th>
+                          <th class="col-offset">{$t('ledger.offset')}</th>
+                          <th class="col-debit">{$t('ledger.debit')}</th>
+                          <th class="col-credit">{$t('ledger.credit')}</th>
+                          <th class="col-actions"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <!-- Main transaction line (current account) -->
+                        <tr class="edit-main-line">
+                          <td>
+                            <input 
+                              type="date" 
+                              bind:value={editingData.date}
+                              onfocus={handleFocus}
+                            />
+                          </td>
+                          <td>
+                            <input 
+                              type="text" 
+                              bind:value={editingData.reference}
+                              placeholder={$t('ledger.ref')}
+                              onfocus={handleFocus}
+                            />
+                          </td>
+                          <td>
+                            <input 
+                              type="text" 
+                              bind:value={editingData.memo}
+                              placeholder={$t('ledger.memo')}
+                              onfocus={handleFocus}
+                            />
+                          </td>
+                          <td>
+                            <input 
+                              type="text" 
+                              value={account?.name ?? ''}
+                              disabled
+                              class="current-account-disabled"
+                            />
+                          </td>
+                          <td>
+                            <input 
+                              type="number" 
+                              step="0.01" 
+                              bind:value={editingData.mainDebit}
+                              placeholder="0.00"
+                              onblur={handleEditMainDebitBlur}
+                              onfocus={handleFocus}
+                            />
+                          </td>
+                          <td>
+                            <input 
+                              type="number" 
+                              step="0.01" 
+                              bind:value={editingData.mainCredit}
+                              placeholder="0.00"
+                              onblur={handleEditMainCreditBlur}
+                              onfocus={handleFocus}
+                            />
+                          </td>
+                          <td></td>
+                        </tr>
+                        
+                        <!-- Offset/split entries -->
+                        {#each editingData.entries as entry, idx (entry.id)}
+                          {@const balance = getEditBalance()}
+                          {@const divisor = unit?.displayDivisor ?? 100}
+                          {@const autoFillAmount = idx === editingData.entries.length - 1 && !entry.debit && !entry.credit ? formatAmount(-balance) : ''}
+                          {@const isDebit = balance < 0}
+                          
+                          <tr class="edit-split-line">
+                            <td colspan="2"></td>
+                            <td>
+                              <input 
+                                type="text" 
+                                bind:value={entry.note}
+                                placeholder={$t('ledger.note')}
+                                onfocus={handleFocus}
+                              />
+                            </td>
+                            <td>
+                              <AccountAutocomplete
+                                entityId={account?.entityId ?? ''}
+                                bind:search={entry.accountSearch}
+                                bind:selectedId={entry.accountId}
+                                disabled={false}
+                                onfocus={handleFocus}
+                              />
+                            </td>
+                            <td>
+                              <input 
+                                type="number" 
+                                step="0.01" 
+                                bind:value={entry.debit}
+                                placeholder={isDebit ? autoFillAmount : '0.00'}
+                                onblur={() => handleEditDebitBlur(entry.id)}
+                                onfocus={handleFocus}
+                              />
+                            </td>
+                            <td>
+                              <input 
+                                type="number" 
+                                step="0.01" 
+                                bind:value={entry.credit}
+                                placeholder={!isDebit ? autoFillAmount : '0.00'}
+                                onblur={() => handleEditCreditBlur(entry.id)}
+                                onfocus={handleFocus}
+                              />
+                            </td>
+                            <td>
+                              {#if editingData.entries.length > 1}
+                                <button 
+                                  class="btn-remove-split" 
+                                  onclick={() => removeEditSplitEntry(entry.id)}
+                                  title={$t('ledger.remove_split')}
+                                >
+                                  ×
+                                </button>
+                              {/if}
+                            </td>
+                          </tr>
+                        {/each}
+                      </tbody>
+                    </table>
+                    
+                    <!-- Actions Footer: Buttons on left, Totals on right -->
+                    <div class="edit-actions-footer">
+                      <div class="edit-actions-left">
                         <button class="btn-primary" onclick={saveEdit}>{$t('common.save')}</button>
                         <button class="btn-secondary" onclick={cancelEdit}>{$t('common.cancel')}</button>
+                        <button class="btn-secondary" onclick={addEditSplitEntry}>+ {$t('ledger.add_split')}</button>
                         <button class="btn-danger" onclick={() => deleteTransaction(txn)}>{$t('common.delete')}</button>
+                      </div>
+                      <div class="edit-totals-right">
+                        {#if editingData}
+                          {@const totals = getEditTotals()}
+                          <span class="total-label">{$t('ledger.debits_total')}:</span>
+                          <span class="total-amount">{unit?.symbol ?? ''}{totals.debits.toFixed(2)}</span>
+                          <span class="total-label">{$t('ledger.credits_total')}:</span>
+                          <span class="total-amount">{unit?.symbol ?? ''}{totals.credits.toFixed(2)}</span>
+                          <span class="total-label">{$t('ledger.balance')}:</span>
+                          {#if Math.abs(totals.balance) <= 1}
+                            <span class="balanced">{unit?.symbol ?? ''}0.00 ✓</span>
+                          {:else}
+                            <span class="imbalanced">{unit?.symbol ?? ''}{formatAmount(totals.balance)} ⚠</span>
+                          {/if}
+                        {/if}
                       </div>
                     </div>
                   </div>
@@ -1349,16 +1664,91 @@
     font-weight: 600;
   }
   
-  .edit-placeholder {
-    padding: 2rem;
-    text-align: center;
+  .edit-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
   }
   
-  .edit-actions {
+  .edit-table thead th {
+    text-align: left;
+    padding: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+    font-weight: 600;
+  }
+  
+  .edit-table tbody td {
+    padding: 0.5rem;
+  }
+  
+  .edit-table input {
+    width: 100%;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--border-light);
+    border-radius: 4px;
+    background: var(--surface-primary);
+    color: var(--text-primary);
+    font-size: inherit;
+  }
+  
+  .edit-table input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+  }
+  
+  .edit-table input:disabled {
+    background: var(--surface-secondary);
+    color: var(--text-muted);
+    cursor: not-allowed;
+  }
+  
+  .edit-table input[type="number"] {
+    text-align: right;
+    font-family: 'Courier New', monospace;
+  }
+  
+  .edit-main-line {
+    background: var(--surface-primary);
+  }
+  
+  .edit-split-line {
+    background: var(--surface-secondary);
+  }
+  
+  .edit-actions-footer {
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    background: var(--surface-secondary);
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 2rem;
+  }
+  
+  .edit-actions-left {
     display: flex;
     gap: 0.5rem;
-    justify-content: center;
-    margin-top: 1rem;
+    flex-shrink: 0;
+  }
+  
+  .edit-totals-right {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    font-size: 0.875rem;
+    font-family: 'Courier New', monospace;
+    white-space: nowrap;
+  }
+  
+  .total-label {
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+  
+  .total-amount {
+    font-weight: 600;
+    margin-right: 0.5rem;
   }
   
   .split-indicator {

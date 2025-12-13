@@ -81,13 +81,25 @@ Primary transaction entry interface for an account. Displays existing transactio
 - Click on any transaction line (if not locked)
 - Expands transaction into edit container (blue border)
 - Loads transaction data into edit form
-- Shows: ✏️ icon, "Save", "Cancel", "Delete" buttons
+- Shows: ✏️ icon, full inline editor with entry table and actions footer
 
 **Edit Container:**
 - Full-width inline editor at transaction's position in table
-- Blue border indicates active edit mode
-- Contains transaction editor component (currently placeholder)
-- Future: Full split editor with same behavior as new entry mode
+- Blue border (2px solid primary-color) indicates active edit mode
+- Contains transaction editor matching new entry form
+- **Main line:** Date, Ref, Memo, Current Account (disabled), Debit, Credit
+- **Split lines:** Note, Account (autocomplete), Debit, Credit, Remove (×) button
+- **Actions footer (single line):**
+  - **Left side:** [Save] [Cancel] [+ Split] [Delete] buttons
+  - **Right side:** Debits total, Credits total, Balance (✓ green or ⚠ red)
+
+**Editing Behavior:**
+- Simple transactions: Shows main entry + one offset entry
+- Split transactions: Shows main entry + all split entries (always expanded in edit mode)
+- Can add/remove splits during editing
+- Auto-balance calculation with visual feedback
+- Debit/Credit mutual exclusion via blur handlers
+- Auto-select text on focus for easy editing
 
 **Exiting Edit Mode:**
 - Save → Updates transaction, reloads ledger
@@ -99,6 +111,10 @@ Primary transaction entry interface for an account. Displays existing transactio
 - Dialog: "Delete this transaction? This cannot be undone."
 - [Cancel] [Delete] buttons
 - Only shown for unlocked transactions
+
+**Debug Logging:**
+- Extensive logging added to diagnose data loading issues
+- Logs transaction structure, split entries, loaded data
 
 ### View State Persistence
 
