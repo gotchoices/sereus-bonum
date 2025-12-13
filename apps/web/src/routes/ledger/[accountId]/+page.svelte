@@ -602,19 +602,20 @@
     {/if}
   </header>
   
-  <!-- Ledger Table -->
-  <div class="ledger-container">
-    {#if loading}
-      <div class="loading-state">
-        <span class="spinner"></span>
-        <span>{$t('common.loading')}</span>
-      </div>
-    {:else if error}
-      <div class="error-state">
-        <p>{$t('common.error')}: {error}</p>
-      </div>
-    {:else}
+  <!-- Column Headers (fixed, outside scroll area) -->
+  {#if !loading && !error}
+    <div class="column-headers">
       <table class="ledger-table">
+        <colgroup>
+          <col class="col-expand">
+          <col class="col-date">
+          <col class="col-ref">
+          <col class="col-memo">
+          <col class="col-offset">
+          <col class="col-debit">
+          <col class="col-credit">
+          <col class="col-balance">
+        </colgroup>
         <thead>
           <tr>
             <th class="col-expand">
@@ -635,6 +636,33 @@
             <th class="col-balance">{$t('ledger.running_balance')}</th>
           </tr>
         </thead>
+      </table>
+    </div>
+  {/if}
+  
+  <!-- Ledger Table (scrollable transactions) -->
+  <div class="ledger-container">
+    {#if loading}
+      <div class="loading-state">
+        <span class="spinner"></span>
+        <span>{$t('common.loading')}</span>
+      </div>
+    {:else if error}
+      <div class="error-state">
+        <p>{$t('common.error')}: {error}</p>
+      </div>
+    {:else}
+      <table class="ledger-table">
+        <colgroup>
+          <col class="col-expand">
+          <col class="col-date">
+          <col class="col-ref">
+          <col class="col-memo">
+          <col class="col-offset">
+          <col class="col-debit">
+          <col class="col-credit">
+          <col class="col-balance">
+        </colgroup>
         <tbody>
           {#if transactions.length === 0}
             <tr class="empty-row">
@@ -1025,7 +1053,29 @@
     font-family: 'Courier New', monospace;
   }
   
-  /* Ledger Container */
+  /* Column Headers (fixed, outside scroll area) */
+  .column-headers {
+    background: var(--surface-primary);
+    flex-shrink: 0;
+    border-bottom: 2px solid var(--border-color);
+  }
+  
+  .column-headers .ledger-table {
+    margin-bottom: 0;
+  }
+  
+  .column-headers th {
+    background: var(--surface-primary);
+    text-align: left;
+    padding: 0.75rem 1rem;
+    border-bottom: none;
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    text-transform: uppercase;
+  }
+  
+  /* Ledger Container (scrollable) */
   .ledger-container {
     flex: 1;
     overflow-y: auto;
@@ -1037,24 +1087,7 @@
     width: 100%;
     border-collapse: collapse;
     font-size: 0.875rem;
-  }
-  
-  .ledger-table thead {
-    position: sticky;
-    top: 0;
-    background: var(--surface-primary);
-    z-index: 10;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  }
-  
-  .ledger-table th {
-    text-align: left;
-    padding: 0.75rem 1rem;
-    border-bottom: 2px solid var(--border-color);
-    font-weight: 600;
-    color: var(--text-muted);
-    font-size: 0.8125rem;
-    text-transform: uppercase;
+    table-layout: fixed;
   }
   
   .ledger-table td {
