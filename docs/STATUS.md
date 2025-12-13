@@ -14,7 +14,7 @@
 - ✅ Transaction Search (Phase 1: Browser with export)
 - ⬜ Transaction Search (Phase 2: Query builder)
 - ✅ Settings screen (theme, dates, account display, sign reversal)
-- ⬜ Import Books (GnuCash)
+- 🔄 Import Books (GnuCash) - Parser complete, account/transaction creation pending
 
 ---
 
@@ -218,6 +218,17 @@ Features implemented:
 
 ### Medium Priority (Polish & UX)
 
+#### ⬜ Virtual Scrolling for Large Ledgers (Performance)
+**Trigger:** If ledgers with 1,000+ entries prove slow
+- **Problem:** Current design renders ALL transactions in DOM (poor performance beyond ~1,000 entries)
+- **Solution:** Implement virtual scrolling/windowing (only render visible rows + buffer)
+- **Library:** TanStack Virtual (recommended)
+  - Handles variable/dynamic heights (collapsed vs expanded vs edit mode)
+  - Framework-agnostic, well-tested, ~5KB
+  - Better than custom implementation for this complexity
+- **Trade-off:** Added complexity vs. massive performance gain
+- **Test first:** Import large GnuCash books to measure actual impact before implementing
+
 #### ⬜ Collapsible Global Menu
 - Hamburger toggle to hide/show sidebar
 - More screen space for data-heavy views
@@ -292,13 +303,30 @@ From story 04 (Alt D):
 - ✅ XML format research
 - ✅ Parser prototype (`test/manual/gnucash-parser.ts`)
 - ✅ Format documentation (`design/specs/import-books.md`)
+- ✅ **Import Strategy Spec** (`design/specs/web/global/import.md`)
+  - Two entry points: "Import Books" (new entity) and "Import Transactions" (existing entity)
+  - Single reusable import engine
+  - GUID-based idempotence for GnuCash
+- ✅ **Import Module Created** (`apps/web/src/lib/import/`)
+  - `types.ts`: TypeScript interfaces
+  - `gnucash-parser.ts`: GnuCash XML parser (accounts, transactions, commodities)
+  - `import-service.ts`: Main import orchestration
+  - `index.ts`: Public API
+- ✅ **Import UI** (`apps/web/src/routes/import/+page.svelte`)
+  - File upload with drag & drop
+  - Progress indicator
+  - Real GnuCash parsing (uncompressed XML)
+  - Account/transaction count display
+- ⬜ **Next Steps:**
+  - Account creation with DataService
+  - Transaction creation with DataService
+  - Account mapping UI (for existing entity imports)
+  - Duplicate detection (GUID-based)
+  - Gzip decompression support
 - ⬜ Handle scheduled transactions
 - ⬜ Handle price database (multi-currency/securities)
 - ⬜ Handle lots (cost basis tracking)
 - ⬜ SQLite format support
-- ⬜ Move to production library (`packages/import/`)
-- ⬜ Build account mapping UI
-- ⬜ Implement import workflow
 
 ### ⬜ Transaction Import (CSV, QIF, QFX, OFX)
 - ⬜ CSV with column mapping
