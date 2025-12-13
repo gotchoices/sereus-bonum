@@ -9,8 +9,8 @@
 Primary transaction entry interface for an account. Optimized for keyboard-centric rapid data entry with minimal mouse interaction.
 
 **References:**
-- **[Transaction Editor](../global/transaction-edit.md):** Reusable editor component for new entry and editing
-- **[Account Autocomplete](../global/account-autocomplete.md):** Detailed specs for account selection behavior
+- **[Transaction Editor](../components/transaction-edit.md):** Reusable editor component for new entry and editing
+- **[Account Autocomplete](../components/account-autocomplete.md):** Detailed specs for account selection behavior
 
 ---
 
@@ -64,7 +64,7 @@ Entries show offset account names. Full path can be long:
 </a>
 ```
 ## Offset Account Autocomplete
-Any entry that accepts an account uses [auto complete](../global/account-autocomplete.md).
+Any entry that accepts an account uses [auto complete](../components/account-autocomplete.md).
 
 ## New Transaction Entry
 
@@ -90,7 +90,7 @@ This ensures the blank entry is always at the natural insertion point for the cu
 - **Mouse:** Click any field → activates transaction editor
 - Editor appears in-place (expands from the blank row)
 - Same component as editing existing transactions
-- See **[Transaction Editor](../global/transaction-edit.md)** for editor behavior
+- See **[Transaction Editor](../components/transaction-edit.md)** for editor behavior
 
 **After save:**
 - New transaction created in database
@@ -133,7 +133,7 @@ Expand to show child entries:
 
 ## Transaction Entry
 
-See **[Transaction Editor](../global/transaction-edit.md)** for complete details on:
+See **[Transaction Editor](../components/transaction-edit.md)** for complete details on:
 - Simple mode (single offset account)
 - Split mode (multiple accounts, debits, credits)
 - Tab flow and keyboard navigation
@@ -243,7 +243,7 @@ It is also distinguished by a blue border while in editing mode.
 - **Split transactions:** Always show multi-line in edit mode (all entries visible), regardless of collapsed/expanded state in view
 - **Split button available:** Can convert simple transaction to split during edit (+ Split button)
 - Same keyboard navigation as new entry
-- See **[Transaction Editor](../global/transaction-edit.md)** for complete editor behavior
+- See **[Transaction Editor](../components/transaction-edit.md)** for complete editor behavior
 
 **Actions:**
 - **Save:** Validates and saves changes, exits edit mode

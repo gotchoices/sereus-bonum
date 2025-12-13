@@ -7,8 +7,8 @@
 - Story 03 (Transaction Entry)
 - Story 02 (GnuCash Import, step 9.7)
 - `design/specs/web/screens/ledger.md`
-- `design/specs/web/global/transaction-edit.md`
-- `design/specs/web/global/account-autocomplete.md`
+- `design/specs/web/components/transaction-edit.md`
+- `design/specs/web/components/account-autocomplete.md`
 
 ---
 
@@ -273,7 +273,7 @@ The editor aligns with the ledger table columns. Fields are positioned to match 
 
 ## Transaction Editor Component
 
-Behavior defined in `design/specs/web/global/transaction-edit.md`:
+Behavior defined in `design/specs/web/components/transaction-edit.md`:
 - Two modes: Simple (one offset) and Split (multiple offsets)
 - Keyboard navigation optimized for rapid entry
 - Tab flow through fields
@@ -288,7 +288,7 @@ The editor component is mode-agnostic (doesn't know if it's new entry or edit). 
 
 ## Account Autocomplete
 
-All account input fields use the autocomplete component defined in `design/specs/web/global/account-autocomplete.md`:
+All account input fields use the autocomplete component defined in `design/specs/web/components/account-autocomplete.md`:
 
 **Features:**
 - Type to search, filters by relevance

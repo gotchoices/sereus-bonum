@@ -3,7 +3,7 @@
   "generated": "2024-12-11",
   "outputs": [
     {
-      "source": "design/specs/web/global/account-autocomplete.md",
+      "source": "design/specs/web/components/account-autocomplete.md",
       "type": "component",
       "targets": [
         {
@@ -20,7 +20,7 @@
       ]
     },
     {
-      "source": "design/specs/web/global/transaction-edit.md",
+      "source": "design/specs/web/components/transaction-edit.md",
       "type": "component",
       "targets": [
         {
