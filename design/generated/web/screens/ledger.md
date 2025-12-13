@@ -171,13 +171,18 @@ Transactions before the closed date cannot be edited.
 
 This ensures the blank entry is always at the natural insertion point.
 
+**Design:**
 ```
    | [Date   ] | [Ref] | [Memo         ] | [Account   ] [|] | [Debit  ] | [Credit ] |
 ```
+- Contains real input fields (not placeholders)
+- Fields styled subtly (muted, italic) until focused
+- Fully keyboard-accessible via Tab navigation
 
 **Behavior:**
-- Click or focus any field: Activates transaction editor
-- Editor appears inline (same table row)
+- **Keyboard:** Tab to Date field → automatically activates transaction editor
+- **Mouse:** Click any field → activates transaction editor
+- Editor expands inline (same table row)
 - Uses transaction-edit component
 - On save: Creates transaction, refreshes ledger, new blank row appears, focus moves to Date of new blank row
 - On cancel: Clears fields, blank row remains

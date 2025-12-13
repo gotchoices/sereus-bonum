@@ -395,6 +395,15 @@
     };
     log.ui.debug('[Ledger] New entry editingData:', editingData);
     log.ui.debug('[Ledger] Splits length:', editingData.splits.length);
+    
+    // Focus the date field in the editor after it renders
+    setTimeout(() => {
+      const dateInput = document.querySelector<HTMLInputElement>('.new-entry-row.edit-simple-row input[type="date"], .new-entry-row.edit-metadata-row input[type="date"]');
+      if (dateInput) {
+        dateInput.focus();
+        log.ui.debug('[Ledger] Focused date input in new entry editor');
+      }
+    }, 50);
   }
   
   // Save edit or create new
@@ -632,24 +641,33 @@
           
           <!-- New Entry Row (top position when newest first) -->
           {#if $settings.transactionSortOrder === 'newest'}
-            <!-- Blank entry row (not yet activated) -->
-            <tr 
-              class="new-entry-row blank-entry-row" 
-              onclick={activateNewEntry}
-              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activateNewEntry(); } }}
-              tabindex="0"
-              role="button"
-              aria-label={$t('ledger.enter_new_transaction')}
-            >
+            <!-- Blank entry row (keyboard-accessible with real inputs) -->
+            <tr class="new-entry-row blank-entry-row">
               <td class="col-expand"></td>
               <td class="col-date">
-                <span class="placeholder">{new Date().toISOString().split('T')[0]}</span>
+                <input 
+                  type="date" 
+                  class="blank-input"
+                  value={new Date().toISOString().split('T')[0]}
+                  onfocus={activateNewEntry}
+                  placeholder=""
+                />
               </td>
               <td class="col-ref">
-                <span class="placeholder"></span>
+                <input 
+                  type="text" 
+                  class="blank-input"
+                  onfocus={activateNewEntry}
+                  placeholder={$t('ledger.ref')}
+                />
               </td>
               <td class="col-memo">
-                <span class="placeholder">{$t('ledger.enter_new_transaction')}</span>
+                <input 
+                  type="text" 
+                  class="blank-input"
+                  onfocus={activateNewEntry}
+                  placeholder={$t('ledger.enter_new_transaction')}
+                />
               </td>
               <td class="col-offset"></td>
               <td class="col-debit"></td>
@@ -715,7 +733,7 @@
                         class="split-toggle-btn"
                         onclick={addSplitEntry}
                         title="Convert to split transaction"
-                        disabled={!editingData.splits[0].accountId}
+                        disabled={!!editingData.splits[0].accountId}
                       >
                         |
                       </button>
@@ -746,13 +764,14 @@
                   <td class="col-balance"></td>
                 </tr>
                 
-                <!-- Simple mode actions -->
+                <!-- Simple mode actions (editing existing transaction) -->
                 <tr class="edit-actions-row">
                   <td colspan="8">
                     <div class="edit-actions-container">
                       <div class="edit-actions-left">
                         <button class="btn-primary" onclick={saveEdit}>{$t('common.save')}</button>
                         <button class="btn-secondary" onclick={cancelEdit}>{$t('common.cancel')}</button>
+                        <button class="btn-secondary" onclick={addSplitEntry}>+ {$t('ledger.add_split')}</button>
                         <button class="btn-danger" onclick={() => deleteTransaction(txn.transactionId)}>{$t('common.delete')}</button>
                       </div>
                     </div>
@@ -1307,24 +1326,33 @@
               </tr>
             {/if}
           {:else}
-            <!-- Blank entry row (not yet activated) -->
-            <tr 
-              class="new-entry-row blank-entry-row" 
-              onclick={activateNewEntry}
-              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activateNewEntry(); } }}
-              tabindex="0"
-              role="button"
-              aria-label={$t('ledger.enter_new_transaction')}
-            >
+            <!-- Blank entry row (keyboard-accessible with real inputs) -->
+            <tr class="new-entry-row blank-entry-row">
               <td class="col-expand"></td>
               <td class="col-date">
-                <span class="placeholder">{new Date().toISOString().split('T')[0]}</span>
+                <input 
+                  type="date" 
+                  class="blank-input"
+                  value={new Date().toISOString().split('T')[0]}
+                  onfocus={activateNewEntry}
+                  placeholder=""
+                />
               </td>
               <td class="col-ref">
-                <span class="placeholder"></span>
+                <input 
+                  type="text" 
+                  class="blank-input"
+                  onfocus={activateNewEntry}
+                  placeholder={$t('ledger.ref')}
+                />
               </td>
               <td class="col-memo">
-                <span class="placeholder">{$t('ledger.enter_new_transaction')}</span>
+                <input 
+                  type="text" 
+                  class="blank-input"
+                  onfocus={activateNewEntry}
+                  placeholder={$t('ledger.enter_new_transaction')}
+                />
               </td>
               <td class="col-offset"></td>
               <td class="col-debit"></td>
@@ -1452,7 +1480,7 @@
   }
   
   .col-date {
-    width: 110px;
+    width: 135px; /* Increased for date picker widget */
   }
   
   .col-ref {
@@ -1468,9 +1496,13 @@
   }
   
   .col-debit,
-  .col-credit,
+  .col-credit {
+    width: 160px; /* Increased for 4 more digits */
+    text-align: right;
+  }
+  
   .col-balance {
-    width: 120px;
+    width: 160px;
     text-align: right;
   }
   
@@ -1801,21 +1833,37 @@
   
   /* Blank entry row */
   .blank-entry-row {
-    cursor: pointer;
     background: var(--surface-secondary);
     border-top: 2px dashed var(--border-color);
   }
   
-  .blank-entry-row:hover,
-  .blank-entry-row:focus {
+  .blank-entry-row:hover {
     background: var(--surface-hover);
-    outline: 2px solid var(--primary-color);
-    outline-offset: -2px;
   }
   
-  .blank-entry-row .placeholder {
+  /* Blank entry row inputs - subtle styling */
+  .blank-input {
+    width: 100%;
+    padding: 0.375rem 0.5rem;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
     color: var(--text-muted);
     font-style: italic;
+    transition: all 0.15s;
+  }
+  
+  .blank-input:hover {
+    border-color: var(--border-light);
+    background: var(--surface-primary);
+  }
+  
+  .blank-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    background: var(--surface-primary);
+    color: var(--text-primary);
+    font-style: normal;
   }
   
   .new-entry-row {

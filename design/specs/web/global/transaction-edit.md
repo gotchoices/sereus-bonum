@@ -51,17 +51,28 @@ Edit a transaction with two entries: the current account and one offset account.
 2. Ref (optional): Reference/check number
 3. Memo (optional): Transaction description
 4. Account (required): Offset account - uses **[Account Autocomplete](./account-autocomplete.md)**
-5. Split button `[|]`: Converts to split mode (enabled only when Account field is empty)
+5. Split button `[|]`: Inline with Account field (NEW entry only, enabled when Account is empty)
 6. Debit (one required): Amount field
 7. Credit (one required): Amount field
 
 **Note:** The consumer (e.g., ledger screen) determines visual layout and alignment. See [Ledger Screen](../screens/ledger.md) for how fields are positioned within the table structure.
+
+**Converting to Split Mode:**
+- **During NEW entry:** Split button `[|]` appears inline with Account field (enabled when Account is empty)
+- **During EDIT:** `[+ Add Split]` button appears in actions row (always enabled)
+- Both convert the transaction from simple to split mode
 
 **Validation:**
 - Date must be valid
 - Account must be selected (not just typed text)
 - Exactly one of Debit OR Credit must have a value (not both, not neither)
 - When one field has a value and user tabs away from it, the other field is cleared
+
+**Actions (Edit Mode):**
+- `[Save]` button: Commits changes
+- `[Cancel]` button: Discards changes
+- `[+ Add Split]` button: Converts to split mode
+- `[Delete]` button: Deletes transaction (confirmation required)
 
 **Tab Flow:**
 - Date → Ref → Memo → Account → Debit → Credit

@@ -79,13 +79,16 @@ This ensures the blank entry is always at the natural insertion point for the cu
 ### Blank Row Behavior
 
 **Initial state:**
-- Empty fields: Date (defaults to today), Ref, Memo, Account, Debit, Credit
+- Contains real input fields: Date (defaults to today), Ref, Memo
+- Fields are subtle (muted, italic) until focused
 - Appears as a single line at top or bottom (depending on sort order)
 - Not stored in the backend until populated
+- Fully keyboard-accessible: Tab into Date field to begin entry
 
 **User interaction:**
-- Focus/click on any field in blank row → Activates transaction editor on blank transaction
-- Editor appears in-place (same location, bottom of ledger)
+- **Keyboard:** Tab to Date field → automatically activates transaction editor
+- **Mouse:** Click any field → activates transaction editor
+- Editor appears in-place (expands from the blank row)
 - Same component as editing existing transactions
 - See **[Transaction Editor](../global/transaction-edit.md)** for editor behavior
 
