@@ -10,6 +10,7 @@
   import { loadViewState, saveViewState } from '$lib/stores/viewState';
   import { getDataService, type LedgerEntry, type Account, type Unit, type AccountGroup, type Entity } from '$lib/data';
   import AccountAutocomplete from '$lib/components/AccountAutocomplete.svelte';
+  import TransactionEditor from '$lib/components/TransactionEditor.svelte';
   import { formatDate as formatDateUtil } from '$lib/utils/formatDate';
   
   // Route param
@@ -370,8 +371,15 @@
   
   // Activate new entry mode
   function activateNewEntry() {
-    if (editingTransactionId) {
-      log.ui.warn('[Ledger] Already editing:', editingTransactionId);
+    // If already in new entry mode with data, just silently return (re-focusing is fine)
+    if (editingTransactionId === 'new' && isNewEntry && editingData) {
+      log.ui.debug('[Ledger] Already in new entry mode, ignoring duplicate activation');
+      return;
+    }
+    
+    // If editing a different transaction, warn and block
+    if (editingTransactionId && editingTransactionId !== 'new') {
+      log.ui.warn('[Ledger] Already editing transaction:', editingTransactionId);
       return;
     }
     
@@ -641,39 +649,62 @@
           
           <!-- New Entry Row (top position when newest first) -->
           {#if $settings.transactionSortOrder === 'newest'}
-            <!-- Blank entry row (keyboard-accessible with real inputs) -->
-            <tr class="new-entry-row blank-entry-row">
-              <td class="col-expand"></td>
-              <td class="col-date">
-                <input 
-                  type="date" 
-                  class="blank-input"
-                  value={new Date().toISOString().split('T')[0]}
-                  onfocus={activateNewEntry}
-                  placeholder=""
-                />
-              </td>
-              <td class="col-ref">
-                <input 
-                  type="text" 
-                  class="blank-input"
-                  onfocus={activateNewEntry}
-                  placeholder={$t('ledger.ref')}
-                />
-              </td>
-              <td class="col-memo">
-                <input 
-                  type="text" 
-                  class="blank-input"
-                  onfocus={activateNewEntry}
-                  placeholder={$t('ledger.enter_new_transaction')}
-                />
-              </td>
-              <td class="col-offset"></td>
-              <td class="col-debit"></td>
-              <td class="col-credit"></td>
-              <td class="col-balance"></td>
-            </tr>
+            {#if isNewEntry && editingTransactionId === 'new' && editingData}
+              <!-- NEW ENTRY at top (newest first) -->
+              <TransactionEditor
+                bind:editingData={editingData}
+                {isNewEntry}
+                entityId={account?.entityId ?? ''}
+                {accountId}
+                accountName={account?.name ?? ''}
+                accountPath={getAccountPath()}
+                {unit}
+                onSave={saveEdit}
+                onCancel={cancelEdit}
+                onAddSplit={addSplitEntry}
+                onRemoveSplit={removeSplitEntry}
+                onCurrentDebitBlur={handleCurrentDebitBlur}
+                onCurrentCreditBlur={handleCurrentCreditBlur}
+                onSplitDebitBlur={handleSplitDebitBlur}
+                onSplitCreditBlur={handleSplitCreditBlur}
+                onFocus={handleFocus}
+                {getEditTotals}
+              />
+            {:else}
+              <!-- Blank entry row (keyboard-accessible with real inputs) -->
+              <tr class="new-entry-row blank-entry-row">
+                <td class="col-expand"></td>
+                <td class="col-date">
+                  <input 
+                    type="date" 
+                    class="blank-input"
+                    value={new Date().toISOString().split('T')[0]}
+                    onfocus={activateNewEntry}
+                    placeholder=""
+                  />
+                </td>
+                <td class="col-ref">
+                  <input 
+                    type="text" 
+                    class="blank-input"
+                    onfocus={activateNewEntry}
+                    placeholder={$t('ledger.ref')}
+                  />
+                </td>
+                <td class="col-memo">
+                  <input 
+                    type="text" 
+                    class="blank-input"
+                    onfocus={activateNewEntry}
+                    placeholder={$t('ledger.enter_new_transaction')}
+                  />
+                </td>
+                <td class="col-offset"></td>
+                <td class="col-debit"></td>
+                <td class="col-credit"></td>
+                <td class="col-balance"></td>
+              </tr>
+            {/if}
           {/if}
           
           {#each transactions as txn, idx (txn.transactionId)}
@@ -690,252 +721,28 @@
             
             <!-- Transaction in edit mode -->
             {#if editingTransactionId === txn.transactionId && editingData}
-              {#if editingData.splits.length === 1}
-                <!-- SIMPLE MODE: Single row entry -->
-                <tr class="edit-simple-row">
-                  <td class="col-expand"></td>
-                  <td class="col-date">
-                    <input 
-                      type="date" 
-                      bind:value={editingData.date}
-                      onfocus={handleFocus}
-                      class="edit-input"
-                    />
-                  </td>
-                  <td class="col-ref">
-                    <input 
-                      type="text" 
-                      bind:value={editingData.reference}
-                      placeholder={$t('ledger.ref')}
-                      onfocus={handleFocus}
-                      class="edit-input"
-                    />
-                  </td>
-                  <td class="col-memo">
-                    <input 
-                      type="text" 
-                      bind:value={editingData.memo}
-                      placeholder={$t('ledger.memo')}
-                      onfocus={handleFocus}
-                      class="edit-input"
-                    />
-                  </td>
-                  <td class="col-offset">
-                    <div class="simple-account-field">
-                      <AccountAutocomplete
-                        entityId={account?.entityId ?? ''}
-                        bind:value={editingData.splits[0].accountSearch}
-                        bind:selectedId={editingData.splits[0].accountId}
-                        disabled={false}
-                        onfocus={handleFocus}
-                      />
-                      <button 
-                        class="split-toggle-btn"
-                        onclick={addSplitEntry}
-                        title="Convert to split transaction"
-                        disabled={!!editingData.splits[0].accountId}
-                      >
-                        |
-                      </button>
-                    </div>
-                  </td>
-                  <td class="col-debit">
-                    <input 
-                      type="number" 
-                      step="0.01" 
-                      bind:value={editingData.currentAccountDebit}
-                      placeholder=""
-                      onblur={handleCurrentDebitBlur}
-                      onfocus={handleFocus}
-                      class="edit-input edit-amount"
-                    />
-                  </td>
-                  <td class="col-credit">
-                    <input 
-                      type="number" 
-                      step="0.01" 
-                      bind:value={editingData.currentAccountCredit}
-                      placeholder=""
-                      onblur={handleCurrentCreditBlur}
-                      onfocus={handleFocus}
-                      class="edit-input edit-amount"
-                    />
-                  </td>
-                  <td class="col-balance"></td>
-                </tr>
-                
-                <!-- Simple mode actions (editing existing transaction) -->
-                <tr class="edit-actions-row">
-                  <td colspan="8">
-                    <div class="edit-actions-container">
-                      <div class="edit-actions-left">
-                        <button class="btn-primary" onclick={saveEdit}>{$t('common.save')}</button>
-                        <button class="btn-secondary" onclick={cancelEdit}>{$t('common.cancel')}</button>
-                        <button class="btn-secondary" onclick={addSplitEntry}>+ {$t('ledger.add_split')}</button>
-                        <button class="btn-danger" onclick={() => deleteTransaction(txn.transactionId)}>{$t('common.delete')}</button>
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-              {:else}
-                <!-- SPLIT MODE: Multiple rows -->
-                <!-- Transaction metadata row -->
-                <tr class="edit-metadata-row">
-                  <td class="col-expand"></td>
-                  <td class="col-date">
-                    <input 
-                      type="date" 
-                      bind:value={editingData.date}
-                      onfocus={handleFocus}
-                      class="edit-input"
-                    />
-                  </td>
-                  <td class="col-ref">
-                    <input 
-                      type="text" 
-                      bind:value={editingData.reference}
-                      placeholder={$t('ledger.ref')}
-                      onfocus={handleFocus}
-                      class="edit-input"
-                    />
-                  </td>
-                  <td class="col-memo">
-                    <input 
-                      type="text" 
-                      bind:value={editingData.memo}
-                      placeholder={$t('ledger.memo')}
-                      onfocus={handleFocus}
-                      class="edit-input"
-                    />
-                  </td>
-                  <td class="col-offset"></td>
-                  <td class="col-debit"></td>
-                  <td class="col-credit"></td>
-                  <td class="col-balance"></td>
-                </tr>
-                
-                <!-- Current account entry row -->
-                <tr class="edit-entry-row edit-current-account">
-                  <td class="col-expand"></td>
-                  <td class="col-date"></td>
-                  <td class="col-ref"></td>
-                  <td class="col-memo"></td>
-                  <td class="col-offset">
-                    <a href="/ledger/{accountId}" class="current-account-link" title={getAccountPath()}>
-                      {account?.name ?? ''}
-                    </a>
-                  </td>
-                  <td class="col-debit">
-                    <input 
-                      type="number" 
-                      step="0.01" 
-                      bind:value={editingData.currentAccountDebit}
-                      placeholder=""
-                      onblur={handleCurrentDebitBlur}
-                      onfocus={handleFocus}
-                      class="edit-input edit-amount"
-                    />
-                  </td>
-                  <td class="col-credit">
-                    <input 
-                      type="number" 
-                      step="0.01" 
-                      bind:value={editingData.currentAccountCredit}
-                      placeholder=""
-                      onblur={handleCurrentCreditBlur}
-                      onfocus={handleFocus}
-                      class="edit-input edit-amount"
-                    />
-                  </td>
-                  <td class="col-balance"></td>
-                </tr>
-                
-                <!-- Split entry rows -->
-                {#each editingData.splits as split (split.id)}
-                  <tr class="edit-entry-row edit-split-entry">
-                    <td class="col-expand"></td>
-                    <td class="col-date"></td>
-                    <td class="col-ref"></td>
-                    <td class="col-memo">
-                      <input 
-                        type="text" 
-                        bind:value={split.note}
-                        placeholder={$t('ledger.note')}
-                        onfocus={handleFocus}
-                        class="edit-input"
-                      />
-                    </td>
-                    <td class="col-offset">
-                      <AccountAutocomplete
-                        entityId={account?.entityId ?? ''}
-                        bind:value={split.accountSearch}
-                        bind:selectedId={split.accountId}
-                        disabled={false}
-                        onfocus={handleFocus}
-                      />
-                    </td>
-                    <td class="col-debit">
-                      <input 
-                        type="number" 
-                        step="0.01" 
-                        bind:value={split.debit}
-                        placeholder=""
-                        onblur={() => handleSplitDebitBlur(split.id)}
-                        onfocus={handleFocus}
-                        class="edit-input edit-amount"
-                      />
-                    </td>
-                    <td class="col-credit">
-                      <input 
-                        type="number" 
-                        step="0.01" 
-                        bind:value={split.credit}
-                        placeholder=""
-                        onblur={() => handleSplitCreditBlur(split.id)}
-                        onfocus={handleFocus}
-                        class="edit-input edit-amount"
-                      />
-                    </td>
-                    <td class="col-balance">
-                      {#if editingData.splits.length > 1}
-                        <button 
-                          class="btn-remove-split" 
-                          onclick={() => removeSplitEntry(split.id)}
-                          title={$t('ledger.remove_split')}
-                        >
-                          ×
-                        </button>
-                      {/if}
-                    </td>
-                  </tr>
-                {/each}
-                
-                <!-- Split mode actions footer -->
-                <tr class="edit-actions-row">
-                  <td colspan="8">
-                    <div class="edit-actions-container">
-                      <div class="edit-actions-left">
-                        <button class="btn-primary" onclick={saveEdit}>{$t('common.save')}</button>
-                        <button class="btn-secondary" onclick={cancelEdit}>{$t('common.cancel')}</button>
-                        <button class="btn-secondary" onclick={addSplitEntry}>+ {$t('ledger.add_split')}</button>
-                        <button class="btn-danger" onclick={() => deleteTransaction(txn.transactionId)}>{$t('common.delete')}</button>
-                      </div>
-                      {#if true}
-                        {@const totals = getEditTotals()}
-                        <div class="edit-totals-right">
-                          <span class="total-amount">{unit?.symbol ?? ''}{totals.debits.toFixed(2)}</span>
-                          <span class="total-amount">{unit?.symbol ?? ''}{totals.credits.toFixed(2)}</span>
-                          {#if Math.abs(totals.balance) <= 1}
-                            <span class="balanced">{unit?.symbol ?? ''}0.00 ✓</span>
-                          {:else}
-                            <span class="imbalanced">{unit?.symbol ?? ''}{formatAmount(totals.balance)} ⚠</span>
-                          {/if}
-                        </div>
-                      {/if}
-                    </div>
-                  </td>
-                </tr>
-              {/if}
+              <!-- EDIT EXISTING TRANSACTION -->
+              <TransactionEditor
+                bind:editingData={editingData}
+                isNewEntry={false}
+                entityId={account?.entityId ?? ''}
+                {accountId}
+                accountName={account?.name ?? ''}
+                accountPath={getAccountPath()}
+                {unit}
+                onSave={saveEdit}
+                onCancel={cancelEdit}
+                onDelete={deleteTransaction}
+                onAddSplit={addSplitEntry}
+                onRemoveSplit={removeSplitEntry}
+                onCurrentDebitBlur={handleCurrentDebitBlur}
+                onCurrentCreditBlur={handleCurrentCreditBlur}
+                onSplitDebitBlur={handleSplitDebitBlur}
+                onSplitCreditBlur={handleSplitCreditBlur}
+                onFocus={handleFocus}
+                {getEditTotals}
+                transactionId={txn.transactionId}
+              />
             {:else}
               <!-- View mode: Collapsed or Expanded -->
               {#if txn.isExpanded}
@@ -1086,246 +893,27 @@
           <!-- New Entry Row (position depends on sort order) -->
           {#if $settings.transactionSortOrder === 'oldest'}
             {#if isNewEntry && editingTransactionId === 'new' && editingData}
-            {#if editingData.splits.length === 1}
-              <!-- NEW ENTRY: Simple Mode - Single row -->
-              <tr class="edit-simple-row new-entry-row">
-                <td class="col-expand"></td>
-                <td class="col-date">
-                  <input 
-                    type="date" 
-                    bind:value={editingData.date}
-                    onfocus={handleFocus}
-                    class="edit-input"
-                  />
-                </td>
-                <td class="col-ref">
-                  <input 
-                    type="text" 
-                    bind:value={editingData.reference}
-                    placeholder={$t('ledger.ref')}
-                    onfocus={handleFocus}
-                    class="edit-input"
-                  />
-                </td>
-                <td class="col-memo">
-                  <input 
-                    type="text" 
-                    bind:value={editingData.memo}
-                    placeholder={$t('ledger.memo')}
-                    onfocus={handleFocus}
-                    class="edit-input"
-                  />
-                </td>
-                <td class="col-offset">
-                  <div class="simple-account-field">
-                    <AccountAutocomplete
-                      entityId={account?.entityId ?? ''}
-                      bind:value={editingData.splits[0].accountSearch}
-                      bind:selectedId={editingData.splits[0].accountId}
-                      disabled={false}
-                      onfocus={handleFocus}
-                    />
-                    <button 
-                      class="split-toggle-btn"
-                      onclick={addSplitEntry}
-                      title="Convert to split transaction"
-                      disabled={!editingData.splits[0].accountId}
-                    >
-                      |
-                    </button>
-                  </div>
-                </td>
-                <td class="col-debit">
-                  <input 
-                    type="number" 
-                    step="0.01" 
-                    bind:value={editingData.currentAccountDebit}
-                    placeholder=""
-                    onblur={handleCurrentDebitBlur}
-                    onfocus={handleFocus}
-                    class="edit-input edit-amount"
-                  />
-                </td>
-                <td class="col-credit">
-                  <input 
-                    type="number" 
-                    step="0.01" 
-                    bind:value={editingData.currentAccountCredit}
-                    placeholder=""
-                    onblur={handleCurrentCreditBlur}
-                    onfocus={handleFocus}
-                    class="edit-input edit-amount"
-                  />
-                </td>
-                <td class="col-balance"></td>
-              </tr>
-              
-              <!-- Simple mode actions (new entry) -->
-              <tr class="edit-actions-row new-entry-row">
-                <td colspan="8">
-                  <div class="edit-actions-container">
-                    <div class="edit-actions-left">
-                      <button class="btn-primary" onclick={saveEdit}>{$t('common.save')}</button>
-                      <button class="btn-secondary" onclick={cancelEdit}>{$t('common.cancel')}</button>
-                    </div>
-                  </div>
-                </td>
-              </tr>
+              <!-- NEW ENTRY at bottom (oldest first) -->
+              <TransactionEditor
+                bind:editingData={editingData}
+                {isNewEntry}
+                entityId={account?.entityId ?? ''}
+                {accountId}
+                accountName={account?.name ?? ''}
+                accountPath={getAccountPath()}
+                {unit}
+                onSave={saveEdit}
+                onCancel={cancelEdit}
+                onAddSplit={addSplitEntry}
+                onRemoveSplit={removeSplitEntry}
+                onCurrentDebitBlur={handleCurrentDebitBlur}
+                onCurrentCreditBlur={handleCurrentCreditBlur}
+                onSplitDebitBlur={handleSplitDebitBlur}
+                onSplitCreditBlur={handleSplitCreditBlur}
+                onFocus={handleFocus}
+                {getEditTotals}
+              />
             {:else}
-              <!-- NEW ENTRY: Split Mode - Multiple rows -->
-              <tr class="edit-metadata-row new-entry-row">
-                <td class="col-expand"></td>
-                <td class="col-date">
-                  <input 
-                    type="date" 
-                    bind:value={editingData.date}
-                    onfocus={handleFocus}
-                    class="edit-input"
-                  />
-                </td>
-                <td class="col-ref">
-                  <input 
-                    type="text" 
-                    bind:value={editingData.reference}
-                    placeholder={$t('ledger.ref')}
-                    onfocus={handleFocus}
-                    class="edit-input"
-                  />
-                </td>
-                <td class="col-memo">
-                  <input 
-                    type="text" 
-                    bind:value={editingData.memo}
-                    placeholder={$t('ledger.memo')}
-                    onfocus={handleFocus}
-                    class="edit-input"
-                  />
-                </td>
-                <td class="col-offset"></td>
-                <td class="col-debit"></td>
-                <td class="col-credit"></td>
-                <td class="col-balance"></td>
-              </tr>
-              
-              <tr class="edit-entry-row edit-current-account new-entry-row">
-                <td class="col-expand"></td>
-                <td class="col-date"></td>
-                <td class="col-ref"></td>
-                <td class="col-memo"></td>
-                <td class="col-offset">
-                  <a href="/ledger/{accountId}" class="current-account-link" title={getAccountPath()}>
-                    {account?.name ?? ''}
-                  </a>
-                </td>
-                <td class="col-debit">
-                  <input 
-                    type="number" 
-                    step="0.01" 
-                    bind:value={editingData.currentAccountDebit}
-                    placeholder=""
-                    onblur={handleCurrentDebitBlur}
-                    onfocus={handleFocus}
-                    class="edit-input edit-amount"
-                  />
-                </td>
-                <td class="col-credit">
-                  <input 
-                    type="number" 
-                    step="0.01" 
-                    bind:value={editingData.currentAccountCredit}
-                    placeholder=""
-                    onblur={handleCurrentCreditBlur}
-                    onfocus={handleFocus}
-                    class="edit-input edit-amount"
-                  />
-                </td>
-                <td class="col-balance"></td>
-              </tr>
-              
-              {#each editingData.splits as split (split.id)}
-                <tr class="edit-entry-row edit-split-entry new-entry-row">
-                  <td class="col-expand"></td>
-                  <td class="col-date"></td>
-                  <td class="col-ref"></td>
-                  <td class="col-memo">
-                    <input 
-                      type="text" 
-                      bind:value={split.note}
-                      placeholder={$t('ledger.note')}
-                      onfocus={handleFocus}
-                      class="edit-input"
-                    />
-                  </td>
-                  <td class="col-offset">
-                    <AccountAutocomplete
-                      entityId={account?.entityId ?? ''}
-                      bind:value={split.accountSearch}
-                      bind:selectedId={split.accountId}
-                      disabled={false}
-                      onfocus={handleFocus}
-                    />
-                  </td>
-                  <td class="col-debit">
-                    <input 
-                      type="number" 
-                      step="0.01" 
-                      bind:value={split.debit}
-                      placeholder=""
-                      onblur={() => handleSplitDebitBlur(split.id)}
-                      onfocus={handleFocus}
-                      class="edit-input edit-amount"
-                    />
-                  </td>
-                  <td class="col-credit">
-                    <input 
-                      type="number" 
-                      step="0.01" 
-                      bind:value={split.credit}
-                      placeholder=""
-                      onblur={() => handleSplitCreditBlur(split.id)}
-                      onfocus={handleFocus}
-                      class="edit-input edit-amount"
-                    />
-                  </td>
-                  <td class="col-balance">
-                    {#if editingData.splits.length > 1}
-                      <button 
-                        class="btn-remove-split" 
-                        onclick={() => removeSplitEntry(split.id)}
-                        title={$t('ledger.remove_split')}
-                      >
-                        ×
-                      </button>
-                    {/if}
-                  </td>
-                </tr>
-              {/each}
-              
-              <tr class="edit-actions-row new-entry-row">
-                <td colspan="8">
-                  <div class="edit-actions-container">
-                    <div class="edit-actions-left">
-                      <button class="btn-primary" onclick={saveEdit}>{$t('common.save')}</button>
-                      <button class="btn-secondary" onclick={cancelEdit}>{$t('common.cancel')}</button>
-                      <button class="btn-secondary" onclick={addSplitEntry}>+ {$t('ledger.add_split')}</button>
-                    </div>
-                    {#if true}
-                      {@const totals = getEditTotals()}
-                      <div class="edit-totals-right">
-                        <span class="total-amount">{unit?.symbol ?? ''}{totals.debits.toFixed(2)}</span>
-                        <span class="total-amount">{unit?.symbol ?? ''}{totals.credits.toFixed(2)}</span>
-                        {#if Math.abs(totals.balance) <= 1}
-                          <span class="balanced">{unit?.symbol ?? ''}0.00 ✓</span>
-                        {:else}
-                          <span class="imbalanced">{unit?.symbol ?? ''}{formatAmount(totals.balance)} ⚠</span>
-                        {/if}
-                      </div>
-                    {/if}
-                  </div>
-                </td>
-              </tr>
-            {/if}
-          {:else}
             <!-- Blank entry row (keyboard-accessible with real inputs) -->
             <tr class="new-entry-row blank-entry-row">
               <td class="col-expand"></td>
