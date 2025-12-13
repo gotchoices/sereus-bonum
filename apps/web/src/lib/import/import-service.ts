@@ -2,6 +2,7 @@ import { parseGnuCashXML } from './gnucash-parser';
 import type { ParsedBooks, ImportResult, ImportOptions } from './types';
 import { getDataService } from '$lib/data';
 import { log } from '$lib/logger';
+import * as pako from 'pako';
 
 /**
  * Main import service
@@ -36,12 +37,20 @@ export class ImportService {
     const header = await this.readFileHeader(file);
     const isGzipped = header[0] === 0x1f && header[1] === 0x8b;
     
+    let content: string;
+    
     if (isGzipped) {
-      // TODO: Decompress gzip (requires library or server-side)
-      throw new Error('Gzipped GnuCash files not yet supported. Please uncompress first.');
+      log.data.info('[Import] Decompressing gzipped file');
+      // Read as array buffer for decompression
+      const buffer = await file.arrayBuffer();
+      const decompressed = pako.ungzip(new Uint8Array(buffer));
+      // Convert to string (UTF-8)
+      const decoder = new TextDecoder('utf-8');
+      content = decoder.decode(decompressed);
+    } else {
+      content = await file.text();
     }
     
-    const content = await file.text();
     return await parseGnuCashXML(content);
   }
   
@@ -80,7 +89,9 @@ export class ImportService {
         log.data.info('[Import] Creating new entity:', options.entityName);
         const entity = await dataService.createEntity({
           name: options.entityName,
-          currencyCode: 'USD' // TODO: Extract from parsed commodities
+          baseUnit: 'USD', // TODO: Extract from parsed commodities
+          description: 'Imported from GnuCash',
+          fiscalYearEnd: '12-31'
         });
         entityId = entity.id;
       }

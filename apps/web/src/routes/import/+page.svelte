@@ -533,12 +533,16 @@
   }
   
   .btn-primary {
-    background: var(--primary-color);
-    color: white;
+    background: var(--primary-color, #0066cc) !important;
+    color: white !important;
   }
   
   .btn-primary:hover:not(:disabled) {
     background: var(--primary-color-hover, #0052a3);
+  }
+  
+  .btn-primary:active:not(:disabled) {
+    background: var(--primary-color-active, #003d7a);
   }
   
   .btn-primary:disabled {
