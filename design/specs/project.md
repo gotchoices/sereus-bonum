@@ -22,6 +22,17 @@ Key capabilities:
 - Households wanting to track net worth across multiple accounts
 - Anyone wanting financial data ownership without cloud vendor lock-in
 
+**Delivery posture:**
+
+**Production / Industrial-strength** — optimize for correctness, scalability, accessibility, maintainability
+
+This is not a prototype or MVP throwaway. Bonum is intended as a long-term financial record system where:
+- Data integrity is paramount (double-entry validation, immutable audit trails)
+- Performance matters at scale (10K+ transactions, virtualized rendering)
+- Accessibility is required (keyboard-first navigation, screen reader support)
+- Code maintainability is essential (clean specs, test coverage, refactoring tolerance)
+- Security is critical (local-first data, encrypted sync, user-controlled sharing)
+
 ## Platforms
 
 **What platforms will this project target?**
@@ -93,6 +104,30 @@ Sereus Fabric — a peer-to-peer network for secure, distributed data. Data is r
 - Full data model documented in [Schema](../../docs/Schema.md)
 - Multi-currency/inventory model in [Units-and-Exchange](../../docs/Units-and-Exchange.md)
 - Schema decisions tracked in [STATUS](../../docs/STATUS.md)
+
+**Quality / performance posture:**
+
+- **Expected scale:** Large
+  - Entities: 10-50+ per user (personal, businesses, multiple years)
+  - Accounts: 100-500 per entity (hierarchical chart of accounts)
+  - Transactions: 10K-100K+ per entity (decades of records)
+  - Entries: 20K-500K+ (multi-entry splits common)
+
+- **Critical interactions that must stay fast:**
+  - **Ledger scrolling:** Must handle 10K+ transactions without lag (virtual scrolling required)
+  - **Account autocomplete:** Sub-100ms response for typeahead search across 500+ accounts
+  - **Transaction entry:** Keyboard-driven workflow, no input lag, instant auto-balance calculation
+  - **Report generation:** Balance sheets/income statements with 500+ accounts < 1 second
+  - **Import processing:** GnuCash files with 17K+ transactions must complete in < 30 seconds
+  - **Search/filter:** Cross-entity transaction search across 100K+ entries < 2 seconds
+  - **Sync:** P2P data sync must be non-blocking, background, progress-aware
+
+- **Robustness requirements:**
+  - **Data validation:** All transactions must balance (Assets = Liabilities + Equity)
+  - **Error recovery:** Graceful handling of corrupted imports, partial data, sync conflicts
+  - **Audit trail:** Immutable transaction history, timestamped edits, user attribution
+  - **Accessibility:** WCAG 2.1 AA compliance (keyboard nav, screen readers, contrast ratios)
+  - **Testing:** Unit tests for data integrity, integration tests for import/sync, E2E for critical paths
 
 ---
 
