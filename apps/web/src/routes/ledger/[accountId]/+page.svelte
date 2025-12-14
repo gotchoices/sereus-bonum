@@ -604,43 +604,27 @@
   
   <!-- Column Headers (fixed, outside scroll area) -->
   {#if !loading && !error}
-    <div class="column-headers">
-      <table class="ledger-table">
-        <colgroup>
-          <col class="col-expand">
-          <col class="col-date">
-          <col class="col-ref">
-          <col class="col-memo">
-          <col class="col-offset">
-          <col class="col-debit">
-          <col class="col-credit">
-          <col class="col-balance">
-        </colgroup>
-        <thead>
-          <tr>
-            <th class="col-expand">
-              <button 
-                class="expand-all-btn" 
-                onclick={toggleExpandAll}
-                title={expandAll ? $t('ledger.collapse_all') : $t('ledger.expand_all')}
-              >
-                {expandAll ? '▼' : '▶'}
-              </button>
-            </th>
-            <th class="col-date">{$t('ledger.date')}</th>
-            <th class="col-ref">{$t('ledger.ref')}</th>
-            <th class="col-memo">{$t('ledger.memo')}</th>
-            <th class="col-offset">{$t('ledger.offset')}</th>
-            <th class="col-debit">{$t('ledger.debit')}</th>
-            <th class="col-credit">{$t('ledger.credit')}</th>
-            <th class="col-balance">{$t('ledger.running_balance')}</th>
-          </tr>
-        </thead>
-      </table>
+    <div class="column-headers ledger-grid" role="row" aria-rowindex="1">
+      <div class="col-expand" role="columnheader" aria-colindex="1">
+        <button 
+          class="expand-all-btn" 
+          onclick={toggleExpandAll}
+          title={expandAll ? $t('ledger.collapse_all') : $t('ledger.expand_all')}
+        >
+          {expandAll ? '▼' : '▶'}
+        </button>
+      </div>
+      <div class="col-date" role="columnheader" aria-colindex="2">{$t('ledger.date')}</div>
+      <div class="col-ref" role="columnheader" aria-colindex="3">{$t('ledger.ref')}</div>
+      <div class="col-memo" role="columnheader" aria-colindex="4">{$t('ledger.memo')}</div>
+      <div class="col-offset" role="columnheader" aria-colindex="5">{$t('ledger.offset')}</div>
+      <div class="col-debit" role="columnheader" aria-colindex="6">{$t('ledger.debit')}</div>
+      <div class="col-credit" role="columnheader" aria-colindex="7">{$t('ledger.credit')}</div>
+      <div class="col-balance" role="columnheader" aria-colindex="8">{$t('ledger.running_balance')}</div>
     </div>
   {/if}
   
-  <!-- Ledger Table (scrollable transactions) -->
+  <!-- Ledger Grid (scrollable transactions) -->
   <div class="ledger-container">
     {#if loading}
       <div class="loading-state">
@@ -652,27 +636,14 @@
         <p>{$t('common.error')}: {error}</p>
       </div>
     {:else}
-      <table class="ledger-table">
-        <colgroup>
-          <col class="col-expand">
-          <col class="col-date">
-          <col class="col-ref">
-          <col class="col-memo">
-          <col class="col-offset">
-          <col class="col-debit">
-          <col class="col-credit">
-          <col class="col-balance">
-        </colgroup>
-        <tbody>
+      <div class="ledger-grid" role="grid" aria-label={$t('ledger.title')}>
           {#if transactions.length === 0}
-            <tr class="empty-row">
-              <td colspan="8">
-                <div class="empty-message">
-                  <p>{$t('ledger.no_transactions')}</p>
-                  <p class="text-muted">{$t('ledger.enter_first')}</p>
-                </div>
-              </td>
-            </tr>
+            <div class="empty-row" role="row" aria-rowindex="2">
+              <div class="empty-message" style="grid-column: 1 / -1;">
+                <p>{$t('ledger.no_transactions')}</p>
+                <p class="text-muted">{$t('ledger.enter_first')}</p>
+              </div>
+            </div>
           {/if}
           
           <!-- New Entry Row (top position when newest first) -->
@@ -700,9 +671,9 @@
               />
             {:else}
               <!-- Blank entry row (keyboard-accessible with real inputs) -->
-              <tr class="new-entry-row blank-entry-row">
-                <td class="col-expand"></td>
-                <td class="col-date">
+              <div class="new-entry-row blank-entry-row ledger-row" role="row">
+                <div class="col-expand" role="gridcell"></div>
+                <div class="col-date" role="gridcell">
                   <input 
                     type="date" 
                     class="blank-input"
@@ -710,41 +681,39 @@
                     onfocus={activateNewEntry}
                     placeholder=""
                   />
-                </td>
-                <td class="col-ref">
+                </div>
+                <div class="col-ref" role="gridcell">
                   <input 
                     type="text" 
                     class="blank-input"
                     onfocus={activateNewEntry}
                     placeholder={$t('ledger.ref')}
                   />
-                </td>
-                <td class="col-memo">
+                </div>
+                <div class="col-memo" role="gridcell">
                   <input 
                     type="text" 
                     class="blank-input"
                     onfocus={activateNewEntry}
                     placeholder={$t('ledger.enter_new_transaction')}
                   />
-                </td>
-                <td class="col-offset"></td>
-                <td class="col-debit"></td>
-                <td class="col-credit"></td>
-                <td class="col-balance"></td>
-              </tr>
+                </div>
+                <div class="col-offset" role="gridcell"></div>
+                <div class="col-debit" role="gridcell"></div>
+                <div class="col-credit" role="gridcell"></div>
+                <div class="col-balance" role="gridcell"></div>
+              </div>
             {/if}
           {/if}
           
           {#each transactions as txn, idx (txn.transactionId)}
             <!-- Locked separator -->
             {#if hasLockedTransactions && idx === firstUnlockedIndex}
-              <tr class="locked-separator">
-                <td colspan="8">
-                  <div class="separator-line">
-                    <span class="lock-icon">🔒</span>
-                  </div>
-                </td>
-              </tr>
+              <div class="locked-separator ledger-row" role="row">
+                <div class="separator-line" style="grid-column: 1 / -1;">
+                  <span class="lock-icon">🔒</span>
+                </div>
+              </div>
             {/if}
             
             <!-- Transaction in edit mode -->
@@ -775,121 +744,125 @@
               <!-- View mode: Collapsed or Expanded -->
               {#if txn.isExpanded}
                 <!-- Expanded: Transaction header -->
-                <tr 
-                  class="transaction-header"
+                <div 
+                  class="transaction-header ledger-row"
                   class:locked={txn.isLocked}
                   class:clickable={!txn.isLocked}
                   onclick={() => !txn.isLocked && enterEditMode(txn)}
+                  role="row"
+                  aria-expanded="true"
                 >
-                  <td class="col-expand">
+                  <div class="col-expand" role="gridcell">
                     <button 
                       class="expand-btn" 
                       onclick={(e) => { e.stopPropagation(); toggleExpand(txn.transactionId); }}
                     >
                       ▼
                     </button>
-                  </td>
-                  <td class="col-date">{formatDate(txn.date)}</td>
-                  <td class="col-ref">{txn.reference ?? ''}</td>
-                  <td class="col-memo">{txn.memo ?? ''}</td>
-                  <td class="col-offset"></td>
-                  <td class="col-debit"></td>
-                  <td class="col-credit"></td>
-                  <td class="col-balance amount">
+                  </div>
+                  <div class="col-date" role="gridcell">{formatDate(txn.date)}</div>
+                  <div class="col-ref" role="gridcell">{txn.reference ?? ''}</div>
+                  <div class="col-memo" role="gridcell">{txn.memo ?? ''}</div>
+                  <div class="col-offset" role="gridcell"></div>
+                  <div class="col-debit" role="gridcell"></div>
+                  <div class="col-credit" role="gridcell"></div>
+                  <div class="col-balance amount" role="gridcell">
                     {#if txn.entries[0]}
                       {formatAmount(txn.entries[0].runningBalance)}
                     {/if}
-                  </td>
-                </tr>
+                  </div>
+                </div>
                 
                 <!-- Expanded: Entry lines -->
                 {#each txn.entries as entry (entry.entryId)}
                   <!-- Current account entry -->
-                  <tr class="entry-line" class:locked={txn.isLocked}>
-                    <td class="col-expand"></td>
-                    <td class="col-date"></td>
-                    <td class="col-ref"></td>
-                    <td class="col-memo">{entry.note ?? ''}</td>
-                    <td class="col-offset">
+                  <div class="entry-line ledger-row" class:locked={txn.isLocked} role="row">
+                    <div class="col-expand" role="gridcell"></div>
+                    <div class="col-date" role="gridcell"></div>
+                    <div class="col-ref" role="gridcell"></div>
+                    <div class="col-memo" role="gridcell">{entry.note ?? ''}</div>
+                    <div class="col-offset" role="gridcell">
                       <a href="/ledger/{accountId}" title={getAccountPath()}>
                         {account?.name}
                       </a>
-                    </td>
-                    <td class="col-debit amount">
+                    </div>
+                    <div class="col-debit amount" role="gridcell">
                       {entry.amount > 0 ? formatAmount(entry.amount) : ''}
-                    </td>
-                    <td class="col-credit amount">
+                    </div>
+                    <div class="col-credit amount" role="gridcell">
                       {entry.amount < 0 ? formatAmount(Math.abs(entry.amount)) : ''}
-                    </td>
-                    <td class="col-balance"></td>
-                  </tr>
+                    </div>
+                    <div class="col-balance" role="gridcell"></div>
+                  </div>
                   
                   <!-- Offset account entry (simple) -->
                   {#if entry.offsetAccountName}
-                    <tr class="entry-line" class:locked={txn.isLocked}>
-                      <td class="col-expand"></td>
-                      <td class="col-date"></td>
-                      <td class="col-ref"></td>
-                      <td class="col-memo"></td>
-                      <td class="col-offset">
+                    <div class="entry-line ledger-row" class:locked={txn.isLocked} role="row">
+                      <div class="col-expand" role="gridcell"></div>
+                      <div class="col-date" role="gridcell"></div>
+                      <div class="col-ref" role="gridcell"></div>
+                      <div class="col-memo" role="gridcell"></div>
+                      <div class="col-offset" role="gridcell">
                         <a href="/ledger/{entry.offsetAccountId}" title={entry.offsetAccountPath || entry.offsetAccountName}>
                           {entry.offsetAccountName}
                         </a>
-                      </td>
-                      <td class="col-debit amount">
+                      </div>
+                      <div class="col-debit amount" role="gridcell">
                         {entry.amount < 0 ? formatAmount(Math.abs(entry.amount)) : ''}
-                      </td>
-                      <td class="col-credit amount">
+                      </div>
+                      <div class="col-credit amount" role="gridcell">
                         {entry.amount > 0 ? formatAmount(entry.amount) : ''}
-                      </td>
-                      <td class="col-balance"></td>
-                    </tr>
+                      </div>
+                      <div class="col-balance" role="gridcell"></div>
+                    </div>
                   {/if}
                   
                   <!-- Split entries -->
                   {#if entry.splitEntries}
                     {#each entry.splitEntries as split (split.entryId)}
-                      <tr class="entry-line" class:locked={txn.isLocked}>
-                        <td class="col-expand"></td>
-                        <td class="col-date"></td>
-                        <td class="col-ref"></td>
-                        <td class="col-memo">{split.note ?? ''}</td>
-                        <td class="col-offset">
+                      <div class="entry-line ledger-row" class:locked={txn.isLocked} role="row">
+                        <div class="col-expand" role="gridcell"></div>
+                        <div class="col-date" role="gridcell"></div>
+                        <div class="col-ref" role="gridcell"></div>
+                        <div class="col-memo" role="gridcell">{split.note ?? ''}</div>
+                        <div class="col-offset" role="gridcell">
                           <a href="/ledger/{split.accountId}" title={split.accountPath}>
                             {split.accountName}
                           </a>
-                        </td>
-                        <td class="col-debit amount">
+                        </div>
+                        <div class="col-debit amount" role="gridcell">
                           {split.amount > 0 ? formatAmount(split.amount) : ''}
-                        </td>
-                        <td class="col-credit amount">
+                        </div>
+                        <div class="col-credit amount" role="gridcell">
                           {split.amount < 0 ? formatAmount(Math.abs(split.amount)) : ''}
-                        </td>
-                        <td class="col-balance"></td>
-                      </tr>
+                        </div>
+                        <div class="col-balance" role="gridcell"></div>
+                      </div>
                     {/each}
                   {/if}
                 {/each}
               {:else}
                 <!-- Collapsed: Single line -->
-                <tr 
-                  class="transaction-line"
+                <div 
+                  class="transaction-line ledger-row"
                   class:locked={txn.isLocked}
                   class:clickable={!txn.isLocked}
                   onclick={() => !txn.isLocked && enterEditMode(txn)}
+                  role="row"
+                  aria-expanded="false"
                 >
-                  <td class="col-expand">
+                  <div class="col-expand" role="gridcell">
                     <button 
                       class="expand-btn" 
                       onclick={(e) => { e.stopPropagation(); toggleExpand(txn.transactionId); }}
                     >
                       ▶
                     </button>
-                  </td>
-                  <td class="col-date">{formatDate(txn.date)}</td>
-                  <td class="col-ref">{txn.reference ?? ''}</td>
-                  <td class="col-memo">{txn.memo ?? ''}</td>
-                  <td class="col-offset">
+                  </div>
+                  <div class="col-date" role="gridcell">{formatDate(txn.date)}</div>
+                  <div class="col-ref" role="gridcell">{txn.reference ?? ''}</div>
+                  <div class="col-memo" role="gridcell">{txn.memo ?? ''}</div>
+                  <div class="col-offset" role="gridcell">
                     {#if txn.entries[0]?.isSplit}
                       <span class="split-indicator">[{$t('ledger.split')}]</span>
                     {:else if txn.entries[0]?.offsetAccountName}
@@ -897,23 +870,23 @@
                         {txn.entries[0].offsetAccountName}
                       </a>
                     {/if}
-                  </td>
-                  <td class="col-debit amount">
+                  </div>
+                  <div class="col-debit amount" role="gridcell">
                     {#if txn.entries[0] && txn.entries[0].amount > 0}
                       {formatAmount(txn.entries[0].amount)}
                     {/if}
-                  </td>
-                  <td class="col-credit amount">
+                  </div>
+                  <div class="col-credit amount" role="gridcell">
                     {#if txn.entries[0] && txn.entries[0].amount < 0}
                       {formatAmount(Math.abs(txn.entries[0].amount))}
                     {/if}
-                  </td>
-                  <td class="col-balance amount">
+                  </div>
+                  <div class="col-balance amount" role="gridcell">
                     {#if txn.entries[0]}
                       {formatAmount(txn.entries[0].runningBalance)}
                     {/if}
-                  </td>
-                </tr>
+                  </div>
+                </div>
               {/if}
             {/if}
           {/each}
@@ -943,9 +916,9 @@
               />
             {:else}
             <!-- Blank entry row (keyboard-accessible with real inputs) -->
-            <tr class="new-entry-row blank-entry-row">
-              <td class="col-expand"></td>
-              <td class="col-date">
+            <div class="new-entry-row blank-entry-row ledger-row" role="row">
+              <div class="col-expand" role="gridcell"></div>
+              <div class="col-date" role="gridcell">
                 <input 
                   type="date" 
                   class="blank-input"
@@ -953,32 +926,31 @@
                   onfocus={activateNewEntry}
                   placeholder=""
                 />
-              </td>
-              <td class="col-ref">
+              </div>
+              <div class="col-ref" role="gridcell">
                 <input 
                   type="text" 
                   class="blank-input"
                   onfocus={activateNewEntry}
                   placeholder={$t('ledger.ref')}
                 />
-              </td>
-              <td class="col-memo">
+              </div>
+              <div class="col-memo" role="gridcell">
                 <input 
                   type="text" 
                   class="blank-input"
                   onfocus={activateNewEntry}
                   placeholder={$t('ledger.enter_new_transaction')}
                 />
-              </td>
-              <td class="col-offset"></td>
-              <td class="col-debit"></td>
-              <td class="col-credit"></td>
-              <td class="col-balance"></td>
-            </tr>
+              </div>
+              <div class="col-offset" role="gridcell"></div>
+              <div class="col-debit" role="gridcell"></div>
+              <div class="col-credit" role="gridcell"></div>
+              <div class="col-balance" role="gridcell"></div>
+            </div>
+            {/if}
           {/if}
-          {/if}
-        </tbody>
-      </table>
+      </div>
     {/if}
   </div>
 </div>
@@ -1058,17 +1030,12 @@
     background: var(--surface-primary);
     flex-shrink: 0;
     border-bottom: 2px solid var(--border-color);
+    padding: 0.75rem 0;
   }
   
-  .column-headers .ledger-table {
-    margin-bottom: 0;
-  }
-  
-  .column-headers th {
-    background: var(--surface-primary);
+  .column-headers > div {
     text-align: left;
-    padding: 0.75rem 1rem;
-    border-bottom: none;
+    padding: 0 1rem;
     font-weight: 600;
     color: var(--text-muted);
     font-size: 0.8125rem;
@@ -1082,48 +1049,44 @@
     padding: 0;
   }
   
-  /* Table */
-  .ledger-table {
-    width: 100%;
-    border-collapse: collapse;
+  /* Grid */
+  .ledger-grid {
+    display: grid;
+    grid-template-columns: 
+      40px      /* Expand/collapse button */
+      135px     /* Date */
+      100px     /* Reference */
+      1fr       /* Memo (flexible) */
+      200px     /* Offset account */
+      160px     /* Debit */
+      160px     /* Credit */
+      160px;    /* Running balance */
+    gap: 0;
     font-size: 0.875rem;
-    table-layout: fixed;
+    width: 100%;
   }
   
-  .ledger-table td {
+  .ledger-row {
+    display: contents; /* Children become grid items */
+  }
+  
+  .ledger-row > div {
     padding: 0.5rem 1rem;
     border-bottom: 1px solid var(--border-light);
   }
   
-  /* Column widths */
-  .col-expand {
-    width: 40px;
+  /* Performance: Browser-native virtualization */
+  .transaction-line,
+  .transaction-header,
+  .entry-line {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 40px; /* Height hint for browser */
   }
   
-  .col-date {
-    width: 135px; /* Increased for date picker widget */
-  }
-  
-  .col-ref {
-    width: 100px;
-  }
-  
-  .col-memo {
-    min-width: 200px;
-  }
-  
-  .col-offset {
-    min-width: 150px;
-  }
-  
+  /* Column alignment */
   .col-debit,
-  .col-credit {
-    width: 160px; /* Increased for 4 more digits */
-    text-align: right;
-  }
-  
+  .col-credit,
   .col-balance {
-    width: 160px;
     text-align: right;
   }
   
@@ -1184,7 +1147,7 @@
   }
   
   /* Locked separator */
-  .locked-separator td {
+  .locked-separator {
     padding: 0.5rem 0;
   }
   

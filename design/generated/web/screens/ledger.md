@@ -41,6 +41,85 @@ Primary transaction entry and viewing interface for a single account. Displays a
 
 ---
 
+## Grid Layout Implementation
+
+### Technical Approach
+
+The ledger uses CSS Grid (not HTML `<table>`) for the transaction list to enable:
+- Virtual scrolling for large datasets (10K+ transactions)
+- Variable-height rows (collapsed ~40px, expanded ~varies, edit mode ~varies)
+- Absolute positioning compatibility
+- Smooth inline editing without layout reflow
+
+### Grid Structure
+
+```html
+<div class="ledger-grid" role="grid" aria-label="Account ledger">
+  <!-- Each transaction/row -->
+  <div class="ledger-row" role="row" aria-rowindex="{n}">
+    <div class="col-expand" role="gridcell" aria-colindex="1">...</div>
+    <div class="col-date" role="gridcell" aria-colindex="2">...</div>
+    <div class="col-ref" role="gridcell" aria-colindex="3">...</div>
+    <div class="col-memo" role="gridcell" aria-colindex="4">...</div>
+    <div class="col-offset" role="gridcell" aria-colindex="5">...</div>
+    <div class="col-debit" role="gridcell" aria-colindex="6">...</div>
+    <div class="col-credit" role="gridcell" aria-colindex="7">...</div>
+    <div class="col-balance" role="gridcell" aria-colindex="8">...</div>
+  </div>
+</div>
+```
+
+### CSS Grid Properties
+
+```css
+.ledger-grid {
+  display: grid;
+  grid-template-columns: 
+    40px      /* Expand/collapse button */
+    135px     /* Date */
+    100px     /* Reference */
+    1fr       /* Memo (flexible) */
+    200px     /* Offset account */
+    160px     /* Debit */
+    160px     /* Credit */
+    160px;    /* Running balance */
+  gap: 0;
+  align-items: start;
+}
+
+.ledger-row {
+  display: contents; /* Children become grid items */
+}
+```
+
+### ARIA Roles for Accessibility
+
+- **Grid container:** `role="grid"` with `aria-label`
+- **Rows:** `role="row"` with `aria-rowindex` (1-based)
+- **Cells:** `role="gridcell"` with `aria-colindex` (1-based)
+- **Edit mode:** `aria-expanded="true"` on row being edited
+- **Locked transactions:** `aria-disabled="true"` on locked rows
+
+### Performance Optimization
+
+After grid refactor, apply CSS `content-visibility`:
+
+```css
+.ledger-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 40px; /* Height hint */
+}
+```
+
+This enables browser-native virtualization without JavaScript library overhead.
+
+If `content-visibility` is insufficient for 10K+ transactions, integrate TanStack Virtual:
+- Package: `@tanstack/svelte-virtual` (already installed)
+- Only render visible rows + 5 overscan buffer
+- Absolute positioning now compatible with grid layout
+
+---
+
 ## Header Section
 
 ### Back Link
