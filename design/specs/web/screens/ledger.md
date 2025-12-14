@@ -14,6 +14,18 @@ Primary transaction entry interface for an account. Optimized for keyboard-centr
 
 ---
 
+## Layout
+
+The ledger uses a grid-based layout (not HTML tables) to support:
+- Efficient rendering of large transaction lists (10K+ transactions)
+- Smooth scrolling with variable-height rows (collapsed/expanded/edit modes)
+- Inline editing without layout reflow
+- Proper column alignment across all row types
+
+Columns maintain fixed alignment during scrolling. The layout handles very long content (memos, account paths) gracefully with text wrapping or truncation as appropriate.
+
+---
+
 ## Header Section
 The header is fixed on the page and does not scroll with the transaction list.
 The user should be able to see the informatio in the header at all times.

@@ -527,6 +527,24 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@tanstack/svelte-virtual@npm:^3.13.13":
+  version: 3.13.13
+  resolution: "@tanstack/svelte-virtual@npm:3.13.13"
+  dependencies:
+    "@tanstack/virtual-core": "npm:3.13.13"
+  peerDependencies:
+    svelte: ^3.48.0 || ^4.0.0 || ^5.0.0
+  checksum: 10c0/3bb7c60c02525d345b8289fdbec71d1ae2ae3ec3705337dac64e2591bc67885965f4664715cc98af31e8241b5d730aa4ba0fa954bc0b39127effca93aeac111f
+  languageName: node
+  linkType: hard
+
+"@tanstack/virtual-core@npm:3.13.13":
+  version: 3.13.13
+  resolution: "@tanstack/virtual-core@npm:3.13.13"
+  checksum: 10c0/0411295054a6fff21a22944c224f2e414c77c6455015b319f378ea3e9937aefb3b43f4113df2ab9096e5f3db673b085cd778d69ec9918f42bbb94c2dbd43a639
+  languageName: node
+  linkType: hard
+
 "@types/cookie@npm:^0.6.0":
   version: 0.6.0
   resolution: "@types/cookie@npm:0.6.0"
@@ -1648,6 +1666,7 @@ __metadata:
     "@sveltejs/adapter-auto": "npm:^3.0.0"
     "@sveltejs/kit": "npm:^2.0.0"
     "@sveltejs/vite-plugin-svelte": "npm:^4.0.0"
+    "@tanstack/svelte-virtual": "npm:^3.13.13"
     "@types/pako": "npm:^2.0.4"
     "@types/sql.js": "npm:^1.4.9"
     pako: "npm:^2.1.0"

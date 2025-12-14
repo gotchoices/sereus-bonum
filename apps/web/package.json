@@ -11,6 +11,7 @@
     "postinstall": "cp node_modules/sql.js/dist/sql-wasm.wasm static/"
   },
   "dependencies": {
+    "@tanstack/svelte-virtual": "^3.13.13",
     "pako": "^2.1.0",
     "sql.js": "^1.11.0",
     "xlsx": "^0.18.5"

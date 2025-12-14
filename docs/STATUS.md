@@ -219,15 +219,15 @@ Features implemented:
 ### Medium Priority (Polish & UX)
 
 #### ⬜ Virtual Scrolling for Large Ledgers (Performance)
-**Trigger:** If ledgers with 1,000+ entries prove slow
+**Challenge:** Complex due to table structure with dynamic row heights
 - **Problem:** Current design renders ALL transactions in DOM (poor performance beyond ~1,000 entries)
-- **Solution:** Implement virtual scrolling/windowing (only render visible rows + buffer)
-- **Library:** TanStack Virtual (recommended)
-  - Handles variable/dynamic heights (collapsed vs expanded vs edit mode)
-  - Framework-agnostic, well-tested, ~5KB
-  - Better than custom implementation for this complexity
-- **Trade-off:** Added complexity vs. massive performance gain
-- **Test first:** Import large GnuCash books to measure actual impact before implementing
+- **Attempted:** TanStack Virtual - conflicts with `<table>` structure and nested rows (expanded/edit modes)
+- **Options:**
+  1. **Refactor to div-based layout:** Replace `<table>` with CSS Grid/Flexbox (maintains column alignment, allows absolute positioning for virtual scrolling)
+  2. **CSS `content-visibility: auto`:** Modern browser API for automatic virtualization (simpler, but less browser support)
+  3. **Pagination:** Simple fallback - show 100 transactions at a time with prev/next
+- **Decision pending:** Test with real GnuCash import first to measure actual performance impact
+- **Package installed:** `@tanstack/svelte-virtual` (v3.13.13) - ready when needed
 
 #### ⬜ Collapsible Global Menu
 - Hamburger toggle to hide/show sidebar
@@ -375,7 +375,7 @@ From story 04 (Alt D):
 - ⬜ Setup wizard for new users
 
 ### Prerequisites
-- ✅ Virtual scrolling (for large imports) - See "Medium Priority" section
+- ⚠️ Virtual scrolling (for large imports) - Deferred (see "Medium Priority" - test real import first)
 - ✅ Import parser complete (GnuCash XML)
 - ⬜ Schema: Add `gnucash_guid TEXT` column to `account` table
 - ⬜ Schema: Add `gnucash_guid TEXT` column to `entry` table (for transaction deduplication)
