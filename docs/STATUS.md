@@ -94,7 +94,7 @@ To enable the test data generator:
   - If transaction already visible → No scroll (perfect for editing)
   - If transaction off-screen → Scroll to bring it into view
   - New transactions naturally appear near blank entry (both visible together)
-- **After Test Data Generation:** Scroll to blank entry to show results
+- **After Test Data Generation:** Scroll to blank entry to show results (TODO: timing issue - may need refinement)
 - **Viewport Persistence:** Saves `lastVisibleTransactionId` in `viewState`
   - Tracks topmost visible transaction (debounced during scroll)
   - Restores position on reload (falls back to blank entry if transaction not found)
@@ -424,6 +424,81 @@ From story 04 (Alt D):
 ---
 
 ## AI-Assisted Features
+
+### Implementation Phasing
+
+#### Phase 1: Settings & API Configuration
+- ⬜ Settings screen integration for AI
+  - API key management (per-provider: OpenAI, Anthropic, etc.)
+  - Provider/model selection (dropdown)
+  - Multiple agent configs (name, provider, model, key)
+  - Active agent selection
+  - User-specified rules files (text box per agent + global rules)
+  - Rules scope: agent-specific and all-agents
+- ⬜ Backend service layer for agent API calls
+- ⬜ Credential storage/encryption strategy
+
+#### Phase 2: UI & Conversation Interface
+- ⬜ AI wizard bubble component (overlay or sidebar)
+  - Query input field
+  - Scrollable dialog/conversation display
+  - Export conversation (PDF, text)
+  - Print conversation
+  - Clear/reset conversation
+- ⬜ Global activation (menu item, keyboard shortcut)
+- ⬜ Context awareness foundation
+  - Track active screen/route
+  - Capture selected entity
+  - Capture open account(s)
+
+#### Phase 3: Q&A + Contextual Help
+- ⬜ Fixed context bundle (app documentation)
+  - How to use the app (navigation, screens, workflows)
+  - Accounting concepts (debit/credit, accrual, balance sheet, etc.)
+  - Common tasks (create entity, enter transaction, reconcile)
+- ⬜ Agent can answer questions about:
+  - General accounting principles
+  - How to use Bonum features
+  - Current entity/account context
+- ⬜ Interactive setup workflows (see Story 07)
+
+#### Phase 4: Non-Generative Actions (Read-Only)
+- ⬜ Agent tool/function calling framework
+- ⬜ Query data (accounts, transactions, balances)
+- ⬜ Build and display reports (Balance Sheet, Income Statement, etc.)
+- ⬜ Print ledgers
+- ⬜ Open/configure screens
+- ⬜ Search for transactions
+
+#### Phase 5: Generative Actions (Data Writes)
+- ⬜ Enter transactions (with user review/approval)
+- ⬜ Assist in reconciliation
+- ⬜ Assist in account generation
+- ⬜ Account mapping during import (see Import Books section)
+
+#### Phase 6: Advanced Features (Voice, OCR, Polish)
+- 🔮 Voice input (Web Speech API)
+  - Microphone icon in AI wizard
+  - Browser speech-to-text → agent parsing
+  - Examples: "I just paid $43.97 for lunch" → agent asks clarifying questions
+- 🔮 Voice output (text-to-speech)
+  - Digital toggle for reading responses aloud
+  - Browser Speech Synthesis API
+- 🔮 Invoice/Receipt OCR (Vision models)
+  - Upload image of invoice or receipt
+  - Agent extracts: date, vendor, amount, line items
+  - Agent suggests categorization
+  - User reviews/approves generated transaction
+- 🔮 Custom report generation
+  - Natural language: "Show me net worth over time"
+  - Agent generates chart/report configuration
+  - Renders using existing report components
+
+### 🔄 Story & Spec Development
+- **Story:** `design/stories/web/07-ai-assistant.md` (core Q&A and interactive setup)
+- **Component Spec:** `design/specs/web/components/ai-wizard.md` (brainstorming)
+- **Integration:** Vercel AI SDK (`ai` npm package)
+- **Status:** Ready for story drafting and initial implementation
 
 ### Strategy
 **Integration:** Vercel AI SDK (`ai` npm package) - TypeScript toolkit for structured AI output
