@@ -439,17 +439,25 @@ From story 04 (Alt D):
 - ⬜ Credential storage/encryption strategy
 
 #### Phase 2: UI & Conversation Interface
-- ⬜ AI wizard bubble component (overlay or sidebar)
+- ⬜ AI assistant component (initial design decision: sidebar pane)
   - Query input field
   - Scrollable dialog/conversation display
   - Export conversation (PDF, text)
   - Print conversation
   - Clear/reset conversation
+  - Resizable/expandable for quick queries vs. involved discussions
 - ⬜ Global activation (menu item, keyboard shortcut)
 - ⬜ Context awareness foundation
   - Track active screen/route
   - Capture selected entity
   - Capture open account(s)
+  - Multi-window/pane awareness (desktop: multiple screens open simultaneously)
+- ⬜ **Post-MVP Refinements** (answer after first generation)
+  - Placement alternatives (sidebar vs. overlay vs. top/bottom pane)
+  - Optimal width/height for different query types
+  - Docking behavior relative to global menu dock/undock
+  - Conversation persistence strategy (per-screen, global, saved history)
+  - State management across multi-tab/multi-window sessions
 
 #### Phase 3: Q&A + Contextual Help
 - ⬜ Fixed context bundle (app documentation)
@@ -475,6 +483,23 @@ From story 04 (Alt D):
 - ⬜ Assist in reconciliation
 - ⬜ Assist in account generation
 - ⬜ Account mapping during import (see Import Books section)
+- ⬜ **Review/Approve Workflow** (design after Phase 3 testing)
+  - How to display proposed changes (diff view? preview modal? inline highlights?)
+  - Approve/reject controls (per-item? batch?)
+  - Undo/rollback mechanism
+- ⬜ **Privacy & Data Minimization** (design before Phase 5 implementation)
+  - Define what data is sent to AI API (screen name? entity ID? full transactions?)
+  - User visibility/consent for data sharing
+  - Local-only vs. cloud-enhanced modes
+  - Audit log of what was sent to AI
+- ⬜ **Error Handling & Offline** (design in Phase 2/3)
+  - Graceful degradation when API unavailable
+  - Error messages for failures (rate limits, invalid key, network)
+  - Offline mode behavior
+- ⬜ **Cost Management** (design in Phase 2/3)
+  - User awareness of API costs per interaction
+  - Optional rate limiting
+  - Token usage tracking/display
 
 #### Phase 6: Advanced Features (Voice, OCR, Polish)
 - 🔮 Voice input (Web Speech API)
@@ -496,9 +521,9 @@ From story 04 (Alt D):
 
 ### 🔄 Story & Spec Development
 - **Story:** `design/stories/web/07-ai-assistant.md` (core Q&A and interactive setup)
-- **Component Spec:** `design/specs/web/components/ai-wizard.md` (brainstorming)
+- **Component Spec:** `design/specs/web/components/ai-assistant.md` (draft)
 - **Integration:** Vercel AI SDK (`ai` npm package)
-- **Status:** Ready for story drafting and initial implementation
+- **Status:** Ready for initial generation (Phases 1-3)
 
 ### Strategy
 **Integration:** Vercel AI SDK (`ai` npm package) - TypeScript toolkit for structured AI output
