@@ -22,6 +22,12 @@
   let entity: Entity | null = $state(null);
   let accountGroup: AccountGroup | null = $state(null);
   
+  // Dev tools
+  const ENABLE_TEST_DATA_GENERATOR = import.meta.env.DEV && import.meta.env.VITE_ENABLE_TEST_DATA === 'true';
+  let generatingTestData = $state(false);
+  let testDataProgress = $state<string | null>(null);
+  let testDataCount = $state(1000);
+  
   // Ledger data
   let entries: LedgerEntry[] = $state([]);
   let loading = $state(true);
@@ -571,6 +577,139 @@
       setTimeout(() => target.select(), 0);
     }
   }
+  
+  // DEV ONLY: Generate test data for performance testing
+  async function generateTestData() {
+    if (!account || !entity) return;
+    
+    const confirmed = confirm(
+      `⚠️ This will generate ${testDataCount.toLocaleString()} test transactions in this account.\n\n` +
+      'This is for performance testing only and cannot be undone.\n\n' +
+      'Continue?'
+    );
+    
+    if (!confirmed) return;
+    
+    generatingTestData = true;
+    testDataProgress = 'Initializing...';
+    log.ui.info(`[Dev] Generating ${testDataCount} test transactions`);
+    
+    try {
+      const dataService = await getDataService();
+      const allAccounts = await dataService.getAccounts(entity.id);
+      
+      // Get offset accounts (exclude current account)
+      const offsetAccounts = allAccounts.filter(a => a.id !== accountId);
+      if (offsetAccounts.length === 0) {
+        throw new Error('Need at least one other account for test data');
+      }
+      
+      // Generate 15,000 transactions over 2 years
+      const endDate = new Date();
+      const startDate = new Date(endDate);
+      startDate.setFullYear(startDate.getFullYear() - 2);
+      const oneYearAgo = new Date(endDate);
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+      
+      const batchSize = 100;
+      const totalCount = testDataCount;
+      const batches = Math.ceil(totalCount / batchSize);
+      
+      for (let batch = 0; batch < batches; batch++) {
+        const batchTransactions = [];
+        const batchStart = batch * batchSize;
+        const batchEnd = Math.min(batchStart + batchSize, totalCount);
+        
+        for (let i = batchStart; i < batchEnd; i++) {
+          // Random date between start and end
+          const randomTime = startDate.getTime() + Math.random() * (endDate.getTime() - startDate.getTime());
+          const date = new Date(randomTime).toISOString().split('T')[0];
+          
+          // Determine transaction type (70% simple, 20% 2-3 splits, 10% 4-6 splits)
+          const typeRoll = Math.random();
+          const splitCount = typeRoll < 0.7 ? 1 : typeRoll < 0.9 ? 2 + Math.floor(Math.random() * 2) : 4 + Math.floor(Math.random() * 3);
+          
+          // Random amount (between $10 and $5000, in cents)
+          const baseAmount = Math.floor((Math.random() * 4990 + 10) * 100);
+          
+          // Build entries
+          const entries: Array<{ accountId: string; amount: number; note?: string }> = [];
+          
+          if (splitCount === 1) {
+            // Simple transaction
+            const offsetAccount = offsetAccounts[Math.floor(Math.random() * offsetAccounts.length)];
+            entries.push({
+              accountId: accountId,
+              amount: Math.random() > 0.5 ? baseAmount : -baseAmount,
+            });
+            entries.push({
+              accountId: offsetAccount.id,
+              amount: entries[0].amount * -1,
+            });
+          } else {
+            // Split transaction
+            // Current account entry (total amount)
+            const isDebit = Math.random() > 0.5;
+            entries.push({
+              accountId: accountId,
+              amount: isDebit ? baseAmount : -baseAmount,
+            });
+            
+            // Split the offset across multiple accounts
+            let remaining = baseAmount;
+            for (let s = 0; s < splitCount; s++) {
+              const offsetAccount = offsetAccounts[Math.floor(Math.random() * offsetAccounts.length)];
+              const isLast = s === splitCount - 1;
+              const amount = isLast ? remaining : Math.floor(remaining * (0.2 + Math.random() * 0.4));
+              remaining -= amount;
+              
+              entries.push({
+                accountId: offsetAccount.id,
+                amount: isDebit ? -amount : amount,
+                note: `Split ${s + 1}/${splitCount}`,
+              });
+            }
+          }
+          
+          batchTransactions.push({
+            entityId: entity!.id,
+            date,
+            reference: i % 5 === 0 ? `REF-${i}` : undefined,
+            memo: `Test transaction ${i + 1}`,
+            entries,
+          });
+        }
+        
+        // Insert batch
+        testDataProgress = `Inserting batch ${batch + 1}/${batches} (${batchEnd}/${totalCount} transactions)...`;
+        await Promise.all(batchTransactions.map(txn => {
+          const { entries, ...txnData } = txn;
+          return dataService.createTransaction(txnData, entries);
+        }));
+        
+        // Brief pause to allow UI updates
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      
+      testDataProgress = 'Reloading ledger...';
+      await loadData();
+      
+      testDataProgress = `✅ Successfully generated ${totalCount} test transactions!`;
+      log.ui.info('[Dev] Test data generation complete');
+      
+      setTimeout(() => {
+        generatingTestData = false;
+        testDataProgress = null;
+      }, 3000);
+    } catch (err) {
+      log.ui.error('[Dev] Test data generation failed:', err);
+      testDataProgress = `❌ Error: ${err instanceof Error ? err.message : String(err)}`;
+      setTimeout(() => {
+        generatingTestData = false;
+        testDataProgress = null;
+      }, 5000);
+    }
+  }
 </script>
 
 <div class="ledger-page">
@@ -593,12 +732,45 @@
           {/if}
         </div>
         
-        <div class="balance-display">
-          <span class="balance-value">
-            {unit?.symbol ?? ''}{#if entries.length > 0}{formatAmount(entries[entries.length - 1].runningBalance)}{:else}0.00{/if}
-          </span>
+        <div class="header-right">
+          <!-- DEV ONLY: Test Data Generator -->
+          {#if ENABLE_TEST_DATA_GENERATOR}
+            <div class="dev-test-tool">
+              <input 
+                type="number" 
+                bind:value={testDataCount}
+                min="1"
+                max="50000"
+                step="100"
+                disabled={generatingTestData}
+                class="dev-count-input"
+                title="Number of test transactions to generate"
+              />
+              <button 
+                class="dev-test-btn-compact"
+                onclick={generateTestData}
+                disabled={generatingTestData}
+                title="Generate test transactions for performance testing"
+              >
+                {#if generatingTestData}⏳{:else}🧪{/if}
+              </button>
+            </div>
+          {/if}
+          
+          <div class="balance-display">
+            <span class="balance-value">
+              {unit?.symbol ?? ''}{#if entries.length > 0}{formatAmount(entries[entries.length - 1].runningBalance)}{:else}0.00{/if}
+            </span>
+          </div>
         </div>
       </div>
+      
+      <!-- Dev progress indicator -->
+      {#if ENABLE_TEST_DATA_GENERATOR && testDataProgress}
+        <div class="dev-progress-bar">
+          <span class="dev-progress-text">{testDataProgress}</span>
+        </div>
+      {/if}
     {/if}
   </header>
   
@@ -1464,5 +1636,69 @@
   .current-account-link:hover {
     text-decoration: underline;
     color: var(--primary-color);
+  }
+  
+  /* Dev tools (compact, config-controlled) */
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  
+  .dev-test-tool {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    background: rgba(243, 156, 18, 0.1);
+    border: 1px solid rgba(243, 156, 18, 0.3);
+    border-radius: 4px;
+  }
+  
+  .dev-count-input {
+    width: 60px;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--border-light);
+    border-radius: 3px;
+    font-size: 0.75rem;
+    text-align: right;
+    background: var(--surface-primary);
+    color: var(--text-primary);
+  }
+  
+  .dev-count-input:focus {
+    outline: none;
+    border-color: #f39c12;
+  }
+  
+  .dev-test-btn-compact {
+    padding: 0.25rem 0.5rem;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    transition: transform 0.15s;
+  }
+  
+  .dev-test-btn-compact:hover:not(:disabled) {
+    transform: scale(1.1);
+  }
+  
+  .dev-test-btn-compact:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  .dev-progress-bar {
+    padding: 0.5rem 1rem;
+    background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+    border-top: 1px solid #f39c12;
+    font-size: 0.8125rem;
+  }
+  
+  .dev-progress-text {
+    color: #856404;
+    font-weight: 500;
   }
 </style>

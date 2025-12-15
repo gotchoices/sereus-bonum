@@ -4,6 +4,16 @@
 
 ---
 
+## Dev Configuration
+
+To enable the test data generator:
+1. Create `apps/web/.env.local` (not tracked by git)
+2. Add: `VITE_ENABLE_TEST_DATA=true`
+3. Restart dev server: `npm run dev`
+4. Generator appears in ledger header (top-right, above balance)
+
+---
+
 ## Current Sprint (Active Development)
 
 ### 🔄 Web MVP - Core Screens
@@ -35,7 +45,12 @@
   - Actions row spans full width with flexbox button layout
 - **Maintains:** All existing functionality (expand/collapse, inline editing, locked transactions, keyboard nav, split mode)
 - **Grid Layout:** 8 columns (40px, 135px, 100px, 1fr, 200px, 160px, 160px, 160px)
-- **Next:** Ready for TanStack Virtual integration if `content-visibility` insufficient for 10K+ transactions
+- **Dev Tools:** Compact test data generator (config-controlled)
+  - **Location:** Top-right of ledger header (above balance display)
+  - **UI:** Number input (default: 1000) + 🧪 button
+  - **Config:** `VITE_ENABLE_TEST_DATA=true` in `.env.local` (DEV mode only)
+  - **Usage:** Generate transactions in small chunks for incremental performance testing
+- **Next:** Test performance with varying transaction counts, then decide on TanStack Virtual if needed
 
 ### ✅ Account Autocomplete & Transaction Entry - Specs & Help
 - **Created specs:**
