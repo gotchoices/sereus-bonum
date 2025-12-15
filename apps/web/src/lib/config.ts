@@ -24,3 +24,11 @@ export const DEBUG_DATA: boolean =
  */
 export const IS_DEV = import.meta.env.DEV;
 
+/**
+ * Enable test data generator in ledger (DEV mode only)
+ * When enabled, also DISABLES localStorage persistence for better performance
+ * Set via VITE_ENABLE_TEST_DATA environment variable
+ */
+export const ENABLE_TEST_DATA: boolean = 
+  IS_DEV && import.meta.env.VITE_ENABLE_TEST_DATA === 'true';
+

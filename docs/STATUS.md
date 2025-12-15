@@ -12,6 +12,11 @@ To enable the test data generator:
 3. Restart dev server: `npm run dev`
 4. Generator appears in ledger header (top-right, above balance)
 
+**Note:** When test data mode is enabled, localStorage persistence is **disabled** for:
+- ✅ **Much faster** test data generation (no serialization overhead)
+- ✅ **No storage quota errors** (localStorage has 5-10MB limit)
+- ⚠️ **Data is ephemeral** - refreshing the page creates a fresh database
+
 ---
 
 ## Current Sprint (Active Development)
@@ -49,7 +54,9 @@ To enable the test data generator:
   - **Location:** Top-right of ledger header (above balance display)
   - **UI:** Number input (default: 1000) + 🧪 button
   - **Config:** `VITE_ENABLE_TEST_DATA=true` in `.env.local` (DEV mode only)
+  - **Persistence:** When enabled, localStorage is **disabled** for speed and to avoid quota errors
   - **Usage:** Generate transactions in small chunks for incremental performance testing
+  - **Note:** Data is ephemeral - refresh creates a fresh database
 - **Next:** Test performance with varying transaction counts, then decide on TanStack Virtual if needed
 
 ### ✅ Account Autocomplete & Transaction Entry - Specs & Help

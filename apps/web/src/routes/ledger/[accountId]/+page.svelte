@@ -12,6 +12,7 @@
   import AccountAutocomplete from '$lib/components/AccountAutocomplete.svelte';
   import TransactionEditor from '$lib/components/TransactionEditor.svelte';
   import { formatDate as formatDateUtil } from '$lib/utils/formatDate';
+  import { ENABLE_TEST_DATA } from '$lib/config';
   
   // Route param
   let accountId = $derived($page.params.accountId);
@@ -23,7 +24,6 @@
   let accountGroup: AccountGroup | null = $state(null);
   
   // Dev tools
-  const ENABLE_TEST_DATA_GENERATOR = import.meta.env.DEV && import.meta.env.VITE_ENABLE_TEST_DATA === 'true';
   let generatingTestData = $state(false);
   let testDataProgress = $state<string | null>(null);
   let testDataCount = $state(1000);
@@ -583,8 +583,10 @@
     if (!account || !entity) return;
     
     const confirmed = confirm(
-      `⚠️ This will generate ${testDataCount.toLocaleString()} test transactions in this account.\n\n` +
-      'This is for performance testing only and cannot be undone.\n\n' +
+      `⚠️ This will generate ${testDataCount.toLocaleString()} test transactions.\n\n` +
+      '📊 For performance testing only\n' +
+      '💾 Data is ephemeral (not saved to localStorage)\n' +
+      '🔄 Refresh the page to start fresh\n\n' +
       'Continue?'
     );
     
@@ -734,7 +736,7 @@
         
         <div class="header-right">
           <!-- DEV ONLY: Test Data Generator -->
-          {#if ENABLE_TEST_DATA_GENERATOR}
+          {#if ENABLE_TEST_DATA}
             <div class="dev-test-tool">
               <input 
                 type="number" 
@@ -750,7 +752,7 @@
                 class="dev-test-btn-compact"
                 onclick={generateTestData}
                 disabled={generatingTestData}
-                title="Generate test transactions for performance testing"
+                title="Generate test transactions (ephemeral - not saved)"
               >
                 {#if generatingTestData}⏳{:else}🧪{/if}
               </button>
@@ -766,7 +768,7 @@
       </div>
       
       <!-- Dev progress indicator -->
-      {#if ENABLE_TEST_DATA_GENERATOR && testDataProgress}
+      {#if ENABLE_TEST_DATA && testDataProgress}
         <div class="dev-progress-bar">
           <span class="dev-progress-text">{testDataProgress}</span>
         </div>

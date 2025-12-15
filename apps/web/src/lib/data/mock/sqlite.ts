@@ -3,7 +3,7 @@
 
 import initSqlJs, { type Database } from 'sql.js';
 import SCHEMA_SQL from './schema.sql?raw';
-import { DEBUG_DATA } from '$lib/config';
+import { DEBUG_DATA, ENABLE_TEST_DATA } from '$lib/config';
 import { seedDemoData, seedDebugTransactions } from './seed';
 import { log } from '$lib/logger';
 
@@ -50,27 +50,34 @@ async function initializeDb(): Promise<Database> {
   });
   log.sqlite.debug('sql.js WASM loaded');
   
-  // Try to restore from localStorage
-  log.sqlite.debug('Checking localStorage for saved database...');
-  const saved = localStorage.getItem(STORAGE_KEY);
+  // Try to restore from localStorage (unless test data mode is enabled)
   let database: Database;
   let needsSeed = false;
   
-  if (saved) {
-    try {
-      log.sqlite.debug('Restoring database from localStorage');
-      const data = new Uint8Array(JSON.parse(saved));
-      database = new SQL.Database(data);
-      log.sqlite.info('Restored database from localStorage');
-    } catch (e) {
-      log.sqlite.warn('Failed to restore, creating fresh database', e);
+  if (ENABLE_TEST_DATA) {
+    log.sqlite.info('Test data mode enabled - persistence disabled, creating fresh database');
+    database = new SQL.Database();
+    needsSeed = true;
+  } else {
+    log.sqlite.debug('Checking localStorage for saved database...');
+    const saved = localStorage.getItem(STORAGE_KEY);
+    
+    if (saved) {
+      try {
+        log.sqlite.debug('Restoring database from localStorage');
+        const data = new Uint8Array(JSON.parse(saved));
+        database = new SQL.Database(data);
+        log.sqlite.info('Restored database from localStorage');
+      } catch (e) {
+        log.sqlite.warn('Failed to restore, creating fresh database', e);
+        database = new SQL.Database();
+        needsSeed = true;
+      }
+    } else {
+      log.sqlite.debug('No saved database, creating fresh');
       database = new SQL.Database();
       needsSeed = true;
     }
-  } else {
-    log.sqlite.debug('No saved database, creating fresh');
-    database = new SQL.Database();
-    needsSeed = true;
   }
   
   // Always run schema (IF NOT EXISTS is safe)
@@ -97,8 +104,14 @@ async function initializeDb(): Promise<Database> {
 
 /**
  * Save database to localStorage
+ * Skipped when ENABLE_TEST_DATA is true for better performance
  */
 export function saveDb(database?: Database): void {
+  if (ENABLE_TEST_DATA) {
+    log.sqlite.debug('Save skipped (test data mode - persistence disabled)');
+    return;
+  }
+  
   const d = database || db;
   if (!d) return;
   
