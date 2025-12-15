@@ -71,42 +71,46 @@
 </script>
 
 <style>
-  /* Editor row styling */
-  :global(.edit-simple-row),
-  :global(.edit-metadata-row),
-  :global(.edit-entry-row),
-  :global(.edit-actions-row) {
-    background: var(--surface-hover, #f9f9f9) !important;
-    position: relative;
-  }
-  
-  /* First row in edit group gets top border */
-  :global(.edit-simple-row),
-  :global(.edit-metadata-row) {
+  /* Editor container - spans all columns, creates nested grid */
+  .editor-container {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 
+      40px      /* Expand */
+      135px     /* Date */
+      100px     /* Ref */
+      1fr       /* Memo */
+      200px     /* Offset */
+      160px     /* Debit */
+      160px     /* Credit */
+      160px;    /* Balance */
+    gap: 0;
     border: 2px solid var(--primary-color, #0066cc);
-    border-bottom: none;
+    background: var(--surface-hover, #f9f9f9);
+    margin: 0.25rem 0;
   }
   
-  /* Middle rows get left/right borders only */
-  :global(.edit-entry-row) {
-    border-left: 2px solid var(--primary-color, #0066cc);
-    border-right: 2px solid var(--primary-color, #0066cc);
-    border-bottom: none;
+  /* Editor rows use display: contents so cells align with grid */
+  .editor-row {
+    display: contents;
   }
   
-  /* Last row (actions) gets bottom border */
-  :global(.edit-actions-row) {
-    border: 2px solid var(--primary-color, #0066cc);
-    border-top: none;
+  /* All editor cells */
+  .editor-row > div {
+    padding: 0.5rem 1rem;
+    background: var(--surface-hover, #f9f9f9);
   }
   
-  :global(.edit-actions-row td) {
-    padding: 0 !important;
-    background: var(--surface-hover, #f9f9f9) !important;
-  }
-  
-  :global(.edit-current-account) {
+  /* Current account row gets different background */
+  .edit-current-account > div {
     background: var(--surface-secondary);
+  }
+  
+  /* Actions row spans full width */
+  .editor-actions {
+    grid-column: 1 / -1;
+    padding: 0;
+    border-top: 1px solid var(--border-color);
   }
   
   /* Simple account field with split toggle button */
@@ -139,31 +143,10 @@
     cursor: not-allowed;
   }
   
-  /* Column-specific widths to match ledger table */
-  :global(.col-date) {
-    width: 135px;
-  }
-  
-  :global(.col-ref) {
-    width: 100px;
-  }
-  
-  :global(.col-memo) {
-    min-width: 200px;
-  }
-  
-  :global(.col-offset) {
-    min-width: 150px;
-  }
-  
+  /* Column alignment (widths defined by parent grid) */
   :global(.col-debit),
-  :global(.col-credit) {
-    width: 160px;
-    text-align: right;
-  }
-  
+  :global(.col-credit),
   :global(.col-balance) {
-    width: 160px;
     text-align: right;
   }
   
@@ -331,19 +314,20 @@
   }
 </style>
 
+<div class="editor-container">
 {#if isSimpleMode}
   <!-- SIMPLE MODE: Single row entry -->
-  <tr class="edit-simple-row" class:new-entry-row={isNewEntry}>
-    <td class="col-expand"></td>
-    <td class="col-date">
+  <div class="editor-row" role="row">
+    <div class="col-expand" role="gridcell"></div>
+    <div class="col-date" role="gridcell">
       <input 
         type="date" 
         bind:value={editingData.date}
         onfocus={onFocus}
         class="edit-input"
       />
-    </td>
-    <td class="col-ref">
+    </div>
+    <div class="col-ref" role="gridcell">
       <input 
         type="text" 
         bind:value={editingData.reference}
@@ -351,8 +335,8 @@
         onfocus={onFocus}
         class="edit-input"
       />
-    </td>
-    <td class="col-memo">
+    </div>
+    <div class="col-memo" role="gridcell">
       <input 
         type="text" 
         bind:value={editingData.memo}
@@ -360,8 +344,8 @@
         onfocus={onFocus}
         class="edit-input"
       />
-    </td>
-    <td class="col-offset">
+    </div>
+    <div class="col-offset" role="gridcell">
       <div class="simple-account-field">
         <AccountAutocomplete
           {entityId}
@@ -379,8 +363,8 @@
           |
         </button>
       </div>
-    </td>
-    <td class="col-debit">
+    </div>
+    <div class="col-debit" role="gridcell">
       <input 
         type="number" 
         step="0.01" 
@@ -390,8 +374,8 @@
         onfocus={onFocus}
         class="edit-input edit-amount"
       />
-    </td>
-    <td class="col-credit">
+    </div>
+    <div class="col-credit" role="gridcell">
       <input 
         type="number" 
         step="0.01" 
@@ -401,41 +385,39 @@
         onfocus={onFocus}
         class="edit-input edit-amount"
       />
-    </td>
-    <td class="col-balance"></td>
-  </tr>
+    </div>
+    <div class="col-balance" role="gridcell"></div>
+  </div>
   
   <!-- Simple mode actions -->
-  <tr class="edit-actions-row" class:new-entry-row={isNewEntry}>
-    <td colspan="8">
-      <div class="edit-actions-container">
-        <div class="edit-actions-left">
-          <button class="btn-primary" onclick={onSave}>{$t('common.save')}</button>
-          <button class="btn-secondary" onclick={onCancel}>{$t('common.cancel')}</button>
-          {#if !isNewEntry}
-            <button class="btn-secondary" onclick={onAddSplit}>+ {$t('ledger.add_split')}</button>
-            {#if onDelete && transactionId}
-              <button class="btn-danger" onclick={() => onDelete?.(transactionId!)}>{$t('common.delete')}</button>
-            {/if}
+  <div class="editor-actions" role="row">
+    <div class="edit-actions-container">
+      <div class="edit-actions-left">
+        <button class="btn-primary" onclick={onSave}>{$t('common.save')}</button>
+        <button class="btn-secondary" onclick={onCancel}>{$t('common.cancel')}</button>
+        {#if !isNewEntry}
+          <button class="btn-secondary" onclick={onAddSplit}>+ {$t('ledger.add_split')}</button>
+          {#if onDelete && transactionId}
+            <button class="btn-danger" onclick={() => onDelete?.(transactionId!)}>{$t('common.delete')}</button>
           {/if}
-        </div>
+        {/if}
       </div>
-    </td>
-  </tr>
+    </div>
+  </div>
 {:else}
   <!-- SPLIT MODE: Multiple rows -->
   <!-- Transaction metadata row -->
-  <tr class="edit-metadata-row" class:new-entry-row={isNewEntry}>
-    <td class="col-expand"></td>
-    <td class="col-date">
+  <div class="editor-row" role="row">
+    <div class="col-expand" role="gridcell"></div>
+    <div class="col-date" role="gridcell">
       <input 
         type="date" 
         bind:value={editingData.date}
         onfocus={onFocus}
         class="edit-input"
       />
-    </td>
-    <td class="col-ref">
+    </div>
+    <div class="col-ref" role="gridcell">
       <input 
         type="text" 
         bind:value={editingData.reference}
@@ -443,8 +425,8 @@
         onfocus={onFocus}
         class="edit-input"
       />
-    </td>
-    <td class="col-memo">
+    </div>
+    <div class="col-memo" role="gridcell">
       <input 
         type="text" 
         bind:value={editingData.memo}
@@ -452,25 +434,25 @@
         onfocus={onFocus}
         class="edit-input"
       />
-    </td>
-    <td class="col-offset"></td>
-    <td class="col-debit"></td>
-    <td class="col-credit"></td>
-    <td class="col-balance"></td>
-  </tr>
+    </div>
+    <div class="col-offset" role="gridcell"></div>
+    <div class="col-debit" role="gridcell"></div>
+    <div class="col-credit" role="gridcell"></div>
+    <div class="col-balance" role="gridcell"></div>
+  </div>
   
   <!-- Current account entry row -->
-  <tr class="edit-entry-row edit-current-account" class:new-entry-row={isNewEntry}>
-    <td class="col-expand"></td>
-    <td class="col-date"></td>
-    <td class="col-ref"></td>
-    <td class="col-memo"></td>
-    <td class="col-offset">
+  <div class="editor-row edit-current-account" role="row">
+    <div class="col-expand" role="gridcell"></div>
+    <div class="col-date" role="gridcell"></div>
+    <div class="col-ref" role="gridcell"></div>
+    <div class="col-memo" role="gridcell"></div>
+    <div class="col-offset" role="gridcell">
       <a href="/ledger/{accountId}" class="current-account-link" title={accountPath}>
         {accountName}
       </a>
-    </td>
-    <td class="col-debit">
+    </div>
+    <div class="col-debit" role="gridcell">
       <input 
         type="number" 
         step="0.01" 
@@ -480,8 +462,8 @@
         onfocus={onFocus}
         class="edit-input edit-amount"
       />
-    </td>
-    <td class="col-credit">
+    </div>
+    <div class="col-credit" role="gridcell">
       <input 
         type="number" 
         step="0.01" 
@@ -491,17 +473,17 @@
         onfocus={onFocus}
         class="edit-input edit-amount"
       />
-    </td>
-    <td class="col-balance"></td>
-  </tr>
+    </div>
+    <div class="col-balance" role="gridcell"></div>
+  </div>
   
   <!-- Split entry rows -->
   {#each editingData.splits as split (split.id)}
-    <tr class="edit-entry-row edit-split-entry" class:new-entry-row={isNewEntry}>
-      <td class="col-expand"></td>
-      <td class="col-date"></td>
-      <td class="col-ref"></td>
-      <td class="col-memo">
+    <div class="editor-row" role="row">
+      <div class="col-expand" role="gridcell"></div>
+      <div class="col-date" role="gridcell"></div>
+      <div class="col-ref" role="gridcell"></div>
+      <div class="col-memo" role="gridcell">
         <input 
           type="text" 
           bind:value={split.note}
@@ -509,8 +491,8 @@
           onfocus={onFocus}
           class="edit-input"
         />
-      </td>
-      <td class="col-offset">
+      </div>
+      <div class="col-offset" role="gridcell">
         <AccountAutocomplete
           {entityId}
           bind:value={split.accountSearch}
@@ -518,8 +500,8 @@
           disabled={false}
           onfocus={onFocus}
         />
-      </td>
-      <td class="col-debit">
+      </div>
+      <div class="col-debit" role="gridcell">
         <input 
           type="number" 
           step="0.01" 
@@ -529,8 +511,8 @@
           onfocus={onFocus}
           class="edit-input edit-amount"
         />
-      </td>
-      <td class="col-credit">
+      </div>
+      <div class="col-credit" role="gridcell">
         <input 
           type="number" 
           step="0.01" 
@@ -540,8 +522,8 @@
           onfocus={onFocus}
           class="edit-input edit-amount"
         />
-      </td>
-      <td class="col-balance">
+      </div>
+      <div class="col-balance" role="gridcell">
         {#if editingData.splits.length > 1}
           <button 
             class="btn-remove-split" 
@@ -551,36 +533,35 @@
             ×
           </button>
         {/if}
-      </td>
-    </tr>
+      </div>
+    </div>
   {/each}
   
   <!-- Split mode actions -->
-  <tr class="edit-actions-row" class:new-entry-row={isNewEntry}>
-    <td colspan="8">
-      {#if true}
-        {@const totals = getEditTotals()}
-        <div class="edit-actions-container">
-          <div class="edit-actions-left">
-            <button class="btn-primary" onclick={onSave}>{$t('common.save')}</button>
-            {#if !isNewEntry && onDelete && transactionId}
-              <button class="btn-danger" onclick={() => onDelete?.(transactionId!)}>{$t('common.delete')}</button>
-            {/if}
-            <button class="btn-secondary" onclick={onCancel}>{$t('common.cancel')}</button>
-            <button class="btn-secondary" onclick={onAddSplit}>+ {$t('ledger.add_split')}</button>
-          </div>
-          <div class="edit-totals-right">
-            <span class="total-amount">{unit?.symbol ?? ''}{totals.debits.toFixed(2)}</span>
-            <span class="total-amount">{unit?.symbol ?? ''}{totals.credits.toFixed(2)}</span>
-            {#if Math.abs(totals.balance) <= 1}
-              <span class="balanced">{unit?.symbol ?? ''}0.00 ✓</span>
-            {:else}
-              <span class="imbalanced">{unit?.symbol ?? ''}{formatAmount(totals.balance)} ⚠</span>
-            {/if}
-          </div>
+  <div class="editor-actions" role="row">
+    {#if true}
+      {@const totals = getEditTotals()}
+      <div class="edit-actions-container">
+        <div class="edit-actions-left">
+          <button class="btn-primary" onclick={onSave}>{$t('common.save')}</button>
+          {#if !isNewEntry && onDelete && transactionId}
+            <button class="btn-danger" onclick={() => onDelete?.(transactionId!)}>{$t('common.delete')}</button>
+          {/if}
+          <button class="btn-secondary" onclick={onCancel}>{$t('common.cancel')}</button>
+          <button class="btn-secondary" onclick={onAddSplit}>+ {$t('ledger.add_split')}</button>
         </div>
-      {/if}
-    </td>
-  </tr>
+        <div class="edit-totals-right">
+          <span class="total-amount">{unit?.symbol ?? ''}{totals.debits.toFixed(2)}</span>
+          <span class="total-amount">{unit?.symbol ?? ''}{totals.credits.toFixed(2)}</span>
+          {#if Math.abs(totals.balance) <= 1}
+            <span class="balanced">{unit?.symbol ?? ''}0.00 ✓</span>
+          {:else}
+            <span class="imbalanced">{unit?.symbol ?? ''}{formatAmount(totals.balance)} ⚠</span>
+          {/if}
+        </div>
+      </div>
+    {/if}
+  </div>
 {/if}
+</div>
 

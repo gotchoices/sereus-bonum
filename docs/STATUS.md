@@ -24,11 +24,18 @@
 **Implementation:** Replaced HTML tables with CSS Grid + ARIA for industrial-strength scalability
 - **Motivation:** Enable virtual scrolling for 10K+ transactions (per production delivery posture)
 - **Architecture:** CSS Grid with `display: contents` pattern for proper column alignment
-- **Accessibility:** Full ARIA grid implementation (`role="grid"`, `role="row"`, `role="gridcell"`)
+- **Accessibility:** Full ARIA grid implementation (`role="grid"`, `role="row"`, `role="gridcell"`, `role="columnheader"`)
 - **Performance:** CSS `content-visibility: auto` for browser-native virtualization
-- **Maintains:** All existing functionality (expand/collapse, inline editing, locked transactions, keyboard nav)
-- **File:** `apps/web/src/routes/ledger/[accountId]/+page.svelte` (table → grid)
-- **Next:** Ready for TanStack Virtual integration if needed for 10K+ transactions
+- **Components Refactored:**
+  - `apps/web/src/routes/ledger/[accountId]/+page.svelte` - Main ledger page (table → grid)
+  - `apps/web/src/lib/components/TransactionEditor.svelte` - Clean grid-first nested layout
+- **Editor Design:** Nested grid architecture (spans parent columns, creates 8-column internal grid)
+  - Container has border/background (not individual rows)
+  - Rows use `display: contents` for cell alignment
+  - Actions row spans full width with flexbox button layout
+- **Maintains:** All existing functionality (expand/collapse, inline editing, locked transactions, keyboard nav, split mode)
+- **Grid Layout:** 8 columns (40px, 135px, 100px, 1fr, 200px, 160px, 160px, 160px)
+- **Next:** Ready for TanStack Virtual integration if `content-visibility` insufficient for 10K+ transactions
 
 ### ✅ Account Autocomplete & Transaction Entry - Specs & Help
 - **Created specs:**

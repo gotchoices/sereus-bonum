@@ -118,6 +118,32 @@ If `content-visibility` is insufficient for 10K+ transactions, integrate TanStac
 - Only render visible rows + 5 overscan buffer
 - Absolute positioning now compatible with grid layout
 
+### Transaction Editor - Clean Grid Architecture
+
+The `TransactionEditor` component (`design/specs/web/components/transaction-edit.md`) uses a **nested grid** design:
+
+**Structure:**
+```
+<div class="editor-container">      ← grid-column: 1 / -1, creates 8-column nested grid, blue border
+  <div class="editor-row">          ← display: contents (children align to parent grid)
+    <div>...</div>                  ← Individual grid cells with padding
+  </div>
+  <div class="editor-actions">      ← Spans full width, contains button flexbox
+    ...
+  </div>
+</div>
+```
+
+**Key Features:**
+- **Wrapper Grid**: `.editor-container` spans all parent columns, creates nested 8-column grid (40px, 135px, 100px, 1fr, 200px, 160px, 160px, 160px)
+- **Visual Grouping**: Blue 2px border and background applied to container (not individual rows)
+- **Row Structure**: `.editor-row` uses `display: contents` so children align with grid
+- **No Conflicts**: Designed grid-first, not adapted from tables
+- **Maintains**: All functionality (simple/split modes, validation, keyboard nav, auto-balance)
+- **ARIA**: Full accessibility (`role="row"`, `role="gridcell"`)
+
+This architecture ensures clean alignment with the parent ledger grid while maintaining visual distinction for edit mode.
+
 ---
 
 ## Header Section
