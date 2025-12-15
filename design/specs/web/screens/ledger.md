@@ -108,6 +108,7 @@ This ensures the blank entry is always at the natural insertion point for the cu
 - New transaction created in database
 - Ledger refreshes with new transaction added
 - New blank entry row appears at bottom
+- Viewport scrolls to show the saved transaction (and blank entry if visible)
 - Cursor moves to Date field of new blank row (ready for next entry)
 
 **After cancel:**
@@ -293,6 +294,28 @@ Transactions in closed/reconciled periods cannot be edited.
 **When periods close:**
 - New separator line appears when period is closed/reconciled
 - Typically monthly or quarterly, controlled by user in settings
+
+## Viewport Management
+
+The ledger automatically manages scroll position to keep the user's focus on relevant content.
+
+### Initial Load
+- **First visit to account:** Scroll to blank entry row (the "latest date" position)
+- **Return visit:** Restore last scroll position (topmost visible transaction ID)
+- **Fallback:** If saved position not found, scroll to blank entry
+
+### After Saving Transaction
+- **Primary goal:** Ensure the just-saved transaction is visible
+- **Secondary goal:** If possible without losing sight of saved transaction, also show blank entry
+- **Method:** Scroll minimally (`scrollIntoView({ block: 'nearest' })`)
+  - If transaction already visible: No scroll
+  - If transaction off-screen: Scroll to bring it into view
+  - New transactions naturally appear near blank entry, so both are often visible together
+
+### Scroll Position Persistence
+- Automatically tracks topmost visible transaction during scrolling (debounced 300ms)
+- Saves `lastVisibleTransactionId` in account-specific view state
+- Restores position on next visit to same account
 
 ## Acceptance Criteria
 

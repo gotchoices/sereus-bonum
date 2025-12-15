@@ -25,11 +25,36 @@ To enable the test data generator:
 - ✅ Home screen with entity list & VBS
 - ✅ Account Catalog (manage account groups)
 - ✅ Accounts View (Balance Sheet, Trial Balance, Income Statement modes)
-- ✅ Ledger (transaction entry with split support)
+- ✅ Ledger (transaction entry with split support, scroll position persistence)
 - ✅ Transaction Search (Phase 1: Browser with export)
 - ⬜ Transaction Search (Phase 2: Query builder)
 - ✅ Settings screen (theme, dates, account display, sign reversal)
 - 🔄 Import Books (GnuCash) - Parser complete, account/transaction creation pending
+
+### ⬜ Ledger Filtering & Search
+- ⬜ **Quick Filter** (ephemeral, keyboard-driven)
+  - Icon/input next to account title
+  - Searches: Memo, Note, Reference (substring, case-insensitive)
+  - Shortcut: Ctrl+F or `/` key
+  - Clears on account change
+- ⬜ **Rich Filters** (persistent, UI-driven)
+  - Date range picker
+  - Amount range
+  - Show only open periods (transactions after closed date)
+  - Show current year/month/quarter
+  - Account dropdown (for split entries)
+  - Combine filters with AND logic
+- ⬜ **Filtered Display**
+  - Show matching transactions only
+  - Optional: Show filtered balance vs. total balance
+  - Link to advanced search (/search) for boolean queries
+
+**Key Design Questions:**
+- Q1: Should quick filter persist in viewState or be truly ephemeral?
+- Q2: Rich filters - where to place UI? (Header bar? Sidebar? Popup panel?)
+- Q3: How to indicate filtered state? (Badge? Background color? Status bar?)
+- Q4: Filtered balance - show both (filtered vs. total) or just suppress balance?
+- Q5: Should "show only open periods" be a rich filter or a global toggle?
 
 ---
 
@@ -57,7 +82,24 @@ To enable the test data generator:
   - **Persistence:** When enabled, localStorage is **disabled** for speed and to avoid quota errors
   - **Usage:** Generate transactions in small chunks for incremental performance testing
   - **Note:** Data is ephemeral - refresh creates a fresh database
-- **Next:** Test performance with varying transaction counts, then decide on TanStack Virtual if needed
+- **Performance Testing Results:** 20,000 transactions tested - scrolling is fast and efficient with `content-visibility: auto`
+
+### ✅ Ledger Scroll Position - Smart Viewport Management
+**Implementation:** Scroll to latest date on load, persist viewport position per account, scroll after save
+- **Default Behavior:** Scroll to blank entry row (adapts to sort order)
+  - Newest first → blank entry at top (scroll to top)
+  - Oldest first → blank entry at bottom (scroll to bottom)
+- **After Saving Transaction:** Scroll to show the saved transaction
+  - Uses `scrollIntoView({ block: 'nearest' })` for minimal scroll
+  - If transaction already visible → No scroll (perfect for editing)
+  - If transaction off-screen → Scroll to bring it into view
+  - New transactions naturally appear near blank entry (both visible together)
+- **After Test Data Generation:** Scroll to blank entry to show results
+- **Viewport Persistence:** Saves `lastVisibleTransactionId` in `viewState`
+  - Tracks topmost visible transaction (debounced during scroll)
+  - Restores position on reload (falls back to blank entry if transaction not found)
+- **Scroll Tracking:** 300ms debounce on scroll events to capture user's reading position
+- **Benefits:** Users always see their work, viewport adapts intelligently to context
 
 ### ✅ Account Autocomplete & Transaction Entry - Specs & Help
 - **Created specs:**
@@ -434,6 +476,21 @@ Currently all stubs:
 ---
 
 ## Future Features (Post-MVP)
+
+### 🔮 Performance Optimizations
+
+#### Virtual Scrolling (Optional Enhancement)
+**Status:** Deferred - Current implementation handles 20K+ transactions well
+- **Trigger:** Only needed if user feedback indicates performance issues beyond 50K transactions
+- **Implementation:** TanStack Virtual for Svelte (`yarn add @tanstack/svelte-virtual` when needed)
+- **Approach:** JavaScript-driven windowing with precise buffer control
+- **Settings Toggle:** Allow users to enable/disable (some prefer full scrollbar for jump-to-date)
+- **Challenges to address:**
+  - Dynamic row heights (collapsed vs. expanded vs. edit modes)
+  - Keyboard navigation across virtual boundaries
+  - Edit mode state persistence for off-screen rows
+  - Scroll position tracking with virtualized items
+- **Alternative:** Continue relying on CSS `content-visibility: auto` (browser-native, zero JS overhead)
 
 ### 🔮 Reporting Enhancements
 - Multi-period comparisons

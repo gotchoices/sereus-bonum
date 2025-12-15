@@ -37,6 +37,11 @@
   let expandedTransactions = $state<Record<string, boolean>>({});
   let expandAll = $state(false);
   let closedDate = $state<string | undefined>(undefined);
+  let lastVisibleTransactionId = $state<string | undefined>(undefined);
+  
+  // Scroll container reference
+  let scrollElement: HTMLDivElement | null = $state(null);
+  let scrollRestorationPending = $state(false);
   
   // Load view state when accountId changes
   $effect(() => {
@@ -45,6 +50,7 @@
         expandedTransactions: Record<string, boolean>;
         expandAll: boolean;
         closedDate?: string;
+        lastVisibleTransactionId?: string;
       }>(`ledger:${accountId}`, {
         expandedTransactions: {},
         expandAll: false,
@@ -52,6 +58,8 @@
       expandedTransactions = loaded.expandedTransactions;
       expandAll = loaded.expandAll;
       closedDate = loaded.closedDate;
+      lastVisibleTransactionId = loaded.lastVisibleTransactionId;
+      scrollRestorationPending = true; // Trigger restoration after render
     }
   });
   
@@ -62,6 +70,7 @@
         expandedTransactions,
         expandAll,
         closedDate,
+        lastVisibleTransactionId,
       });
     }
   });
@@ -235,6 +244,96 @@
     expandAll = !expandAll;
     // Clear individual overrides
     expandedTransactions = {};
+  }
+  
+  // Scroll position tracking and restoration
+  let scrollTrackingTimeout: ReturnType<typeof setTimeout> | null = null;
+  
+  function handleScroll() {
+    // Debounce scroll tracking
+    if (scrollTrackingTimeout) clearTimeout(scrollTrackingTimeout);
+    
+    scrollTrackingTimeout = setTimeout(() => {
+      if (!scrollElement) return;
+      
+      // Find the topmost visible transaction
+      const containerRect = scrollElement.getBoundingClientRect();
+      const txnElements = scrollElement.querySelectorAll('[data-transaction-id]');
+      
+      for (const el of Array.from(txnElements)) {
+        const rect = el.getBoundingClientRect();
+        // Check if element is in viewport (at least 50px visible)
+        if (rect.top >= containerRect.top && rect.top < containerRect.top + 100) {
+          const txnId = el.getAttribute('data-transaction-id');
+          if (txnId && txnId !== 'new') {
+            lastVisibleTransactionId = txnId;
+            log.ui.debug('[Ledger] Scroll position tracked:', txnId);
+            break;
+          }
+        }
+      }
+    }, 300);
+  }
+  
+  function restoreScrollPosition() {
+    if (!scrollElement || !scrollRestorationPending) return;
+    
+    scrollRestorationPending = false;
+    
+    // Try to scroll to last visible transaction
+    if (lastVisibleTransactionId) {
+      const target = scrollElement.querySelector(`[data-transaction-id="${lastVisibleTransactionId}"]`);
+      if (target) {
+        log.ui.info('[Ledger] Restoring scroll to transaction:', lastVisibleTransactionId);
+        target.scrollIntoView({ block: 'start', behavior: 'instant' });
+        return;
+      }
+    }
+    
+    // Otherwise, scroll to blank entry (latest date position)
+    const blankEntry = scrollElement.querySelector('.blank-entry-row');
+    if (blankEntry) {
+      log.ui.info('[Ledger] Scrolling to latest date (blank entry)');
+      blankEntry.scrollIntoView({ block: 'center', behavior: 'instant' });
+    }
+  }
+  
+  // Restore scroll position after data loads
+  $effect(() => {
+    if (!loading && transactions.length > 0 && scrollRestorationPending) {
+      // Delay restoration to ensure DOM is fully rendered
+      setTimeout(() => restoreScrollPosition(), 100);
+    }
+  });
+  
+  // Scroll to specific transaction (minimal scroll if already visible)
+  function scrollToTransaction(transactionId: string) {
+    if (!scrollElement) return;
+    
+    const target = scrollElement.querySelector(`[data-transaction-id="${transactionId}"]`);
+    if (target) {
+      log.ui.info('[Ledger] Scrolling to transaction:', transactionId);
+      target.scrollIntoView({ 
+        block: 'nearest',    // Minimal scroll - only if not visible
+        behavior: 'smooth'   // Nice animation
+      });
+    } else {
+      log.ui.warn('[Ledger] Transaction not found for scroll:', transactionId);
+    }
+  }
+  
+  // Scroll to blank entry (for test data generation, etc.)
+  function scrollToBlankEntry() {
+    if (!scrollElement) return;
+    
+    const blankEntry = scrollElement.querySelector('.blank-entry-row');
+    if (blankEntry) {
+      log.ui.info('[Ledger] Scrolling to blank entry');
+      blankEntry.scrollIntoView({ 
+        block: 'center', 
+        behavior: 'smooth' 
+      });
+    }
   }
   
   // Enter edit mode
@@ -434,6 +533,7 @@
     try {
       const dataService = await getDataService();
       const divisor = unit?.displayDivisor ?? 100;
+      let savedTransactionId: string | null = null;
       
       if (isNewEntry) {
         // Create new transaction
@@ -444,21 +544,22 @@
         // For simple transaction (1 split)
         if (editingData.splits.length === 1 && editingData.splits[0].accountId) {
           const split = editingData.splits[0];
-          await dataService.createTransaction({
+          const txn = await dataService.createTransaction({
+            entityId: entity!.id,
             date: editingData.date,
             reference: editingData.reference || undefined,
             memo: editingData.memo || undefined,
-            entries: [
-              {
-                accountId: accountId,
-                amount: currentAmount,
-              },
-              {
-                accountId: split.accountId,
-                amount: -currentAmount,
-              },
-            ],
-          });
+          }, [
+            {
+              accountId: accountId,
+              amount: currentAmount,
+            },
+            {
+              accountId: split.accountId,
+              amount: -currentAmount,
+            },
+          ]);
+          savedTransactionId = txn.id;
         } else {
           // Split transaction
           const entries = [
@@ -476,15 +577,16 @@
             }),
           ];
           
-          await dataService.createTransaction({
+          const txn = await dataService.createTransaction({
+            entityId: entity!.id,
             date: editingData.date,
             reference: editingData.reference || undefined,
             memo: editingData.memo || undefined,
-            entries,
-          });
+          }, entries);
+          savedTransactionId = txn.id;
         }
         
-        log.ui.info('[Ledger] New transaction created');
+        log.ui.info('[Ledger] New transaction created:', savedTransactionId);
       } else if (editingTransactionId) {
         // Update existing transaction
         await dataService.updateTransaction(editingTransactionId, {
@@ -492,20 +594,30 @@
           reference: editingData.reference || undefined,
           memo: editingData.memo || undefined,
         });
+        savedTransactionId = editingTransactionId;
         
-        log.ui.info('[Ledger] Transaction updated');
+        log.ui.info('[Ledger] Transaction updated:', savedTransactionId);
       }
       
       // Exit edit mode and reload
+      const wasNewEntry = isNewEntry;
+      const txnIdToScroll = savedTransactionId;
       isNewEntry = false;
       editingTransactionId = null;
       editingData = null;
       await loadData();
       
-      // Focus on new entry date field if just created
-      if (isNewEntry) {
+      // Scroll to show the saved transaction
+      if (txnIdToScroll) {
         setTimeout(() => {
-          document.querySelector<HTMLInputElement>('.new-entry-row input[type="date"]')?.focus();
+          scrollToTransaction(txnIdToScroll);
+          
+          // Focus on new entry date field if just created
+          if (wasNewEntry) {
+            setTimeout(() => {
+              document.querySelector<HTMLInputElement>('.blank-entry-row input[type="date"]')?.focus();
+            }, 100);
+          }
         }, 100);
       }
     } catch (e) {
@@ -696,6 +808,9 @@
       testDataProgress = 'Reloading ledger...';
       await loadData();
       
+      // Scroll to blank entry to show results
+      setTimeout(() => scrollToBlankEntry(), 100);
+      
       testDataProgress = `✅ Successfully generated ${totalCount} test transactions!`;
       log.ui.info('[Dev] Test data generation complete');
       
@@ -799,7 +914,7 @@
   {/if}
   
   <!-- Ledger Grid (scrollable transactions) -->
-  <div class="ledger-container">
+  <div class="ledger-container" bind:this={scrollElement} onscroll={handleScroll}>
     {#if loading}
       <div class="loading-state">
         <span class="spinner"></span>
@@ -925,6 +1040,7 @@
                   onclick={() => !txn.isLocked && enterEditMode(txn)}
                   role="row"
                   aria-expanded="true"
+                  data-transaction-id={txn.transactionId}
                 >
                   <div class="col-expand" role="gridcell">
                     <button 
@@ -1024,6 +1140,7 @@
                   onclick={() => !txn.isLocked && enterEditMode(txn)}
                   role="row"
                   aria-expanded="false"
+                  data-transaction-id={txn.transactionId}
                 >
                   <div class="col-expand" role="gridcell">
                     <button 
