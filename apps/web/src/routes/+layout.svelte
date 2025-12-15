@@ -6,6 +6,7 @@
   import { settings } from '$lib/stores/settings';
   import { t } from '$lib/i18n';
   import { log } from '$lib/logger';
+  import AIAssistant from '$lib/components/AIAssistant.svelte';
   import '../app.css';
   
   console.log('[Layout] Script executing, browser:', browser);
@@ -13,6 +14,7 @@
   let initialized = $state(false);
   let initError = $state<string | null>(null);
   let initStarted = false;
+  let aiAssistantOpen = $state(false);
   
   // Use $effect for Svelte 5 - runs after mount on client
   $effect(() => {
@@ -43,7 +45,7 @@
   <div class="init-error">
     <h2>Initialization Error</h2>
     <p>{initError}</p>
-    <button on:click={() => window.location.reload()}>Reload</button>
+    <button onclick={() => window.location.reload()}>Reload</button>
   </div>
 {:else}
   <div class="app-shell">
@@ -84,6 +86,12 @@
             {$t('nav.settings')}
           </a>
         </li>
+        <li>
+          <button class="nav-button" onclick={() => aiAssistantOpen = !aiAssistantOpen}>
+            <span class="nav-icon">🤖</span>
+            AI Help
+          </button>
+        </li>
       </ul>
       
       {#if !initialized}
@@ -94,6 +102,9 @@
     <main class="main-content">
       <slot />
     </main>
+    
+    <!-- AI Assistant -->
+    <AIAssistant bind:isOpen={aiAssistantOpen} />
   </div>
 {/if}
 
@@ -162,6 +173,26 @@
   
   .nav-icon {
     font-size: 1.1rem;
+  }
+  
+  .nav-button {
+    width: 100%;
+    background: none;
+    border: none;
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    font-size: inherit;
+    color: var(--text-secondary);
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    transition: all 0.15s ease;
+  }
+  
+  .nav-button:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
   }
   
   .main-content {
