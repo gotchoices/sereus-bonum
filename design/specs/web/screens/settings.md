@@ -44,6 +44,38 @@ Global application settings and user preferences.
 
 ---
 
+## AI Assistant
+
+### Enable AI Assistant
+- Checkbox: "Enable AI Assistant"
+- Default: Unchecked (disabled)
+- When enabled, shows additional configuration options
+
+### AI Provider
+- Dropdown: `OpenAI`, `Anthropic`, `Google Gemini`
+- Required when AI assistant is enabled
+- Default: None (user must select)
+
+### API Key
+- Password input field (with show/hide toggle)
+- Monospace font for better readability
+- Required when provider is selected
+- Validated on blur
+
+### Test Connection
+- Button: "Test Connection"
+- Disabled when no API key provided
+- Shows loading state while testing
+- Displays success/error message with visual feedback
+
+### Privacy Note
+- Prominent message explaining:
+  - API key stored locally in browser
+  - Never sent to Sereus servers
+  - Requests go directly from browser to chosen provider
+
+---
+
 ## Network Preferences (Future)
 
 ### Sereus Nodes

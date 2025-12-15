@@ -11,11 +11,18 @@ export type Theme = 'light' | 'dark' | 'system';
 export type DateFormat = 'US' | 'EU' | 'ISO';
 export type AccountDisplay = 'code' | 'name' | 'path' | 'code-name';
 export type TransactionSortOrder = 'oldest' | 'newest';
+export type AIProvider = 'openai' | 'anthropic' | 'google';
 
 export interface SignReversal {
   equity: boolean;
   income: boolean;
   liability: boolean;
+}
+
+export interface AISettings {
+  provider: AIProvider | null;
+  apiKey: string;
+  enabled: boolean;
 }
 
 export interface AppSettings {
@@ -25,6 +32,7 @@ export interface AppSettings {
   accountDisplay: AccountDisplay;
   transactionSortOrder: TransactionSortOrder;
   signReversal: SignReversal;
+  ai: AISettings;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -37,6 +45,11 @@ const DEFAULT_SETTINGS: AppSettings = {
     equity: false,
     income: false,
     liability: false,
+  },
+  ai: {
+    provider: null,
+    apiKey: '',
+    enabled: false,
   },
 };
 
@@ -70,6 +83,16 @@ function createSettingsStore() {
         console.error('Failed to parse sign reversal settings:', e);
       }
       
+      let ai = DEFAULT_SETTINGS.ai;
+      try {
+        const saved = localStorage.getItem('bonum-ai-settings');
+        if (saved) {
+          ai = JSON.parse(saved);
+        }
+      } catch (e) {
+        console.error('Failed to parse AI settings:', e);
+      }
+      
       set({
         theme,
         language,
@@ -77,6 +100,7 @@ function createSettingsStore() {
         accountDisplay,
         transactionSortOrder,
         signReversal,
+        ai,
       });
       
       // Apply theme immediately
@@ -141,6 +165,16 @@ function createSettingsStore() {
       update(s => ({ ...s, signReversal: reversal }));
       if (browser) {
         localStorage.setItem('bonum-sign-reversal', JSON.stringify(reversal));
+      }
+    },
+    
+    /**
+     * Set AI settings
+     */
+    setAISettings: (aiSettings: AISettings) => {
+      update(s => ({ ...s, ai: aiSettings }));
+      if (browser) {
+        localStorage.setItem('bonum-ai-settings', JSON.stringify(aiSettings));
       }
     },
   };

@@ -427,16 +427,17 @@ From story 04 (Alt D):
 
 ### Implementation Phasing
 
-#### Phase 1: Settings & API Configuration
-- ⬜ Settings screen integration for AI
-  - API key management (per-provider: OpenAI, Anthropic, etc.)
-  - Provider/model selection (dropdown)
-  - Multiple agent configs (name, provider, model, key)
-  - Active agent selection
-  - User-specified rules files (text box per agent + global rules)
-  - Rules scope: agent-specific and all-agents
-- ⬜ Backend service layer for agent API calls
-- ⬜ Credential storage/encryption strategy
+#### Phase 1: Settings & API Configuration ✅
+- ✅ Settings screen integration for AI
+  - ✅ API key management (per-provider: OpenAI, Anthropic, Google)
+  - ✅ Provider selection (dropdown)
+  - ✅ Enable/disable toggle
+  - ⬜ Multiple agent configs (name, provider, model, key) [Future]
+  - ⬜ Active agent selection [Future]
+  - ⬜ User-specified rules files (text box per agent + global rules) [Future]
+  - ⬜ Rules scope: agent-specific and all-agents [Future]
+- ✅ Backend service layer for agent API calls
+- ✅ Credential storage strategy (localStorage, browser-only)
 
 #### Phase 2: UI & Conversation Interface
 - ⬜ AI assistant component (initial design decision: sidebar pane)

@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { t } from '$lib/i18n';
-  import { settings, type Theme, type DateFormat, type AccountDisplay, type TransactionSortOrder } from '$lib/stores/settings';
+  import { settings, type Theme, type DateFormat, type AccountDisplay, type TransactionSortOrder, type AIProvider } from '$lib/stores/settings';
   import { getDateFormatPreview } from '$lib/utils/formatDate';
+  import { testAIConnection } from '$lib/services/ai';
   
   // Local state for form
   let theme = $state<Theme>('system');
@@ -10,6 +11,14 @@
   let accountDisplay = $state<AccountDisplay>('name');
   let transactionSortOrder = $state<TransactionSortOrder>('oldest');
   let hideNegativeSigns = $state(false); // Simplified: single toggle for Equity + Income
+  
+  // AI settings
+  let aiEnabled = $state(false);
+  let aiProvider = $state<AIProvider | null>(null);
+  let aiApiKey = $state('');
+  let showApiKey = $state(false);
+  let testingConnection = $state(false);
+  let testResult = $state<{ success: boolean; message: string } | null>(null);
   
   // Date format preview
   let datePreview = $derived(getDateFormatPreview(dateFormat));
@@ -27,6 +36,10 @@
     transactionSortOrder = $settings.transactionSortOrder;
     // Simplified: if either equity or income is reversed, toggle is on
     hideNegativeSigns = $settings.signReversal.equity || $settings.signReversal.income;
+    // AI settings
+    aiEnabled = $settings.ai.enabled;
+    aiProvider = $settings.ai.provider;
+    aiApiKey = $settings.ai.apiKey;
   });
   
   // Auto-save on change
@@ -53,6 +66,32 @@
       income: hideNegativeSigns,
       liability: false, // Liabilities stay as-is
     });
+  }
+  
+  function handleAISettingsChange() {
+    settings.setAISettings({
+      enabled: aiEnabled,
+      provider: aiProvider,
+      apiKey: aiApiKey,
+    });
+    // Clear test result when settings change
+    testResult = null;
+  }
+  
+  async function handleTestConnection() {
+    testingConnection = true;
+    testResult = null;
+    
+    try {
+      testResult = await testAIConnection();
+    } catch (error) {
+      testResult = {
+        success: false,
+        message: error instanceof Error ? error.message : 'Unknown error',
+      };
+    } finally {
+      testingConnection = false;
+    }
   }
 </script>
 
@@ -133,6 +172,85 @@
       </label>
       <p class="setting-note">{$t('settings.hide_negative_signs_note')}</p>
     </div>
+  </section>
+  
+  <!-- AI Assistant -->
+  <section class="settings-section">
+    <h2>AI Assistant</h2>
+    
+    <div class="setting-row">
+      <label class="setting-label toggle-label">
+        <input 
+          type="checkbox" 
+          bind:checked={aiEnabled}
+          onchange={handleAISettingsChange}
+        />
+        <span>Enable AI Assistant</span>
+      </label>
+      <p class="setting-note">Provides context-aware help and guidance throughout the app</p>
+    </div>
+    
+    {#if aiEnabled}
+      <div class="setting-row">
+        <label class="setting-label" for="ai-provider-select">AI Provider</label>
+        <select 
+          id="ai-provider-select" 
+          bind:value={aiProvider} 
+          onchange={handleAISettingsChange}
+        >
+          <option value={null}>Select provider...</option>
+          <option value="openai">OpenAI</option>
+          <option value="anthropic">Anthropic</option>
+          <option value="google">Google Gemini</option>
+        </select>
+      </div>
+      
+      {#if aiProvider}
+        <div class="setting-row api-key-row">
+          <label class="setting-label" for="ai-api-key">API Key</label>
+          <div class="api-key-input-wrapper">
+            <input 
+              id="ai-api-key"
+              type={showApiKey ? 'text' : 'password'}
+              bind:value={aiApiKey}
+              onblur={handleAISettingsChange}
+              placeholder="Enter your API key..."
+              class="api-key-input"
+            />
+            <button 
+              type="button"
+              class="btn-toggle-key"
+              onclick={() => showApiKey = !showApiKey}
+              title={showApiKey ? 'Hide API key' : 'Show API key'}
+            >
+              {showApiKey ? '👁️' : '👁️‍🗨️'}
+            </button>
+          </div>
+        </div>
+        
+        <div class="setting-note security-note">
+          <strong>🔒 Privacy Note:</strong> Your API key is stored locally in your browser and never sent to Sereus servers. 
+          All AI requests go directly from your browser to {aiProvider === 'openai' ? 'OpenAI' : aiProvider === 'anthropic' ? 'Anthropic' : 'Google'}.
+        </div>
+        
+        <div class="setting-row">
+          <button 
+            class="btn-test"
+            onclick={handleTestConnection}
+            disabled={testingConnection || !aiApiKey}
+          >
+            {testingConnection ? 'Testing...' : 'Test Connection'}
+          </button>
+        </div>
+        
+        {#if testResult}
+          <div class="test-result {testResult.success ? 'success' : 'error'}">
+            <strong>{testResult.success ? '✓' : '✗'}</strong>
+            {testResult.message}
+          </div>
+        {/if}
+      {/if}
+    {/if}
   </section>
   
   <!-- Network (Future) -->
@@ -354,6 +472,114 @@
   
   .network-section {
     opacity: 0.7;
+  }
+  
+  .api-key-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .api-key-input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-top: var(--space-sm);
+  }
+  
+  .api-key-input {
+    flex: 1;
+    padding: var(--space-sm);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+  }
+  
+  .api-key-input:focus {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 1px;
+  }
+  
+  .btn-toggle-key {
+    padding: var(--space-sm);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    cursor: pointer;
+    font-size: 1.125rem;
+    line-height: 1;
+    min-width: 40px;
+  }
+  
+  .btn-toggle-key:hover {
+    background: var(--bg-hover);
+  }
+  
+  .security-note {
+    padding: var(--space-md);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    margin-top: var(--space-md);
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+  
+  .security-note strong {
+    display: block;
+    margin-bottom: var(--space-xs);
+    color: var(--text-primary);
+  }
+  
+  .btn-test {
+    padding: var(--space-sm) var(--space-lg);
+    border: 1px solid var(--accent-color);
+    border-radius: var(--radius-sm);
+    background: var(--accent-color);
+    color: white;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  
+  .btn-test:hover:not(:disabled) {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+  }
+  
+  .btn-test:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  .test-result {
+    padding: var(--space-md);
+    border-radius: var(--radius-sm);
+    margin-top: var(--space-md);
+    font-size: 0.875rem;
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+  }
+  
+  .test-result strong {
+    font-size: 1.125rem;
+    line-height: 1;
+  }
+  
+  .test-result.success {
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    color: rgb(22, 163, 74);
+  }
+  
+  .test-result.error {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: rgb(220, 38, 38);
   }
 </style>
 
