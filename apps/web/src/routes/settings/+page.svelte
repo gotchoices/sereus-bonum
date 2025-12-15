@@ -229,8 +229,8 @@
         </div>
         
         <div class="setting-note security-note">
-          <strong>🔒 Privacy Note:</strong> Your API key is stored locally in your browser and never sent to Sereus servers. 
-          All AI requests go directly from your browser to {aiProvider === 'openai' ? 'OpenAI' : aiProvider === 'anthropic' ? 'Anthropic' : 'Google'}.
+          <strong>🔒 Privacy Note:</strong> Your API key is stored locally in your browser. 
+          AI requests go directly from your browser to {aiProvider === 'openai' ? 'OpenAI' : aiProvider === 'anthropic' ? 'Anthropic' : 'Google'} (no Sereus servers involved).
         </div>
         
         <div class="setting-row">

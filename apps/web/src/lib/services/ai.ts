@@ -1,11 +1,14 @@
 /**
  * AI Service
  * 
- * Client-side wrapper that calls our API routes
- * (API routes use Vercel AI SDK server-side to avoid CORS issues)
+ * Direct browser integration with AI providers
+ * Uses dangerouslyAllowBrowser flag since users supply their own API keys
  */
 
-import type { CoreMessage } from 'ai';
+import { createOpenAI } from '@ai-sdk/openai';
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { generateText, streamText, type CoreMessage } from 'ai';
 import { settings } from '$lib/stores/settings';
 import { get } from 'svelte/store';
 
@@ -24,9 +27,9 @@ export interface AIStreamResponse {
 }
 
 /**
- * Validate AI settings
+ * Get configured AI provider client
  */
-function validateSettings() {
+function getProviderClient() {
   const currentSettings = get(settings);
   const { provider, apiKey, enabled } = currentSettings.ai;
   
@@ -42,7 +45,40 @@ function validateSettings() {
     throw new Error('No API key configured. Please add your API key in Settings.');
   }
   
-  return { provider, apiKey };
+  switch (provider) {
+    case 'openai':
+      return createOpenAI({ apiKey });
+    case 'anthropic':
+      return createAnthropic({ 
+        apiKey,
+        headers: {
+          'anthropic-dangerous-direct-browser-access': 'true'
+        }
+      });
+    case 'google':
+      return createGoogleGenerativeAI({ apiKey });
+    default:
+      throw new Error(`Unknown provider: ${provider}`);
+  }
+}
+
+/**
+ * Get the default model for the current provider
+ */
+function getDefaultModel() {
+  const currentSettings = get(settings);
+  const { provider } = currentSettings.ai;
+  
+  switch (provider) {
+    case 'openai':
+      return 'gpt-4o';
+    case 'anthropic':
+      return 'claude-sonnet-4-0'; // Latest Claude Sonnet
+    case 'google':
+      return 'gemini-1.5-pro';
+    default:
+      return 'gpt-4o';
+  }
 }
 
 /**
@@ -56,31 +92,33 @@ export async function generateAIResponse(
   }
 ): Promise<AIResponse> {
   try {
-    const { provider, apiKey } = validateSettings();
+    const provider = getProviderClient();
+    const model = getDefaultModel();
     
-    const response = await fetch('/api/ai/generate', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        provider,
-        apiKey,
-        messages,
-        systemPrompt: options?.systemPrompt,
-        temperature: options?.temperature ?? 0.7,
-      }),
+    const result = await generateText({
+      model: provider(model),
+      messages,
+      system: options?.systemPrompt,
+      temperature: options?.temperature ?? 0.7,
     });
     
-    const data = await response.json();
-    
-    if (!response.ok) {
-      throw new Error(data.error || 'AI request failed');
-    }
-    
-    return data;
+    return {
+      text: result.text,
+      usage: result.usage ? {
+        promptTokens: result.usage.inputTokens || 0,
+        completionTokens: result.usage.outputTokens || 0,
+        totalTokens: result.usage.totalTokens || 0,
+      } : undefined,
+    };
   } catch (error) {
     if (error instanceof Error) {
+      // Enhanced error messages
+      if (error.message.includes('API key') || error.message.includes('authentication')) {
+        throw new Error('Invalid API key. Please check your API key in Settings.');
+      }
+      if (error.message.includes('quota') || error.message.includes('rate limit')) {
+        throw new Error('API rate limit exceeded. Please try again later or check your quota.');
+      }
       throw error;
     }
     throw new Error('Unknown error occurred while contacting AI service.');
@@ -98,55 +136,28 @@ export async function streamAIResponse(
   }
 ): Promise<AIStreamResponse> {
   try {
-    const { provider, apiKey } = validateSettings();
+    const provider = getProviderClient();
+    const model = getDefaultModel();
     
-    const response = await fetch('/api/ai/stream', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        provider,
-        apiKey,
-        messages,
-        systemPrompt: options?.systemPrompt,
-        temperature: options?.temperature ?? 0.7,
-      }),
+    const result = await streamText({
+      model: provider(model),
+      messages,
+      system: options?.systemPrompt,
+      temperature: options?.temperature ?? 0.7,
     });
     
-    if (!response.ok) {
-      const data = await response.json();
-      throw new Error(data.error || 'AI streaming request failed');
-    }
-    
-    if (!response.body) {
-      throw new Error('No response body received from server');
-    }
-    
-    const textStream = response.body.pipeThrough(new TextDecoderStream());
-    
-    // Collect full text as stream progresses
-    const fullText = (async () => {
-      const reader = textStream.getReader();
-      let fullText = '';
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          fullText += value;
-        }
-      } finally {
-        reader.releaseLock();
-      }
-      return fullText;
-    })();
-    
     return {
-      textStream: textStream as unknown as ReadableStream<string>,
-      fullText,
+      textStream: result.textStream,
+      fullText: result.text,
     };
   } catch (error) {
     if (error instanceof Error) {
+      if (error.message.includes('API key') || error.message.includes('authentication')) {
+        throw new Error('Invalid API key. Please check your API key in Settings.');
+      }
+      if (error.message.includes('quota') || error.message.includes('rate limit')) {
+        throw new Error('API rate limit exceeded. Please try again later or check your quota.');
+      }
       throw error;
     }
     throw new Error('Unknown error occurred while contacting AI service.');
@@ -171,9 +182,14 @@ export async function testAIConnection(): Promise<{ success: boolean; message: s
       message: `Connection successful! ${response.text}`,
     };
   } catch (error) {
+    console.error('[AI Test] Full error:', error);
+    if (error instanceof Error) {
+      console.error('[AI Test] Error message:', error.message);
+      console.error('[AI Test] Error stack:', error.stack);
+    }
     return {
       success: false,
-      message: error instanceof Error ? error.message : 'Unknown error',
+      message: error instanceof Error ? error.message : JSON.stringify(error),
     };
   }
 }

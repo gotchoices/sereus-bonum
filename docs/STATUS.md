@@ -432,8 +432,10 @@ From story 04 (Alt D):
   - ✅ API key management (per-provider: OpenAI, Anthropic, Google)
   - ✅ Provider selection (dropdown)
   - ✅ Enable/disable toggle
-  - ⬜ Multiple agent configs (name, provider, model, key) [Future]
-  - ⬜ Active agent selection [Future]
+  - ⬜ Multiple provider/key configurations [Future]
+  - ⬜ Active provider selection in Settings [Future]
+  - ⬜ Query provider for available models (dynamic model list) [Future]
+  - ⬜ Model selection in AI dialog (not Settings) [Future]
   - ⬜ User-specified rules files (text box per agent + global rules) [Future]
   - ⬜ Rules scope: agent-specific and all-agents [Future]
 - ✅ Backend service layer for agent API calls
