@@ -13,9 +13,13 @@ List of screens for this target with routes and status.
 
 | Screen Name | Route | Spec File | Variants | Status |
 |-------------|-------|-----------|----------|--------|
-| Item List | ItemList | item-list.md | happy, empty, error | draft |
-| Item Detail | ItemDetail | item-detail.md | happy, error | draft |
-| User Profile | UserProfile | user-profile.md | happy, empty | draft |
+| Home | / | (home) | - | implemented |
+| Catalog | /catalog | catalog.md | - | implemented |
+| Entity Accounts | /entities/[id] | (entity-accounts) | - | implemented |
+| Ledger | /ledger/[accountId] | ledger.md | - | implemented |
+| Search | /search | search.md | - | implemented |
+| Import | /import | import.md | - | draft |
+| Settings | /settings | settings.md | - | implemented |
 
 ## Notes
 

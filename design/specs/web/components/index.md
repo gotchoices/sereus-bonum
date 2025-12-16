@@ -15,7 +15,8 @@ List reusable UI components for this target.
 | AccountAutocomplete | account-autocomplete.md | Ledger, Search, Import | complete |
 | TransactionEditor | transaction-edit.md | Ledger, Import Review | complete |
 | TransactionResultsTable | transaction-results-table.md | Search | draft |
-| AIAssistant | ai-assistant.md | All screens (sidebar) | draft |
+| AIAssistant | ai-assistant.md | All screens (overlay) | draft |
+| VisualBalanceSheet | visual-balance-sheet.md | Home, Reports | draft |
 
 ## Notes
 
