@@ -441,16 +441,17 @@ From story 04 (Alt D):
 - ✅ Backend service layer for agent API calls
 - ✅ Credential storage strategy (localStorage, browser-only)
 
-#### Phase 2: UI & Conversation Interface
-- ⬜ AI assistant component (initial design decision: sidebar pane)
-  - Query input field
-  - Scrollable dialog/conversation display
-  - Export conversation (PDF, text)
-  - Print conversation
-  - Clear/reset conversation
-  - Resizable/expandable for quick queries vs. involved discussions
-- ⬜ Global activation (menu item, keyboard shortcut)
-- ⬜ Context awareness foundation
+#### Phase 2: UI & Conversation Interface ✅
+- ✅ AI assistant component (floating window, lower-left corner)
+  - ✅ Query input field with paper airplane send icon
+  - ✅ Scrollable dialog/conversation display
+  - ✅ Clear conversation button
+  - ✅ Minimize button (collapse to button)
+  - ✅ Resizable height (drag top edge, persistent)
+  - ⬜ Export conversation (PDF, text) [Future]
+  - ⬜ Print conversation [Future]
+- ✅ Global activation (button at bottom of nav menu)
+- ⬜ Context awareness foundation [Phase 3]
   - Track active screen/route
   - Capture selected entity
   - Capture open account(s)
@@ -472,9 +473,19 @@ From story 04 (Alt D):
   - How to use Bonum features
   - Current entity/account context
 - ⬜ Interactive setup workflows (see Story 07)
+- ⬜ **RAG (Retrieval Augmented Generation)** for documentation
+  - Break manual into chunks, create searchable index
+  - At query time: retrieve only relevant sections
+  - Avoids sending entire manual with every query
+  - Options: simple keyword search or embedding-based semantic search
 
 #### Phase 4: Non-Generative Actions (Read-Only)
-- ⬜ Agent tool/function calling framework
+- ⬜ **Tool Calling / Function Calling** framework
+  - AI requests specific functions when needed (e.g., `getAccountBalance()`)
+  - We execute function, return result as text
+  - AI uses result to formulate answer
+  - More efficient than sending all data upfront
+  - Examples: "What's my checking balance?" → calls `getAccountBalance({ name: "Checking" })`
 - ⬜ Query data (accounts, transactions, balances)
 - ⬜ Build and display reports (Balance Sheet, Income Statement, etc.)
 - ⬜ Print ledgers
@@ -532,6 +543,27 @@ From story 04 (Alt D):
 **Integration:** Vercel AI SDK (`ai` npm package) - TypeScript toolkit for structured AI output
 **Approach:** Story-driven design → lightweight specs for UI → implementation
 **Provider:** User-supplied API key (OpenAI/Anthropic/Google) in Settings
+
+### Context Management Strategy
+**Problem:** Can't send entire manual + all user data with every query (token limits, cost, latency)
+
+**Solution - Hybrid Approach:**
+1. **Static Context** (current): Basic system prompt with app overview
+2. **RAG for Documentation** (Phase 3): Retrieve relevant manual sections on-demand
+   - Pre-index documentation chunks
+   - Search based on user query
+   - Send only relevant 2-3 sections
+3. **Tool Calling for Live Data** (Phase 4): Let AI request specific data when needed
+   - AI: "I need the checking account balance"
+   - App: Executes `getAccountBalance()`, returns result
+   - AI: Uses result to answer user
+4. **Conversation History**: Full message history sent each time (context preservation)
+
+**Benefits:**
+- Stays within token limits
+- Cost-efficient (only pay for what's needed)
+- Faster responses (less data to process)
+- Scalable to large manuals and datasets
 
 ### 🔄 Planned AI Assistance Use Cases
 

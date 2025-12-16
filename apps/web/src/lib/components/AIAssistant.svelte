@@ -1,11 +1,12 @@
 <!--
   AI Assistant Component
   
-  A conversational AI sidebar that helps users with accounting concepts,
+  A floating window-style AI assistant that helps users with accounting concepts,
   setup workflows, and general questions.
 -->
 
 <script lang="ts">
+  import { browser } from '$app/environment';
   import { streamAIResponse } from '$lib/services/ai';
   import { settings } from '$lib/stores/settings';
   import type { CoreMessage } from 'ai';
@@ -24,6 +25,23 @@
   let currentStreamingMessage = $state('');
   let messagesContainer: HTMLDivElement | null = $state(null);
   let inputElement: HTMLTextAreaElement | null = $state(null);
+  
+  // Height management
+  const DEFAULT_HEIGHT = 400;
+  const MIN_HEIGHT = 200;
+  const MAX_HEIGHT = 800;
+  let panelHeight = $state(DEFAULT_HEIGHT);
+  let isResizing = $state(false);
+  let resizeStartY = $state(0);
+  let resizeStartHeight = $state(0);
+  
+  // Load saved height from localStorage
+  if (browser) {
+    const saved = localStorage.getItem('bonum-ai-assistant-height');
+    if (saved) {
+      panelHeight = Math.min(Math.max(parseInt(saved), MIN_HEIGHT), MAX_HEIGHT);
+    }
+  }
   
   // Auto-scroll to bottom when new messages arrive
   $effect(() => {
@@ -111,43 +129,89 @@
     }
   }
   
-  // Close panel
-  function close() {
+  // Minimize (collapse to button)
+  function minimize() {
     isOpen = false;
   }
+  
+  // Resize handlers
+  function startResize(event: MouseEvent) {
+    isResizing = true;
+    resizeStartY = event.clientY;
+    resizeStartHeight = panelHeight;
+    event.preventDefault();
+  }
+  
+  function handleResize(event: MouseEvent) {
+    if (!isResizing) return;
+    
+    // Calculate new height (drag up = increase height)
+    const deltaY = resizeStartY - event.clientY;
+    const newHeight = Math.min(Math.max(resizeStartHeight + deltaY, MIN_HEIGHT), MAX_HEIGHT);
+    panelHeight = newHeight;
+  }
+  
+  function stopResize() {
+    if (isResizing) {
+      isResizing = false;
+      // Save height to localStorage
+      if (browser) {
+        localStorage.setItem('bonum-ai-assistant-height', panelHeight.toString());
+      }
+    }
+  }
+  
+  // Global mouse event listeners for resize
+  $effect(() => {
+    if (browser && isResizing) {
+      window.addEventListener('mousemove', handleResize);
+      window.addEventListener('mouseup', stopResize);
+      
+      return () => {
+        window.removeEventListener('mousemove', handleResize);
+        window.removeEventListener('mouseup', stopResize);
+      };
+    }
+  });
 </script>
 
 {#if isOpen}
-  <aside class="ai-assistant" class:open={isOpen}>
+  <div class="ai-assistant" style="height: {panelHeight}px">
+    <!-- Resize handle -->
+    <div 
+      class="resize-handle" 
+      onmousedown={startResize}
+      class:resizing={isResizing}
+    ></div>
+    
     <!-- Header -->
     <header class="ai-header">
-      <div class="ai-header-content">
-        <h2>AI Help</h2>
-        <div class="ai-header-actions">
-          {#if messages.length > 0}
-            <button 
-              class="btn-clear" 
-              onclick={clearConversation}
-              title="Clear conversation"
-            >
-              Clear
-            </button>
-          {/if}
+      <h2>Assistant</h2>
+      <div class="ai-header-actions">
+        {#if messages.length > 0}
           <button 
-            class="btn-close" 
-            onclick={close}
-            title="Close AI Help"
+            class="btn-header-icon" 
+            onclick={clearConversation}
+            title="Clear conversation"
           >
-            ✕
+            🗑️
           </button>
-        </div>
+        {/if}
+        <button 
+          class="btn-header-icon" 
+          onclick={minimize}
+          title="Minimize"
+        >
+          −
+        </button>
       </div>
-      {#if !$settings.ai.enabled}
-        <div class="ai-disabled-warning">
-          ⚠️ AI assistant is disabled. Enable it in <a href="/settings">Settings</a>.
-        </div>
-      {/if}
     </header>
+    
+    {#if !$settings.ai.enabled}
+      <div class="ai-disabled-warning">
+        ⚠️ AI assistant is disabled. Enable it in <a href="/settings">Settings</a>.
+      </div>
+    {/if}
     
     <!-- Messages -->
     <div class="ai-messages" bind:this={messagesContainer}>
@@ -193,79 +257,99 @@
         bind:value={inputText}
         onkeydown={handleKeydown}
         placeholder="Ask me anything..."
-        rows="3"
+        rows="2"
         disabled={!$settings.ai.enabled || isStreaming}
       ></textarea>
       <button 
         class="btn-send" 
         onclick={sendMessage}
         disabled={!inputText.trim() || !$settings.ai.enabled || isStreaming}
+        title={isStreaming ? 'Thinking...' : 'Send message'}
       >
-        {isStreaming ? 'Thinking...' : 'Send'}
+        {#if isStreaming}
+          <span class="spinner">⏳</span>
+        {:else}
+          <span class="send-icon">✈️</span>
+        {/if}
       </button>
     </div>
-  </aside>
+  </div>
 {/if}
 
 <style>
   .ai-assistant {
     position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 400px;
+    bottom: 20px;
+    left: 20px;
+    width: 450px;
     background: var(--bg-card);
-    border-left: 1px solid var(--border-color);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
     display: flex;
     flex-direction: column;
     z-index: 1000;
-    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+  }
+  
+  .resize-handle {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 8px;
+    cursor: ns-resize;
+    background: transparent;
+    z-index: 10;
+  }
+  
+  .resize-handle:hover,
+  .resize-handle.resizing {
+    background: var(--accent-color);
+    opacity: 0.3;
   }
   
   .ai-header {
-    padding: var(--space-lg);
+    padding: var(--space-md) var(--space-lg);
     border-bottom: 1px solid var(--border-color);
-    background: var(--bg-secondary);
-  }
-  
-  .ai-header-content {
+    background: var(--bg-nav);
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-shrink: 0;
   }
   
   .ai-header h2 {
     margin: 0;
-    font-size: 1.25rem;
+    font-size: 1rem;
+    font-weight: 600;
     color: var(--text-primary);
   }
   
   .ai-header-actions {
     display: flex;
-    gap: var(--space-sm);
+    gap: var(--space-xs);
   }
   
-  .btn-clear,
-  .btn-close {
+  .btn-header-icon {
     background: none;
     border: none;
-    padding: var(--space-xs) var(--space-sm);
+    padding: var(--space-xs);
     cursor: pointer;
-    font-size: 0.875rem;
+    font-size: 1.125rem;
     color: var(--text-muted);
     border-radius: var(--radius-sm);
+    line-height: 1;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   
-  .btn-clear:hover,
-  .btn-close:hover {
+  .btn-header-icon:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
-  }
-  
-  .btn-close {
-    font-size: 1.25rem;
-    font-weight: bold;
-    padding: var(--space-xs);
   }
   
   .ai-disabled-warning {
@@ -359,26 +443,26 @@
   }
   
   .ai-input-area {
-    padding: var(--space-lg);
+    padding: var(--space-md);
     border-top: 1px solid var(--border-color);
     background: var(--bg-secondary);
     display: flex;
     gap: var(--space-sm);
     align-items: flex-end;
+    flex-shrink: 0;
   }
   
   .ai-input-area textarea {
     flex: 1;
     padding: var(--space-sm);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
+    border-radius: 8px;
     background: var(--bg-card);
     color: var(--text-primary);
     font-family: inherit;
     font-size: 0.875rem;
     resize: none;
-    min-height: 60px;
-    max-height: 150px;
+    max-height: 100px;
   }
   
   .ai-input-area textarea:focus {
@@ -392,24 +476,44 @@
   }
   
   .btn-send {
-    padding: var(--space-sm) var(--space-lg);
+    padding: 0;
+    width: 36px;
+    height: 36px;
     background: var(--accent-color);
     color: white;
     border: none;
-    border-radius: var(--radius-sm);
-    font-weight: 500;
+    border-radius: 50%;
     cursor: pointer;
-    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
     transition: all 0.2s;
+    flex-shrink: 0;
   }
   
   .btn-send:hover:not(:disabled) {
     background: var(--accent-hover);
+    transform: scale(1.05);
   }
   
   .btn-send:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+  
+  .send-icon {
+    display: inline-block;
+    transform: rotate(45deg);
+  }
+  
+  .spinner {
+    animation: spin 1s linear infinite;
+  }
+  
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
   
   /* Responsive */

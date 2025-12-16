@@ -15,6 +15,23 @@
   let initError = $state<string | null>(null);
   let initStarted = false;
   let aiAssistantOpen = $state(false);
+  let navVisible = $state(true);
+  
+  // Load nav visibility from localStorage
+  if (browser) {
+    const savedNavState = localStorage.getItem('bonum-nav-visible');
+    if (savedNavState !== null) {
+      navVisible = savedNavState === 'true';
+    }
+  }
+  
+  // Toggle nav visibility
+  function toggleNav() {
+    navVisible = !navVisible;
+    if (browser) {
+      localStorage.setItem('bonum-nav-visible', navVisible.toString());
+    }
+  }
   
   // Use $effect for Svelte 5 - runs after mount on client
   $effect(() => {
@@ -49,57 +66,78 @@
   </div>
 {:else}
   <div class="app-shell">
-    <nav class="global-nav">
-      <div class="nav-brand">
-        <span class="brand-icon">📊</span>
-        <span class="brand-name">{$t('app.name')}</span>
-      </div>
-      
-      <ul class="nav-links">
-        <li>
-          <a href="/" class:active={$page.url.pathname === '/'}>
-            <span class="nav-icon">🏠</span>
-            {$t('nav.home')}
-          </a>
-        </li>
-        <li>
-          <a href="/catalog" class:active={$page.url.pathname === '/catalog'}>
-            <span class="nav-icon">📁</span>
-            {$t('nav.catalog')}
-          </a>
-        </li>
-        <li>
-          <a href="/search" class:active={$page.url.pathname === '/search'}>
-            <span class="nav-icon">🔍</span>
-            {$t('nav.search')}
-          </a>
-        </li>
-        <li>
-          <a href="/import" class:active={$page.url.pathname === '/import'}>
-            <span class="nav-icon">📥</span>
-            {$t('nav.import')}
-          </a>
-        </li>
-        <li>
-          <a href="/settings" class:active={$page.url.pathname === '/settings'}>
-            <span class="nav-icon">⚙️</span>
-            {$t('nav.settings')}
-          </a>
-        </li>
-        <li>
-          <button class="nav-button" onclick={() => aiAssistantOpen = !aiAssistantOpen}>
-            <span class="nav-icon">🤖</span>
-            AI Help
+    <!-- Navigation Menu -->
+    <nav class="global-nav" class:hidden={!navVisible}>
+      <div class="nav-content">
+        <div class="nav-header">
+          <div class="nav-brand">
+            <span class="brand-icon">📊</span>
+            <span class="brand-name">{$t('app.name')}</span>
+          </div>
+          <button class="btn-nav-toggle" onclick={toggleNav} title="Hide menu">
+            «
           </button>
-        </li>
-      </ul>
-      
-      {#if !initialized}
-        <div class="nav-loading">{$t('common.loading')}</div>
-      {/if}
+        </div>
+        
+        <ul class="nav-links">
+          <li>
+            <a href="/" class:active={$page.url.pathname === '/'}>
+              <span class="nav-icon">🏠</span>
+              {$t('nav.home')}
+            </a>
+          </li>
+          <li>
+            <a href="/catalog" class:active={$page.url.pathname === '/catalog'}>
+              <span class="nav-icon">📁</span>
+              {$t('nav.catalog')}
+            </a>
+          </li>
+          <li>
+            <a href="/search" class:active={$page.url.pathname === '/search'}>
+              <span class="nav-icon">🔍</span>
+              {$t('nav.search')}
+            </a>
+          </li>
+          <li>
+            <a href="/import" class:active={$page.url.pathname === '/import'}>
+              <span class="nav-icon">📥</span>
+              {$t('nav.import')}
+            </a>
+          </li>
+          <li>
+            <a href="/settings" class:active={$page.url.pathname === '/settings'}>
+              <span class="nav-icon">⚙️</span>
+              {$t('nav.settings')}
+            </a>
+          </li>
+        </ul>
+        
+        <!-- Spacer to push AI button to bottom -->
+        <div class="nav-spacer"></div>
+        
+        {#if !initialized}
+          <div class="nav-loading">{$t('common.loading')}</div>
+        {/if}
+        
+        <!-- AI Assistant button at bottom (hidden when pane open) -->
+        {#if !aiAssistantOpen}
+          <div class="nav-ai-button">
+            <button class="btn-assistant" onclick={() => aiAssistantOpen = true}>
+              Assistant
+            </button>
+          </div>
+        {/if}
+      </div>
     </nav>
     
-    <main class="main-content">
+    <!-- Floating show button when nav hidden -->
+    {#if !navVisible}
+      <button class="btn-nav-show" onclick={toggleNav} title="Show menu">
+        ☰
+      </button>
+    {/if}
+    
+    <main class="main-content" class:expanded={!navVisible}>
       <slot />
     </main>
     
@@ -114,15 +152,38 @@
     min-height: 100vh;
     background: var(--bg-primary);
     color: var(--text-primary);
+    position: relative;
   }
   
   .global-nav {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
     width: 220px;
     background: var(--bg-nav);
     border-right: 1px solid var(--border-color);
-    padding: 1rem 0;
+    transition: transform 0.3s ease;
+    z-index: 100;
+  }
+  
+  .global-nav.hidden {
+    transform: translateX(-100%);
+  }
+  
+  .nav-content {
+    height: 100%;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
+  }
+  
+  .nav-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1rem 0.5rem 1rem;
+    flex-shrink: 0;
   }
   
   .nav-brand {
@@ -144,10 +205,49 @@
     color: var(--text-primary);
   }
   
+  .btn-nav-toggle {
+    background: none;
+    border: none;
+    padding: 0.5rem;
+    cursor: pointer;
+    font-size: 1.25rem;
+    color: var(--text-muted);
+    line-height: 1;
+    border-radius: var(--radius-sm);
+  }
+  
+  .btn-nav-toggle:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+  
+  .btn-nav-show {
+    position: fixed;
+    left: 1rem;
+    top: 1rem;
+    z-index: 99;
+    background: var(--bg-nav);
+    border: 1px solid var(--border-color);
+    padding: 0.75rem;
+    cursor: pointer;
+    font-size: 1.25rem;
+    color: var(--text-primary);
+    border-radius: var(--radius-md);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s;
+  }
+  
+  .btn-nav-show:hover {
+    background: var(--bg-hover);
+    transform: scale(1.05);
+  }
+  
   .nav-links {
     list-style: none;
     margin: 0;
     padding: 0;
+    overflow-y: auto;
+    flex: 1;
   }
   
   .nav-links li a {
@@ -175,30 +275,44 @@
     font-size: 1.1rem;
   }
   
-  .nav-button {
+  .nav-spacer {
+    flex: 1;
+  }
+  
+  .nav-ai-button {
+    padding: 1rem;
+  }
+  
+  .btn-assistant {
     width: 100%;
-    background: none;
+    background: var(--accent-color);
+    color: white;
     border: none;
     padding: 0.75rem 1rem;
     cursor: pointer;
-    font-size: inherit;
-    color: var(--text-secondary);
-    text-align: left;
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    transition: all 0.15s ease;
+    font-size: 0.875rem;
+    font-weight: 600;
+    border-radius: 24px;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   }
   
-  .nav-button:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
+  .btn-assistant:hover {
+    background: var(--accent-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
   }
   
   .main-content {
     flex: 1;
+    margin-left: 220px;
     padding: 1.5rem;
     overflow: auto;
+    transition: margin-left 0.3s ease;
+  }
+  
+  .main-content.expanded {
+    margin-left: 0;
   }
   
   .nav-loading {
