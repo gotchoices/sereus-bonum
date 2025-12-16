@@ -16,47 +16,73 @@ const UNITS = [
 ];
 
 // =============================================================================
-// Standard Account Groups
+// Standard Account Groups (matches specs/web/global/account-groups.md)
 // =============================================================================
 
 // Hierarchical account groups
 // parentId creates nesting: parent groups contain child groups
+// Structure matches specs/web/global/account-groups.md
 const ACCOUNT_GROUPS = [
-  // Assets - parent groups first, then children
-  { id: 'grp-current-assets', name: 'Current Assets', accountType: 'ASSET', parentId: null, displayOrder: 100 },
-  { id: 'grp-cash', name: 'Cash & Bank', accountType: 'ASSET', parentId: 'grp-current-assets', displayOrder: 101 },
-  { id: 'grp-receivables', name: 'Receivables', accountType: 'ASSET', parentId: 'grp-current-assets', displayOrder: 102 },
+  // =========== ASSETS (top-level + children) ===========
+  { id: 'grp-assets', name: 'Assets', accountType: 'ASSET', parentId: null, displayOrder: 1 },
   
-  { id: 'grp-fixed-assets', name: 'Fixed Assets', accountType: 'ASSET', parentId: null, displayOrder: 110 },
-  { id: 'grp-property', name: 'Property & Equipment', accountType: 'ASSET', parentId: 'grp-fixed-assets', displayOrder: 111 },
-  { id: 'grp-vehicles', name: 'Vehicles', accountType: 'ASSET', parentId: 'grp-fixed-assets', displayOrder: 112 },
+  { id: 'grp-current-assets', name: 'Current Assets', accountType: 'ASSET', parentId: 'grp-assets', displayOrder: 100 },
+  { id: 'grp-cash', name: 'Cash', accountType: 'ASSET', parentId: 'grp-current-assets', displayOrder: 101 },
+  { id: 'grp-bank', name: 'Bank', accountType: 'ASSET', parentId: 'grp-current-assets', displayOrder: 102 },
+  { id: 'grp-private-credit', name: 'Private Credit', accountType: 'ASSET', parentId: 'grp-current-assets', displayOrder: 103 },
+  { id: 'grp-reimbursements-asset', name: 'Reimbursements', accountType: 'ASSET', parentId: 'grp-current-assets', displayOrder: 104 },
+  { id: 'grp-receivables', name: 'Receivables', accountType: 'ASSET', parentId: 'grp-current-assets', displayOrder: 105 },
   
-  { id: 'grp-investments', name: 'Investments', accountType: 'ASSET', parentId: null, displayOrder: 120 },
-  { id: 'grp-other-assets', name: 'Other Assets', accountType: 'ASSET', parentId: null, displayOrder: 190 },
+  { id: 'grp-fixed-assets', name: 'Fixed Assets', accountType: 'ASSET', parentId: 'grp-assets', displayOrder: 110 },
+  { id: 'grp-real-property', name: 'Real Property', accountType: 'ASSET', parentId: 'grp-fixed-assets', displayOrder: 111 },
+  { id: 'grp-equipment', name: 'Equipment', accountType: 'ASSET', parentId: 'grp-fixed-assets', displayOrder: 112 },
+  { id: 'grp-vehicles', name: 'Vehicles', accountType: 'ASSET', parentId: 'grp-fixed-assets', displayOrder: 113 },
   
-  // Liabilities - with hierarchy
-  { id: 'grp-current-liab', name: 'Current Liabilities', accountType: 'LIABILITY', parentId: null, displayOrder: 200 },
-  { id: 'grp-credit', name: 'Credit Cards', accountType: 'LIABILITY', parentId: 'grp-current-liab', displayOrder: 201 },
-  { id: 'grp-payables', name: 'Payables', accountType: 'LIABILITY', parentId: 'grp-current-liab', displayOrder: 202 },
+  { id: 'grp-product', name: 'Product', accountType: 'ASSET', parentId: 'grp-assets', displayOrder: 120 },
+  { id: 'grp-inventory', name: 'Inventory', accountType: 'ASSET', parentId: 'grp-product', displayOrder: 121 },
+  { id: 'grp-jobs-in-process', name: 'Jobs in Process', accountType: 'ASSET', parentId: 'grp-product', displayOrder: 122 },
+  { id: 'grp-work-in-process', name: 'Work in Process', accountType: 'ASSET', parentId: 'grp-product', displayOrder: 123 },
   
-  { id: 'grp-longterm-liab', name: 'Long-term Debt', accountType: 'LIABILITY', parentId: null, displayOrder: 210 },
-  { id: 'grp-loans', name: 'Loans & Mortgages', accountType: 'LIABILITY', parentId: 'grp-longterm-liab', displayOrder: 211 },
+  { id: 'grp-other-assets', name: 'Other Assets', accountType: 'ASSET', parentId: 'grp-assets', displayOrder: 190 },
   
-  { id: 'grp-other-liab', name: 'Other Liabilities', accountType: 'LIABILITY', parentId: null, displayOrder: 290 },
+  // =========== LIABILITIES (top-level + children) ===========
+  { id: 'grp-liabilities', name: 'Liabilities', accountType: 'LIABILITY', parentId: null, displayOrder: 2 },
   
-  // Equity - flat (no children)
-  { id: 'grp-capital', name: 'Owner Capital', accountType: 'EQUITY', parentId: null, displayOrder: 300 },
-  { id: 'grp-retained', name: 'Retained Earnings', accountType: 'EQUITY', parentId: null, displayOrder: 310 },
+  { id: 'grp-current-liab', name: 'Current Liabilities', accountType: 'LIABILITY', parentId: 'grp-liabilities', displayOrder: 200 },
+  { id: 'grp-credit-cards', name: 'Credit Cards', accountType: 'LIABILITY', parentId: 'grp-current-liab', displayOrder: 201 },
+  { id: 'grp-accounts-payable', name: 'Accounts Payable', accountType: 'LIABILITY', parentId: 'grp-current-liab', displayOrder: 202 },
+  { id: 'grp-payroll-payable', name: 'Payroll Payable', accountType: 'LIABILITY', parentId: 'grp-current-liab', displayOrder: 203 },
   
-  // Income - flat
-  { id: 'grp-income', name: 'Operating Income', accountType: 'INCOME', parentId: null, displayOrder: 400 },
-  { id: 'grp-other-income', name: 'Other Income', accountType: 'INCOME', parentId: null, displayOrder: 410 },
+  { id: 'grp-deposits', name: 'Deposits', accountType: 'LIABILITY', parentId: 'grp-liabilities', displayOrder: 210 },
   
-  // Expenses - flat
-  { id: 'grp-living', name: 'Living Expenses', accountType: 'EXPENSE', parentId: null, displayOrder: 500 },
-  { id: 'grp-operating', name: 'Operating Expenses', accountType: 'EXPENSE', parentId: null, displayOrder: 510 },
-  { id: 'grp-cogs', name: 'Cost of Goods Sold', accountType: 'EXPENSE', parentId: null, displayOrder: 520 },
-  { id: 'grp-taxes', name: 'Taxes', accountType: 'EXPENSE', parentId: null, displayOrder: 590 },
+  { id: 'grp-longterm-debt', name: 'Long-term Debt', accountType: 'LIABILITY', parentId: 'grp-liabilities', displayOrder: 220 },
+  { id: 'grp-loans', name: 'Loans', accountType: 'LIABILITY', parentId: 'grp-longterm-debt', displayOrder: 221 },
+  { id: 'grp-mortgages', name: 'Mortgages', accountType: 'LIABILITY', parentId: 'grp-longterm-debt', displayOrder: 222 },
+  
+  { id: 'grp-other-liab', name: 'Other Liabilities', accountType: 'LIABILITY', parentId: 'grp-liabilities', displayOrder: 290 },
+  
+  // =========== EQUITY (top-level + children) ===========
+  { id: 'grp-equity', name: 'Equity', accountType: 'EQUITY', parentId: null, displayOrder: 3 },
+  
+  { id: 'grp-adjustments', name: 'Adjustments', accountType: 'EQUITY', parentId: 'grp-equity', displayOrder: 300 },
+  { id: 'grp-member-capital', name: 'Member Capital', accountType: 'EQUITY', parentId: 'grp-equity', displayOrder: 310 },
+  { id: 'grp-net-income-alloc', name: 'Net Income Allocations', accountType: 'EQUITY', parentId: 'grp-equity', displayOrder: 320 },
+  
+  // =========== INCOME (top-level + children) ===========
+  { id: 'grp-income', name: 'Income', accountType: 'INCOME', parentId: null, displayOrder: 4 },
+  
+  { id: 'grp-sales', name: 'Sales', accountType: 'INCOME', parentId: 'grp-income', displayOrder: 400 },
+  { id: 'grp-employment', name: 'Employment', accountType: 'INCOME', parentId: 'grp-income', displayOrder: 410 },
+  { id: 'grp-reimbursements-income', name: 'Reimbursements', accountType: 'INCOME', parentId: 'grp-income', displayOrder: 420 },
+  { id: 'grp-adjustments-income', name: 'Adjustments', accountType: 'INCOME', parentId: 'grp-income', displayOrder: 430 },
+  
+  // =========== EXPENSES (top-level + children) ===========
+  { id: 'grp-expenses', name: 'Expenses', accountType: 'EXPENSE', parentId: null, displayOrder: 5 },
+  
+  { id: 'grp-fixed-expense', name: 'Fixed', accountType: 'EXPENSE', parentId: 'grp-expenses', displayOrder: 500 },
+  { id: 'grp-variable-expense', name: 'Variable', accountType: 'EXPENSE', parentId: 'grp-expenses', displayOrder: 510 },
+  { id: 'grp-interest', name: 'Interest', accountType: 'EXPENSE', parentId: 'grp-expenses', displayOrder: 520 },
+  { id: 'grp-tax', name: 'Tax', accountType: 'EXPENSE', parentId: 'grp-expenses', displayOrder: 530 },
 ];
 
 // =============================================================================
@@ -73,31 +99,31 @@ const HOME_ENTITY = {
 
 const HOME_ACCOUNTS = [
   // Assets
-  { id: 'acc-home-checking', groupId: 'grp-cash', code: '1010', name: 'Checking Account' },
-  { id: 'acc-home-savings', groupId: 'grp-cash', code: '1020', name: 'Savings Account' },
-  { id: 'acc-home-brokerage', groupId: 'grp-investments', code: '1210', name: 'Brokerage' },
-  { id: 'acc-home-retirement', groupId: 'grp-investments', code: '1220', name: '401(k)' },
-  { id: 'acc-home-house', groupId: 'grp-property', code: '1310', name: 'House' },
-  { id: 'acc-home-vehicle', groupId: 'grp-property', code: '1320', name: 'Vehicle' },
+  { id: 'acc-home-checking', groupId: 'grp-bank', code: '1010', name: 'Checking Account' },
+  { id: 'acc-home-savings', groupId: 'grp-bank', code: '1020', name: 'Savings Account' },
+  { id: 'acc-home-brokerage', groupId: 'grp-other-assets', code: '1210', name: 'Brokerage' },
+  { id: 'acc-home-retirement', groupId: 'grp-other-assets', code: '1220', name: '401(k)' },
+  { id: 'acc-home-house', groupId: 'grp-real-property', code: '1310', name: 'House' },
+  { id: 'acc-home-vehicle', groupId: 'grp-vehicles', code: '1320', name: 'Vehicle' },
   
   // Liabilities
-  { id: 'acc-home-visa', groupId: 'grp-credit', code: '2010', name: 'Visa' },
-  { id: 'acc-home-mastercard', groupId: 'grp-credit', code: '2020', name: 'Mastercard' },
-  { id: 'acc-home-mortgage', groupId: 'grp-loans', code: '2210', name: 'Mortgage' },
+  { id: 'acc-home-visa', groupId: 'grp-credit-cards', code: '2010', name: 'Visa' },
+  { id: 'acc-home-mastercard', groupId: 'grp-credit-cards', code: '2020', name: 'Mastercard' },
+  { id: 'acc-home-mortgage', groupId: 'grp-mortgages', code: '2210', name: 'Mortgage' },
   { id: 'acc-home-autoloan', groupId: 'grp-loans', code: '2220', name: 'Auto Loan' },
   
   // Equity
-  { id: 'acc-home-opening', groupId: 'grp-capital', code: '3010', name: 'Opening Balance' },
+  { id: 'acc-home-opening', groupId: 'grp-member-capital', code: '3010', name: 'Opening Balance' },
   
   // Income
-  { id: 'acc-home-salary', groupId: 'grp-income', code: '4010', name: 'Salary' },
-  { id: 'acc-home-dividends', groupId: 'grp-other-income', code: '4110', name: 'Dividends' },
+  { id: 'acc-home-salary', groupId: 'grp-employment', code: '4010', name: 'Salary' },
+  { id: 'acc-home-dividends', groupId: 'grp-adjustments-income', code: '4110', name: 'Dividends' },
   
   // Expenses
-  { id: 'acc-home-groceries', groupId: 'grp-living', code: '5010', name: 'Groceries' },
-  { id: 'acc-home-utilities', groupId: 'grp-living', code: '5020', name: 'Utilities' },
-  { id: 'acc-home-dining', groupId: 'grp-living', code: '5030', name: 'Dining Out' },
-  { id: 'acc-home-gas', groupId: 'grp-living', code: '5040', name: 'Gas & Fuel' },
+  { id: 'acc-home-groceries', groupId: 'grp-variable-expense', code: '5010', name: 'Groceries' },
+  { id: 'acc-home-utilities', groupId: 'grp-fixed-expense', code: '5020', name: 'Utilities' },
+  { id: 'acc-home-dining', groupId: 'grp-variable-expense', code: '5030', name: 'Dining Out' },
+  { id: 'acc-home-gas', groupId: 'grp-variable-expense', code: '5040', name: 'Gas & Fuel' },
 ];
 
 // =============================================================================
@@ -114,29 +140,29 @@ const BIZ_ENTITY = {
 
 const BIZ_ACCOUNTS = [
   // Assets
-  { id: 'acc-biz-checking', groupId: 'grp-cash', code: '1010', name: 'Business Checking' },
-  { id: 'acc-biz-savings', groupId: 'grp-cash', code: '1020', name: 'Business Savings' },
+  { id: 'acc-biz-checking', groupId: 'grp-bank', code: '1010', name: 'Business Checking' },
+  { id: 'acc-biz-savings', groupId: 'grp-bank', code: '1020', name: 'Business Savings' },
   { id: 'acc-biz-ar', groupId: 'grp-receivables', code: '1110', name: 'Accounts Receivable' },
-  { id: 'acc-biz-equipment', groupId: 'grp-property', code: '1310', name: 'Equipment' },
+  { id: 'acc-biz-equipment', groupId: 'grp-equipment', code: '1310', name: 'Equipment' },
   
   // Liabilities
-  { id: 'acc-biz-cc', groupId: 'grp-credit', code: '2010', name: 'Business Credit Card' },
-  { id: 'acc-biz-ap', groupId: 'grp-payables', code: '2110', name: 'Accounts Payable' },
+  { id: 'acc-biz-cc', groupId: 'grp-credit-cards', code: '2010', name: 'Business Credit Card' },
+  { id: 'acc-biz-ap', groupId: 'grp-accounts-payable', code: '2110', name: 'Accounts Payable' },
   { id: 'acc-biz-loan', groupId: 'grp-loans', code: '2210', name: 'Business Loan' },
   
   // Equity
-  { id: 'acc-biz-capital', groupId: 'grp-capital', code: '3010', name: 'Owner Investment' },
-  { id: 'acc-biz-draw', groupId: 'grp-retained', code: '3110', name: 'Owner Draw' },
+  { id: 'acc-biz-capital', groupId: 'grp-member-capital', code: '3010', name: 'Owner Investment' },
+  { id: 'acc-biz-draw', groupId: 'grp-net-income-alloc', code: '3110', name: 'Owner Draw' },
   
   // Income
-  { id: 'acc-biz-sales', groupId: 'grp-income', code: '4010', name: 'Sales Revenue' },
-  { id: 'acc-biz-services', groupId: 'grp-income', code: '4020', name: 'Service Revenue' },
+  { id: 'acc-biz-sales', groupId: 'grp-sales', code: '4010', name: 'Sales Revenue' },
+  { id: 'acc-biz-services', groupId: 'grp-sales', code: '4020', name: 'Service Revenue' },
   
   // Expenses
-  { id: 'acc-biz-rent', groupId: 'grp-operating', code: '5010', name: 'Rent' },
-  { id: 'acc-biz-payroll', groupId: 'grp-operating', code: '5020', name: 'Payroll' },
-  { id: 'acc-biz-supplies', groupId: 'grp-operating', code: '5030', name: 'Office Supplies' },
-  { id: 'acc-biz-cogs', groupId: 'grp-cogs', code: '5110', name: 'Cost of Goods Sold' },
+  { id: 'acc-biz-rent', groupId: 'grp-fixed-expense', code: '5010', name: 'Rent' },
+  { id: 'acc-biz-payroll', groupId: 'grp-fixed-expense', code: '5020', name: 'Payroll' },
+  { id: 'acc-biz-supplies', groupId: 'grp-variable-expense', code: '5030', name: 'Office Supplies' },
+  { id: 'acc-biz-cogs', groupId: 'grp-variable-expense', code: '5110', name: 'Cost of Goods Sold' },
 ];
 
 // =============================================================================

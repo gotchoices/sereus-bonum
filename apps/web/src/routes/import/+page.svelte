@@ -2,6 +2,7 @@
   import { t } from '$lib/i18n';
   import { log } from '$lib/logger';
   import { goto } from '$app/navigation';
+  import { onMount } from 'svelte';
   import { 
     importService, 
     type ParsedBooks, 
@@ -10,6 +11,12 @@
     isValidAccountPath,
     isCompleteAccountPath
   } from '$lib/import';
+  import { 
+    accountGroups, 
+    loadAccountGroups, 
+    type AccountGroup,
+    type AccountType
+  } from '$lib/stores/accounts';
   
   let entityName = $state('');
   let selectedFile = $state<File | null>(null);
@@ -24,11 +31,37 @@
   let editingGroupIndex = $state<number | null>(null);
   let editingAccountIndex = $state<number | null>(null);
   let showGroupTreeIndex = $state<number | null>(null);
+  let groupInputValue = $state<string>('');
+  let showGroupSuggestions = $state<boolean>(false);
+  
+  // Compute matching group paths for autocomplete
+  let groupSuggestions = $derived(() => {
+    if (!groupInputValue || groupInputValue.length < 1) return [];
+    const groups = $accountGroups;
+    const allPaths = groups.map(g => buildGroupPath(g.id, groups));
+    const query = groupInputValue.toLowerCase();
+    return allPaths
+      .filter(path => path.toLowerCase().includes(query))
+      .sort((a, b) => {
+        // Prefer paths that start with the query
+        const aStarts = a.toLowerCase().startsWith(query);
+        const bStarts = b.toLowerCase().startsWith(query);
+        if (aStarts && !bStarts) return -1;
+        if (!aStarts && bStarts) return 1;
+        return a.localeCompare(b);
+      })
+      .slice(0, 10); // Limit to 10 suggestions
+  });
   
   // Computed state
   let allResolved = $derived(mappings.every(m => m.isResolved));
   let accountCount = $derived(mappings.length);
   let transactionCount = $derived(parsedData?.transactions.length ?? 0);
+  
+  // Load account groups on mount
+  onMount(() => {
+    loadAccountGroups();
+  });
   
   function handleDragOver(e: DragEvent) {
     e.preventDefault();
@@ -295,13 +328,18 @@
       // Auto-match based on account type and hierarchy
       const autoMatch = autoMatchAccount(account, fullPath, accountMap);
       
+      // Determine if resolved: has group, and either no account (placeholder) or valid account
+      const isResolved = 
+        autoMatch.group !== null && 
+        (autoMatch.account === null || (autoMatch.account !== null && autoMatch.account.length > 0));
+      
       result.push({
         sourceAccount: account,
         fullSourcePath: fullPath,
         targetGroup: autoMatch.group,
         targetAccount: autoMatch.account,
         isSettled: false,
-        isResolved: autoMatch.confidence === 'high',
+        isResolved,
         confidence: autoMatch.confidence,
         depth,
         hasChildren
@@ -329,6 +367,96 @@
     return result;
   }
   
+  /**
+   * Build full hierarchical path for an account group
+   */
+  function buildGroupPath(groupId: string, groups: AccountGroup[]): string {
+    const groupMap = new Map(groups.map(g => [g.id, g]));
+    const path: string[] = [];
+    let current = groupMap.get(groupId);
+    
+    while (current) {
+      path.unshift(current.name);
+      current = current.parentId ? groupMap.get(current.parentId) : undefined;
+    }
+    
+    return path.join(':');
+  }
+  
+  /**
+   * Find account group by matching name (placeholder accounts match to groups)
+   */
+  function findMatchingGroup(accountName: string, accountType: string, groups: AccountGroup[]): { groupId: string; groupPath: string; confidence: 'high' | 'medium' | 'low' } | null {
+    // Try exact name match first (case-insensitive)
+    const exactMatch = groups.find(g => 
+      g.name.toLowerCase() === accountName.toLowerCase() &&
+      g.accountType === mapAccountTypeToBonum(accountType)
+    );
+    
+    if (exactMatch) {
+      return {
+        groupId: exactMatch.id,
+        groupPath: buildGroupPath(exactMatch.id, groups),
+        confidence: 'high'
+      };
+    }
+    
+    // Try partial name match (e.g., "Current Assets" matches "Current Assets")
+    const partialMatch = groups.find(g => 
+      accountName.toLowerCase().includes(g.name.toLowerCase()) &&
+      g.accountType === mapAccountTypeToBonum(accountType)
+    );
+    
+    if (partialMatch) {
+      return {
+        groupId: partialMatch.id,
+        groupPath: buildGroupPath(partialMatch.id, groups),
+        confidence: 'medium'
+      };
+    }
+    
+    // Fallback: find top-level group by type
+    const typeMatch = groups.find(g => 
+      !g.parentId && 
+      g.accountType === mapAccountTypeToBonum(accountType)
+    );
+    
+    if (typeMatch) {
+      return {
+        groupId: typeMatch.id,
+        groupPath: buildGroupPath(typeMatch.id, groups),
+        confidence: 'low'
+      };
+    }
+    
+    return null;
+  }
+  
+  /**
+   * Map GnuCash account type to Bonum account type
+   */
+  function mapAccountTypeToBonum(gnucashType: string): AccountType {
+    const upperType = gnucashType.toUpperCase();
+    
+    if (['BANK', 'CASH', 'ASSET', 'STOCK', 'MUTUAL', 'RECEIVABLE'].includes(upperType)) {
+      return 'ASSET';
+    }
+    if (['CREDIT', 'LIABILITY', 'PAYABLE'].includes(upperType)) {
+      return 'LIABILITY';
+    }
+    if (['EQUITY'].includes(upperType)) {
+      return 'EQUITY';
+    }
+    if (['INCOME'].includes(upperType)) {
+      return 'INCOME';
+    }
+    if (['EXPENSE'].includes(upperType)) {
+      return 'EXPENSE';
+    }
+    
+    return 'ASSET'; // Default fallback
+  }
+  
   function autoMatchAccount(
     account: typeof parsedData.accounts[0],
     fullPath: string,
@@ -338,54 +466,96 @@
     account: string | null;
     confidence: 'high' | 'medium' | 'low';
   } {
-    // Simple auto-matching logic based on GnuCash account types
-    // In production, this would query existing account groups from the database
+    const groups = $accountGroups;
     
-    // Mock hierarchical account groups (in production, query from DB)
-    const typeMap: Record<string, string> = {
-      'BANK': 'Assets:Current Assets:Cash & Bank',
-      'CASH': 'Assets:Current Assets:Cash & Bank',
-      'ASSET': 'Assets:Other Assets',
-      'STOCK': 'Assets:Investments',
-      'MUTUAL': 'Assets:Investments',
-      'CREDIT': 'Liabilities:Credit Cards',
-      'LIABILITY': 'Liabilities:Other Liabilities',
-      'PAYABLE': 'Liabilities:Payables',
-      'EQUITY': 'Equity:Owner\'s Equity',
-      'INCOME': 'Income',
-      'EXPENSE': 'Expenses',
-    };
-    
-    const group = typeMap[account.type] || null;
-    
-    // Placeholder accounts map to group only
+    // Placeholder accounts: try to match to group by name
     if (account.placeholder) {
-      return { 
-        group, 
-        account: null, 
-        confidence: group ? 'high' : 'low' 
+      const match = findMatchingGroup(account.name, account.type, groups);
+      
+      if (match) {
+        return { 
+          group: match.groupPath, 
+          account: null, 
+          confidence: match.confidence
+        };
+      }
+      
+      // No match found for placeholder
+      return {
+        group: null,
+        account: null,
+        confidence: 'low'
       };
     }
     
-    // Check if parent is a matched placeholder
+    // Non-placeholder accounts: check if parent is a matched placeholder
     if (account.parentGuid) {
       const parent = accountMap.get(account.parentGuid);
-      if (parent?.placeholder && typeMap[parent.type]) {
-        // Parent matched, use same account name under matched group
-        return { 
-          group: typeMap[parent.type], 
-          account: account.name, 
-          confidence: 'high' 
-        };
+      if (parent?.placeholder) {
+        const parentMatch = findMatchingGroup(parent.name, parent.type, groups);
+        if (parentMatch) {
+          // Use parent's group, account name only (not full path)
+          return { 
+            group: parentMatch.groupPath, 
+            account: account.name, 
+            confidence: 'high' 
+          };
+        }
       }
     }
     
-    // No perfect match - use full source path as account path
+    // No parent match: try to find a group by type and use account name only
+    const match = findMatchingGroup(account.name, account.type, groups);
+    if (match) {
+      return {
+        group: match.groupPath,
+        account: account.name,
+        confidence: 'medium'
+      };
+    }
+    
     return { 
-      group, 
-      account: fullPath, 
-      confidence: group ? 'medium' : 'low' 
+      group: null, 
+      account: account.name, 
+      confidence: 'low' 
     };
+  }
+  
+  function startEditingGroup(index: number) {
+    editingGroupIndex = index;
+    groupInputValue = mappings[index].targetGroup || '';
+    showGroupSuggestions = true;
+  }
+  
+  function handleGroupInput(e: Event) {
+    groupInputValue = (e.target as HTMLInputElement).value;
+    showGroupSuggestions = true;
+  }
+  
+  function selectGroupSuggestion(index: number, path: string) {
+    groupInputValue = path;
+    showGroupSuggestions = false;
+    updateTargetGroup(index, path);
+  }
+  
+  function handleGroupKeydown(e: KeyboardEvent, index: number) {
+    if (e.key === 'Enter') {
+      showGroupSuggestions = false;
+      updateTargetGroup(index, groupInputValue);
+    } else if (e.key === 'Escape') {
+      showGroupSuggestions = false;
+      editingGroupIndex = null;
+    }
+  }
+  
+  function handleGroupBlur(index: number) {
+    // Delay to allow click on suggestion
+    setTimeout(() => {
+      if (editingGroupIndex === index) {
+        showGroupSuggestions = false;
+        updateTargetGroup(index, groupInputValue);
+      }
+    }, 200);
   }
   
   function toggleSelection(index: number) {
@@ -433,11 +603,16 @@
         accountMap
       );
       
+      // Check if resolved: has group, and either no account (placeholder) or valid account
+      const isResolved = 
+        autoMatch.group !== null && 
+        (autoMatch.account === null || (autoMatch.account !== null && autoMatch.account.length > 0));
+      
       return {
         ...mapping,
         targetGroup: autoMatch.group,
         targetAccount: autoMatch.account,
-        isResolved: autoMatch.confidence === 'high',
+        isResolved,
         confidence: autoMatch.confidence
       };
     });
@@ -445,25 +620,22 @@
     log.ui.info('[Import] Rescan complete');
   }
   
-  async function updateTargetGroup(index: number, newGroup: string) {
+  async   function updateTargetGroup(index: number, newGroup: string) {
     const trimmed = newGroup.trim();
     
-    // Check if group exists (mock - in production query database)
-    const existingGroups = [
-      'Assets:Current Assets:Cash & Bank',
-      'Assets:Current Assets:Receivables',
-      'Assets:Fixed Assets:Property & Equipment',
-      'Assets:Investments',
-      'Assets:Other Assets',
-      'Liabilities:Credit Cards',
-      'Liabilities:Payables',
-      'Liabilities:Other Liabilities',
-      'Equity:Owner\'s Equity',
-      'Income',
-      'Expenses'
-    ];
+    if (trimmed.length === 0) {
+      mappings[index].targetGroup = null;
+      mappings[index].isResolved = false;
+      mappings = mappings;
+      editingGroupIndex = null;
+      return;
+    }
     
-    if (!existingGroups.includes(trimmed) && trimmed.length > 0) {
+    // Check if group exists by building paths from actual groups
+    const groups = $accountGroups;
+    const existingGroupPaths = groups.map(g => buildGroupPath(g.id, groups));
+    
+    if (!existingGroupPaths.includes(trimmed)) {
       // Group doesn't exist - prompt for creation
       const confirmed = confirm(
         `Account group "${trimmed}" does not exist.\n\n` +
@@ -471,16 +643,21 @@
       );
       
       if (confirmed) {
-        // Create group immediately (not waiting for import)
-        // In production: await createAccountGroup(trimmed);
-        log.ui.info('[Import] Created new account group:', trimmed);
+        // TODO: Create group immediately (not waiting for import)
+        // Parse the path and create the group with proper parent relationship
+        log.ui.info('[Import] Would create new account group:', trimmed);
+        // For now, just accept it
       } else {
         return; // User cancelled, don't update mapping
       }
     }
     
-    mappings[index].targetGroup = trimmed || null;
-    mappings[index].isResolved = trimmed.length > 0;
+    mappings[index].targetGroup = trimmed;
+    // Mark as resolved if we have both group and account (or placeholder with just group)
+    mappings[index].isResolved = 
+      trimmed.length > 0 && 
+      (mappings[index].targetAccount === null || 
+       (mappings[index].targetAccount !== null && mappings[index].targetAccount.length > 0));
     mappings = mappings;
     editingGroupIndex = null;
   }
@@ -488,16 +665,23 @@
   function updateTargetAccount(index: number, newAccount: string) {
     const trimmed = newAccount.trim();
     
-    // Validate syntax
+    // Validate syntax if non-empty
     if (trimmed.length > 0 && !isCompleteAccountPath(trimmed)) {
-      // Invalid syntax - show warning
+      log.ui.warn('[Import] Invalid account path syntax:', trimmed);
+      // Don't update, keep editing
       return;
     }
     
-    mappings[index].targetAccount = trimmed || null;
+    mappings[index].targetAccount = trimmed.length > 0 ? trimmed : null;
+    
+    // Mark as resolved if:
+    // - Has a target group, AND
+    // - Either account is null (placeholder) OR account is valid and complete
     mappings[index].isResolved = 
       mappings[index].targetGroup !== null && 
-      (trimmed.length === 0 || isCompleteAccountPath(trimmed));
+      (mappings[index].targetAccount === null || 
+       (mappings[index].targetAccount !== null && isCompleteAccountPath(mappings[index].targetAccount)));
+    
     mappings = mappings;
     editingAccountIndex = null;
   }
@@ -539,8 +723,13 @@
       showToast(`Entity "${entityName}" created`);
       
       // Navigate to entity page (Trial Balance mode)
-      // In production, use importResult.entityId to navigate
-      goto('/?view=trial-balance');
+      const entityId = importResult.entityId;
+      if (entityId) {
+        goto(`/entities/${entityId}?view=trial-balance`);
+      } else {
+        // Fallback if no entityId returned
+        goto('/');
+      }
       
     } catch (err) {
       log.ui.error('[Import] Error during import:', err);
@@ -564,22 +753,6 @@
       toast.classList.remove('show');
       setTimeout(() => toast.remove(), 300);
     }, 3000);
-  }
-  
-  function getConfidenceIcon(confidence: 'high' | 'medium' | 'low'): string {
-    switch (confidence) {
-      case 'high': return '✓';
-      case 'medium': return '⚠';
-      case 'low': return '✗';
-    }
-  }
-  
-  function getConfidenceClass(confidence: 'high' | 'medium' | 'low'): string {
-    switch (confidence) {
-      case 'high': return 'confidence-high';
-      case 'medium': return 'confidence-medium';
-      case 'low': return 'confidence-low';
-    }
   }
   
   function formatTransactionCount(account: typeof parsedData.accounts[0]): string {
@@ -754,11 +927,12 @@
                       <div class="editable-group">
                         <input
                           type="text"
-                          value={mapping.targetGroup || ''}
-                          onblur={(e) => updateTargetGroup(i, e.currentTarget.value)}
-                          onkeydown={(e) => e.key === 'Enter' && updateTargetGroup(i, e.currentTarget.value)}
+                          value={groupInputValue}
+                          oninput={handleGroupInput}
+                          onblur={() => handleGroupBlur(i)}
+                          onkeydown={(e) => handleGroupKeydown(e, i)}
                           class="inline-input"
-                          placeholder="Type group path or use tree..."
+                          placeholder="Type to search groups..."
                           autofocus
                         />
                         <button 
@@ -768,11 +942,23 @@
                         >
                           ▼
                         </button>
+                        {#if showGroupSuggestions && groupSuggestions.length > 0}
+                          <div class="group-suggestions">
+                            {#each groupSuggestions as suggestion}
+                              <button 
+                                class="suggestion-item"
+                                onmousedown={() => selectGroupSuggestion(i, suggestion)}
+                              >
+                                {suggestion}
+                              </button>
+                            {/each}
+                          </div>
+                        {/if}
                       </div>
                     {:else}
                       <span 
                         class="target-group editable"
-                        onclick={() => editingGroupIndex = i}
+                        onclick={() => startEditingGroup(i)}
                         title="Click to edit"
                       >
                         {mapping.targetGroup || '(not mapped)'}
@@ -802,13 +988,13 @@
                   <div class="col-status">
                     <div class="status-indicators">
                       <span 
-                        class="confidence-icon {getConfidenceClass(mapping.confidence)}"
-                        title="{mapping.confidence} confidence (auto-matched)"
+                        class="resolution-icon {mapping.isResolved ? 'resolved' : 'unresolved'}"
+                        title="{mapping.isResolved ? 'Resolved' : 'Needs attention'}"
                       >
-                        {getConfidenceIcon(mapping.confidence)}
+                        {mapping.isResolved ? '✓' : '⚠'}
                       </span>
                       {#if mapping.isSettled}
-                        <span class="settled-icon" title="User marked as settled">✓</span>
+                        <span class="settled-icon" title="Settled (protected from rescan)">🔒</span>
                       {/if}
                     </div>
                   </div>
@@ -1201,6 +1387,36 @@
     display: flex;
     align-items: center;
     gap: 0.25rem;
+    position: relative;
+  }
+  
+  .group-suggestions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 2rem;
+    max-height: 200px;
+    overflow-y: auto;
+    background: var(--surface-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    z-index: 100;
+  }
+  
+  .suggestion-item {
+    display: block;
+    width: 100%;
+    padding: 0.5rem;
+    text-align: left;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 0.875rem;
+  }
+  
+  .suggestion-item:hover {
+    background: var(--surface-hover, #f0f0f0);
   }
   
   .inline-input {
@@ -1248,30 +1464,27 @@
     justify-content: center;
   }
   
-  .confidence-icon {
+  .resolution-icon {
     font-weight: bold;
     font-size: 1.125rem;
     cursor: default;
     user-select: none;
   }
   
-  .confidence-high {
+  .resolution-icon.resolved {
     color: var(--success-color);
   }
   
-  .confidence-medium {
+  .resolution-icon.unresolved {
     color: var(--warning-color, #ff9800);
   }
   
-  .confidence-low {
-    color: var(--danger-color);
-  }
-  
   .settled-icon {
-    color: var(--success-color);
+    color: var(--text-secondary, #666);
     font-weight: bold;
     cursor: default;
     user-select: none;
+    margin-left: 0.25rem;
   }
   
   .dialog-footer {

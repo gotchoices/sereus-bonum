@@ -14,28 +14,66 @@
   } from '$lib/stores/accounts';
   import type { AccountType, AccountGroup } from '$lib/data';
   
-  // Load account groups on mount
+  // LocalStorage key for expanded state
+  const EXPAND_STORAGE_KEY = 'bonum-catalog-expand';
+  
+  // Load account groups on mount and restore expanded state
   let groupsLoaded = false;
   $effect(() => {
     if (browser && !groupsLoaded && $accountGroups.length === 0) {
       groupsLoaded = true;
       loadAccountGroups();
+      // Restore expanded state from localStorage
+      try {
+        const saved = localStorage.getItem(EXPAND_STORAGE_KEY);
+        if (saved) {
+          expandedGroups = new Set(JSON.parse(saved));
+        }
+      } catch (e) {
+        // Ignore parse errors
+      }
     }
   });
   
-  // Account type display info
-  const typeInfo: Record<AccountType, { icon: string; color: string }> = {
-    ASSET: { icon: '💰', color: 'var(--asset-color)' },
-    LIABILITY: { icon: '📋', color: 'var(--liability-color)' },
-    EQUITY: { icon: '📊', color: 'var(--equity-color)' },
-    INCOME: { icon: '📈', color: 'var(--income-color)' },
-    EXPENSE: { icon: '📉', color: 'var(--expense-color)' },
+  // Set initial expand state: top-level groups expanded, others collapsed (spec line 49)
+  $effect(() => {
+    if (browser && $accountGroups.length > 0 && expandedGroups.size === 0) {
+      // Check if localStorage had a saved state
+      const saved = localStorage.getItem(EXPAND_STORAGE_KEY);
+      if (!saved) {
+        // No saved state - expand only top-level groups (Assets, Liabilities, etc.)
+        const topLevelIds = $accountGroups
+          .filter(g => !g.parentId)
+          .map(g => g.id);
+        expandedGroups = new Set(topLevelIds);
+        saveExpandedState();
+      }
+    }
+  });
+  
+  // Account type display info (icons per spec lines 39-43)
+  const typeInfo: Record<AccountType, { icon: string; label: string; color: string }> = {
+    ASSET: { icon: '💰', label: 'Assets', color: 'var(--asset-color)' },
+    LIABILITY: { icon: '📋', label: 'Liabilities', color: 'var(--liability-color)' },
+    EQUITY: { icon: '📊', label: 'Equity', color: 'var(--equity-color)' },
+    INCOME: { icon: '📈', label: 'Income', color: 'var(--income-color)' },
+    EXPENSE: { icon: '📉', label: 'Expenses', color: 'var(--expense-color)' },
   };
   
   const accountTypes: AccountType[] = ['ASSET', 'LIABILITY', 'EQUITY', 'INCOME', 'EXPENSE'];
   
-  // Expanded state for groups
+  // Expanded state for groups (persisted in localStorage)
   let expandedGroups = $state<Set<string>>(new Set());
+  
+  function saveExpandedState() {
+    if (browser) {
+      try {
+        localStorage.setItem(EXPAND_STORAGE_KEY, JSON.stringify([...expandedGroups]));
+      } catch (e) {
+        // Ignore storage errors
+      }
+    }
+  }
   
   function toggleGroup(groupId: string) {
     if (expandedGroups.has(groupId)) {
@@ -44,6 +82,7 @@
       expandedGroups.add(groupId);
     }
     expandedGroups = new Set(expandedGroups);
+    saveExpandedState();
   }
   
   function expandAll() {
@@ -51,15 +90,17 @@
       .filter(g => hasChildren(g.id, $childGroupsByParent))
       .map(g => g.id);
     expandedGroups = new Set(parentIds);
+    saveExpandedState();
   }
   
   function collapseAll() {
     expandedGroups = new Set();
+    saveExpandedState();
   }
   
-  // Count top-level groups per type
+  // Count ALL groups per type (not just top-level)
   function countGroups(type: AccountType): number {
-    return $topLevelGroupsByType.get(type)?.length ?? 0;
+    return $accountGroups.filter(g => g.accountType === type).length;
   }
   
   // ========== Modal State ==========
@@ -136,9 +177,24 @@
     }
   }
   
-  // Get potential parent groups for dropdown (same type, no circular refs)
-  function getParentOptions(type: AccountType): AccountGroup[] {
-    return $accountGroups.filter(g => g.accountType === type && !g.parentId);
+  // Get potential parent groups for dropdown
+  // If type is specified, filter to that type; otherwise show all groups
+  function getParentOptions(type: AccountType | null): AccountGroup[] {
+    if (type) {
+      return $accountGroups.filter(g => g.accountType === type);
+    }
+    return $accountGroups;
+  }
+  
+  // Handle parent selection change - update type to match parent
+  function handleParentChange(parentId: string | null) {
+    formParentId = parentId;
+    if (parentId) {
+      const parent = $accountGroups.find(g => g.id === parentId);
+      if (parent) {
+        formType = parent.accountType;
+      }
+    }
   }
   
   // ========== Context Menu ==========
@@ -167,6 +223,44 @@
   }
 </script>
 
+{#snippet groupRow(group: AccountGroup, depth: number)}
+  {@const children = $childGroupsByParent.get(group.id) || []}
+  {@const hasKids = children.length > 0}
+  {@const isExpanded = expandedGroups.has(group.id)}
+  
+  <div class="group-item">
+    {#if hasKids}
+      <button 
+        class="group-row parent"
+        class:expanded={isExpanded}
+        style="padding-left: calc(var(--space-lg) + {depth * 1.25}rem);"
+        onclick={() => toggleGroup(group.id)}
+        oncontextmenu={(e) => handleContextMenu(e, group)}
+      >
+        <span class="expand-icon">{isExpanded ? '▼' : '▶'}</span>
+        <span class="group-name">{group.name}</span>
+        <span class="child-count">{children.length}</span>
+      </button>
+      
+      {#if isExpanded}
+        <div class="children">
+          {#each children as child}
+            {@render groupRow(child, depth + 1)}
+          {/each}
+        </div>
+      {/if}
+    {:else}
+      <button 
+        class="group-row leaf"
+        style="padding-left: calc(var(--space-lg) + {depth * 1.25}rem + 1.25rem);"
+        oncontextmenu={(e) => handleContextMenu(e, group)}
+      >
+        <span class="group-name">{group.name}</span>
+      </button>
+    {/if}
+  </div>
+{/snippet}
+
 <svelte:window on:click={handleWindowClick} />
 
 <div class="catalog-page">
@@ -194,56 +288,18 @@
         
         <section class="type-section">
           <h2 class="type-header" style="--type-color: {info.color}">
-            <span class="type-icon">{info.icon}</span>
-            {$t(`account_types.${type}`)}
-            <span class="type-count">{$t('catalog.groups_count', { count: countGroups(type) })}</span>
+            <span class="type-icon" title="{info.label}">{info.icon}</span>
+            <span class="type-count">({countGroups(type)} groups)</span>
           </h2>
           
           <div class="groups-list">
             {#each topGroups as group}
-              {@const children = $childGroupsByParent.get(group.id) || []}
-              {@const hasKids = children.length > 0}
-              {@const isExpanded = expandedGroups.has(group.id)}
-              
-              <div class="group-item">
-                {#if hasKids}
-                  <button 
-                    class="group-row parent"
-                    class:expanded={isExpanded}
-                    onclick={() => toggleGroup(group.id)}
-                    oncontextmenu={(e) => handleContextMenu(e, group)}
-                  >
-                    <span class="expand-icon">{isExpanded ? '▼' : '▶'}</span>
-                    <span class="group-name">{group.name}</span>
-                    <span class="child-count">{children.length}</span>
-                  </button>
-                  
-                  {#if isExpanded}
-                    <div class="children">
-                      {#each children as child}
-                        <button 
-                          class="group-row child"
-                          oncontextmenu={(e) => handleContextMenu(e, child)}
-                        >
-                          <span class="group-name">{child.name}</span>
-                        </button>
-                      {/each}
-                    </div>
-                  {/if}
-                {:else}
-                  <button 
-                    class="group-row leaf"
-                    oncontextmenu={(e) => handleContextMenu(e, group)}
-                  >
-                    <span class="group-name">{group.name}</span>
-                  </button>
-                {/if}
-              </div>
+              {@render groupRow(group, 0)}
             {/each}
             
             {#if topGroups.length === 0}
               <div class="empty-type">
-                <span class="text-muted">{$t('catalog.no_children')}</span>
+                <span class="text-muted">{$t('catalog.no_groups_type')}</span>
               </div>
             {/if}
           </div>
@@ -263,11 +319,9 @@
     <button class="menu-item" onclick={() => { openEditModal(contextMenu!.group); closeContextMenu(); }}>
       <span>📝</span> {$t('common.edit')}
     </button>
-    {#if !contextMenu.group.parentId}
-      <button class="menu-item" onclick={() => { openAddChildModal(contextMenu!.group); closeContextMenu(); }}>
-        <span>➕</span> {$t('catalog.add_child')}
-      </button>
-    {/if}
+    <button class="menu-item" onclick={() => { openAddChildModal(contextMenu!.group); closeContextMenu(); }}>
+      <span>➕</span> {$t('catalog.add_child')}
+    </button>
     <hr />
     <button class="menu-item danger" onclick={() => handleDeleteGroup(contextMenu!.group)}>
       <span>🗑️</span> {$t('common.delete')}
@@ -303,35 +357,51 @@
           />
         </div>
         
-        <div class="form-group">
-          <label for="group-type">{$t('catalog.type')}</label>
-          <select 
-            id="group-type"
-            bind:value={formType}
-            disabled={modalMode === 'edit' || modalMode === 'addChild'}
-          >
-            {#each accountTypes as type}
-              <option value={type}>{$t(`account_types.${type}`)}</option>
-            {/each}
-          </select>
-        </div>
-        
         {#if modalMode === 'add'}
           <div class="form-group">
             <label for="group-parent">{$t('catalog.parent')}</label>
-            <select id="group-parent" bind:value={formParentId}>
-              <option value={null}>{$t('catalog.none_top_level')}</option>
-              {#each getParentOptions(formType) as parent}
-                <option value={parent.id}>{parent.name}</option>
+            <select 
+              id="group-parent" 
+              value={formParentId}
+              onchange={(e) => handleParentChange(e.currentTarget.value || null)}
+            >
+              <option value="">{$t('catalog.none_top_level')}</option>
+              {#each $accountGroups as group}
+                <option value={group.id}>{group.name} ({typeInfo[group.accountType].label})</option>
               {/each}
             </select>
           </div>
-        {/if}
-        
-        {#if modalMode === 'addChild' && parentForChild}
+          
+          <div class="form-group">
+            <label for="group-type">{$t('catalog.type')}</label>
+            <select 
+              id="group-type"
+              bind:value={formType}
+              disabled={formParentId !== null}
+            >
+              {#each accountTypes as type}
+                <option value={type}>{$t(`account_types.${type}`)}</option>
+              {/each}
+            </select>
+            {#if formParentId}
+              <span class="form-hint">Type inherited from parent</span>
+            {/if}
+          </div>
+        {:else if modalMode === 'addChild' && parentForChild}
           <div class="form-group">
             <label>{$t('catalog.parent')}</label>
             <input type="text" value={parentForChild.name} disabled />
+          </div>
+          
+          <div class="form-group">
+            <label>{$t('catalog.type')}</label>
+            <input type="text" value={typeInfo[formType].label} disabled />
+          </div>
+        {:else if modalMode === 'edit'}
+          <div class="form-group">
+            <label>{$t('catalog.type')}</label>
+            <input type="text" value={typeInfo[formType].label} disabled />
+            <span class="form-hint">Type cannot be changed</span>
           </div>
         {/if}
         
@@ -466,13 +536,7 @@
   }
   
   .group-row.leaf {
-    padding-left: calc(var(--space-lg) + 1.25rem);
-  }
-  
-  .group-row.child {
-    padding-left: calc(var(--space-lg) + 2rem);
-    color: var(--text-secondary);
-    font-size: 0.85rem;
+    /* Dynamic padding via inline style */
   }
   
   .expand-icon {
@@ -608,6 +672,14 @@
     margin-bottom: var(--space-xs);
     font-size: 0.875rem;
     color: var(--text-secondary);
+  }
+  
+  .form-hint {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: var(--space-xs);
+    font-style: italic;
   }
   
   .form-group input,

@@ -17,28 +17,36 @@ Manage the shared classification structure for organizing accounts (see [Account
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ Account Groups Catalog                      [+ Add Group] │
+│ Account Groups Catalog                    [+ Add Group] │
 ├─────────────────────────────────────────────────────────┤
-│ 💰 Assets                                    (5 groups) │
-│   ▶ Current Assets                                      │
-│       Cash & Bank                                       │
-│       Receivables                                       │
-│   ▶ Fixed Assets                                        │
-│       Property & Equipment                              │
-│       Vehicles                                          │
-│   Other Assets                                          │
+│ 💰 ▶ Assets                                  (5 groups) │
+│     ▶ Current Assets                                    │
+│         Cash & Bank                                     │
+│         Receivables                                     │
+│     ▶ Fixed Assets                                      │
+│         Property & Equipment                            │
+│         Vehicles                                        │
+│     Other Assets                                        │
 ├─────────────────────────────────────────────────────────┤
-│ 📋 Liabilities                               (3 groups) │
-│   ...                                                   │
+│ 📋 ▶ Liabilities                             (3 groups) │
+│     ...                                                 │
 └─────────────────────────────────────────────────────────┘
 ```
 
 **Visual Structure:**
-- Account Type headers (Assets, Liabilities, etc.) always visible
+- Five separate panes/cards
+- Account Type indicated by icon only (hovering over icon reveals type in tooltip)
+  - Assets: bag of cash
+  - Liabilities: ledger
+  - Equity: Bar graph
+  - Income: Blue increasing graph
+  - Expense: Red decreasing graph
+- Top-level groups always visible (default Assets, Liabilities, etc.)
 - Parent groups show expand/collapse icon (▶/▼)
 - Child groups indented beneath parents
 - Leaf groups (no children) show no arrow
 - Count shows number of groups per type
+- Initial state: toplevel accounts expanded, others collapsed
 
 ---
 
@@ -50,12 +58,13 @@ Manage the shared classification structure for organizing accounts (see [Account
 
 **Modal fields:**
 - **Name:** Required
-- **Type:** Dropdown (Asset, Liability, Equity, Income, Expense)
 - **Parent:** Optional dropdown (shows groups of selected type only, includes "None - top level")
+- **Type:** Optional (Asset, Liability, Equity, Income, Expense). Defaults to parent type if selected.
 - **Description:** Optional
 
 **Behavior:**
 - Parent dropdown updates when Type changes
+- Type updates if parent changes
 - Save creates group and refreshes list
 - Cancel closes without saving
 
@@ -66,8 +75,8 @@ Manage the shared classification structure for organizing accounts (see [Account
 **Modal:** Same as Add, pre-filled
 
 **Restrictions:**
-- Cannot change Type (would orphan children)
-- Cannot change Parent (would break hierarchy)
+- Cannot change Type unless toplevel, type must conform to parent
+- Cannot change Parent to an incompatible type if children exist
 - Can change Name and Description
 
 ### Add Child Group
@@ -83,7 +92,7 @@ Manage the shared classification structure for organizing accounts (see [Account
 **Confirmation:** Shows group name, warns about entity usage
 
 **Restrictions:**
-- Cannot delete if entities have accounts in this group
+- Cannot delete if entities have accounts in this group or a child of this group
 - Shows count: "3 entities have accounts in this group"
 - Must reassign accounts first
 
