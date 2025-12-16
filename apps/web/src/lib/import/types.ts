@@ -7,6 +7,7 @@ export interface ParsedAccount {
   code?: string;
   description?: string;
   parentGuid?: string;
+  placeholder?: boolean; // Explicit placeholder flag from source
 }
 
 export interface ParsedTransaction {
@@ -53,3 +54,20 @@ export interface ImportOptions {
   createMissingAccounts?: boolean;
 }
 
+// Account mapping types for import UI
+
+export interface AccountMapping {
+  sourceAccount: ParsedAccount;
+  targetGroup: string | null; // Account group name (e.g., "Cash & Bank")
+  targetAccount: string | null; // Specific account name (optional for placeholder accounts)
+  isSettled: boolean; // User has reviewed/approved this mapping
+  isResolved: boolean; // Has a valid target assignment
+  confidence: 'high' | 'medium' | 'low'; // Auto-mapping confidence
+  depth: number; // Hierarchy level for indentation (0 = root)
+  isImplicitPlaceholder: boolean; // Has children but not marked as placeholder
+}
+
+export interface AccountMappingState {
+  mappings: AccountMapping[];
+  allResolved: boolean;
+}

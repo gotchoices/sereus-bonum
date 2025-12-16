@@ -52,34 +52,41 @@ Entry point for importing data into Bonum - either creating new entities from ex
   - Top-level accounts at left edge
   - Sub-accounts indented beneath parents
   - Multi-level nesting preserved from import
+  - Each account can be hovered over to reveal the full path and GUID
 - **Columns shown:**
   - Source account path (from import file)
-  - Placeholder indicator (explicit or implicit)
-  - Proposed target: account group + account (or group only)
+  - Transaction Count: how many transactions in this account (- for explicit placeholder accounts)
+  - Proposed Target Group: Full account group path
+  - Proposed Target Account: Full account path
   - Resolution status with visual indicator
+- **Rows shown:**
+  - Exclude the "Root Account" from specifically Gnucash import
+  - Exclude any other account which does not contain transactions or children
 
 **Automatic Matching:**
-- Placeholder accounts matching existing groups → mapped to group (no account)
-- Accounts with no perfect match → placed under partial-match group (e.g., "Assets") with account path preserved
-- GUID from import tracked behind scenes (not shown in UI)
+- Placeholder accounts matching existing groups → mapped to group, no account.  Mark as resolved.
+- Accounts under matched placeholders placed under the matched groups.  Use same account name for new account, mark as resolved.
+- Accounts with no perfect match for a group → placed under partial-match group (e.g., "Assets") with account path preserved, mark as unresolved.
+- GUID from import tracked behind scenes (not shown in UI).
 
 **User Actions:**
-- **Mark rows as settled:** User can toggle individual or multiple rows to indicate "I'm satisfied with this mapping"
+- **Pick different group:** User can click on the selected target group and either type with completion or select a pull-down to get a hierarchical expandable tree selector to search for a desired account group.  If the user types in a path for an account group that doesn't exist, the system will prompt for confirmation and then create it.  Manual selection of a target account group markes the line as resolved.
+- **Change Account Path:** User can edit the path of the target account.  Resolved checkmark is not selectable and gives visual warning until typed path is syntactically valid.
+- **Mark rows as settled:** If selection is valid, user can toggle individual or multiple rows to indicate "I'm satisfied with this mapping"
   - Settled rows show checkmark on right
   - Prevents "Rescan" from modifying these rows
 - **Rescan button:** Re-attempts automatic matching for unsettled rows only
   - Useful after user creates new account groups in separate window
-- **Edit mappings:** User can adjust target group/account for any row
 - **"Import" button:** Enabled only when all accounts resolved
 
 **Multi-Window Support:**
-- User can open separate Bonum window to create new account groups
-- Return to import screen and click "Rescan" to match against new groups
+- User might have a separate Bonum window open to create new account groups
+- A re-scan operation should pick up these changes from the database
 
 ### Step 3: Import Execution
 
 **Atomic Transaction:**
-All operations execute as single database transaction:
+Import executes as single database transaction:
 1. Create entity
 2. Create entity-specific account tree
 3. Create all transactions
@@ -101,31 +108,8 @@ All operations execute as single database transaction:
 ### Import Books Success
 
 **User sees:**
-- Entity name created
-- Account count
-- Transaction count
-- Date range
-
-**Buttons:**
-- **"View Entity"** → Navigate to entity's accounts view
-- **"Close"** → Dismiss dialog, stay on current screen
-
-### Import Transactions Success
-
-**User sees:**
-- Transaction count imported
-- Duplicates skipped (if any)
-- Target account name
-
-**Buttons:**
-- **"View Ledger"** → Navigate to target account's ledger
-- **"Close"** → Dismiss dialog, refresh current view
-
-### With Warnings/Errors
-
-**Additional option:**
-- **"View Warnings"** → Expand panel showing details
-- User can still proceed to view results or close
+- Momentary toast: Entity <name> created
+- User is navigated to the Entity page (Trial Balance mode) as though they had clicked on the new entity
 
 ---
 
