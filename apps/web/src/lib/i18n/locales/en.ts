@@ -202,6 +202,8 @@ export default {
     transactions_found: 'Transactions found',
     review_accounts: 'Review the accounts below. All accounts will be imported into your new entity.',
     complete_import: 'Complete Import',
+    import: 'Import',
+    importing: 'Importing...',
     import_complete: 'Import Complete!',
     entity_created: 'Entity "{name}" has been created.',
     imported_counts: '{accounts} accounts and {transactions} transactions imported successfully.',

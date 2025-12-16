@@ -1,22 +1,33 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
   import { log } from '$lib/logger';
-  import { importService, type ParsedBooks, type ImportResult, type AccountMapping } from '$lib/import';
+  import { goto } from '$app/navigation';
+  import { 
+    importService, 
+    type ParsedBooks, 
+    type ImportResult, 
+    type AccountMapping,
+    isValidAccountPath,
+    isCompleteAccountPath
+  } from '$lib/import';
   
   let entityName = $state('');
   let selectedFile = $state<File | null>(null);
   let isDragging = $state(false);
-  let step: 'upload' | 'processing' | 'mapping' | 'importing' | 'complete' = $state('upload');
+  let step: 'upload' | 'processing' | 'mapping' | 'importing' = $state('upload');
   let statusMessage = $state('');
   let parsedData = $state<ParsedBooks | null>(null);
   let mappings = $state<AccountMapping[]>([]);
   let selectedMappings = $state<Set<number>>(new Set());
   let importResult = $state<ImportResult | null>(null);
   let error = $state<string | null>(null);
+  let editingGroupIndex = $state<number | null>(null);
+  let editingAccountIndex = $state<number | null>(null);
+  let showGroupTreeIndex = $state<number | null>(null);
   
   // Computed state
   let allResolved = $derived(mappings.every(m => m.isResolved));
-  let accountCount = $derived(parsedData?.accounts.length ?? 0);
+  let accountCount = $derived(mappings.length);
   let transactionCount = $derived(parsedData?.transactions.length ?? 0);
   
   function handleDragOver(e: DragEvent) {
@@ -62,7 +73,7 @@
   }
   
   function cancel() {
-    window.location.href = '/';
+    goto('/');
   }
   
   async function processFile() {
@@ -82,19 +93,45 @@
     
     try {
       // Parse file using import service
-      parsedData = await importService.parseFile(selectedFile);
+      const rawData = await importService.parseFile(selectedFile);
       
-      log.ui.info('[Import] Parse complete:', { 
-        accounts: parsedData.accounts.length, 
-        transactions: parsedData.transactions.length,
-        commodities: parsedData.commodities.length 
+      log.ui.info('[Import] Raw data:', { 
+        accounts: rawData.accounts.length,
+        transactions: rawData.transactions.length,
+        commodities: rawData.commodities.length,
+        sampleAccounts: rawData.accounts.slice(0, 3).map(a => ({ 
+          name: a.name, 
+          type: a.type, 
+          parentGuid: a.parentGuid 
+        }))
       });
+      
+      // Filter at parse time: exclude Root Account and accounts with no transactions/children
+      const filteredAccounts = filterAccounts(rawData.accounts, rawData.transactions);
+      
+      log.ui.info('[Import] After filtering:', {
+        accountsRaw: rawData.accounts.length,
+        accountsFiltered: filteredAccounts.length,
+        excluded: rawData.accounts.length - filteredAccounts.length
+      });
+      
+      parsedData = {
+        ...rawData,
+        accounts: filteredAccounts
+      };
       
       // Build hierarchical mappings with auto-matching
       statusMessage = 'Analyzing account structure...';
-      mappings = buildAccountMappings(parsedData.accounts);
+      mappings = buildAccountMappings(parsedData.accounts, parsedData.transactions);
       
-      log.ui.info('[Import] Mappings built:', mappings.length);
+      log.ui.info('[Import] Mappings built:', {
+        count: mappings.length,
+        sample: mappings.slice(0, 3).map(m => ({
+          name: m.sourceAccount.name,
+          path: m.fullSourcePath,
+          targetGroup: m.targetGroup
+        }))
+      });
       
       // Go to mapping review
       step = 'mapping';
@@ -106,7 +143,85 @@
     }
   }
   
-  function buildAccountMappings(accounts: typeof parsedData.accounts): AccountMapping[] {
+  function filterAccounts(
+    accounts: typeof parsedData.accounts, 
+    transactions: typeof parsedData.transactions
+  ): typeof accounts {
+    if (!accounts || accounts.length === 0) return [];
+    if (!transactions) transactions = [];
+    
+    log.ui.info('[Import] filterAccounts input:', {
+      accounts: accounts.length,
+      transactions: transactions.length
+    });
+    
+    // Build transaction count map
+    const txCountMap = new Map<string, number>();
+    for (const tx of transactions) {
+      for (const entry of tx.entries) {
+        txCountMap.set(entry.accountGuid, (txCountMap.get(entry.accountGuid) || 0) + 1);
+      }
+    }
+    
+    log.ui.info('[Import] Transaction count map size:', txCountMap.size);
+    
+    // Build children map
+    const childMap = new Map<string, Set<string>>();
+    for (const account of accounts) {
+      if (account.parentGuid) {
+        if (!childMap.has(account.parentGuid)) {
+          childMap.set(account.parentGuid, new Set());
+        }
+        childMap.get(account.parentGuid)!.add(account.guid);
+      }
+    }
+    
+    log.ui.info('[Import] Child map size:', childMap.size);
+    
+    // Filter accounts
+    const filtered = accounts.filter(account => {
+      // Exclude GnuCash Root Account
+      if (account.type === 'ROOT' || account.name === 'Root Account') {
+        log.ui.info(`[Import] Excluding ROOT: ${account.name}`);
+        return false;
+      }
+      
+      // Include if has transactions
+      const hasTx = txCountMap.has(account.guid) && txCountMap.get(account.guid)! > 0;
+      if (hasTx) return true;
+      
+      // Include if has children
+      const hasChildren = childMap.has(account.guid) && childMap.get(account.guid)!.size > 0;
+      if (hasChildren) return true;
+      
+      // Exclude (no transactions, no children)
+      log.ui.info(`[Import] Excluding (no tx/children): ${account.name}`);
+      return false;
+    }).map(account => ({
+      ...account,
+      transactionCount: txCountMap.get(account.guid) || 0
+    }));
+    
+    log.ui.info('[Import] Filtered accounts:', filtered.length);
+    
+    // Safety: if we filtered everything out, return all non-ROOT accounts
+    if (filtered.length === 0 && accounts.length > 0) {
+      log.ui.warn('[Import] Filter removed all accounts! Falling back to all non-ROOT accounts');
+      return accounts
+        .filter(a => a.type !== 'ROOT' && a.name !== 'Root Account')
+        .map(account => ({
+          ...account,
+          transactionCount: txCountMap.get(account.guid) || 0
+        }));
+    }
+    
+    return filtered;
+  }
+  
+  function buildAccountMappings(
+    accounts: typeof parsedData.accounts,
+    transactions: typeof parsedData.transactions
+  ): AccountMapping[] {
     if (!accounts) return [];
     
     // Build parent-child hierarchy
@@ -122,11 +237,34 @@
       }
     }
     
+    // Build full path for each account
+    const pathMap = new Map<string, string>();
+    function buildPath(guid: string, visited = new Set<string>()): string {
+      if (pathMap.has(guid)) return pathMap.get(guid)!;
+      if (visited.has(guid)) return ''; // Circular reference protection
+      
+      const account = accountMap.get(guid);
+      if (!account) return '';
+      
+      if (!account.parentGuid) {
+        pathMap.set(guid, account.name);
+        return account.name;
+      }
+      
+      visited.add(guid);
+      const parentPath = buildPath(account.parentGuid, visited);
+      const fullPath = parentPath ? `${parentPath}:${account.name}` : account.name;
+      pathMap.set(guid, fullPath);
+      return fullPath;
+    }
+    
+    accounts.forEach(acc => buildPath(acc.guid));
+    
     // Calculate depth for each account
     const depthMap = new Map<string, number>();
     function calculateDepth(guid: string, visited = new Set<string>()): number {
       if (depthMap.has(guid)) return depthMap.get(guid)!;
-      if (visited.has(guid)) return 0; // Circular reference protection
+      if (visited.has(guid)) return 0;
       
       const account = accountMap.get(guid);
       if (!account?.parentGuid) {
@@ -152,20 +290,21 @@
       
       const depth = depthMap.get(account.guid) ?? 0;
       const hasChildren = childMap.has(account.guid);
-      const isImplicitPlaceholder = hasChildren && !account.placeholder;
+      const fullPath = pathMap.get(account.guid) || account.name;
       
-      // Auto-match based on account type and name
-      const autoMatch = autoMatchAccount(account);
+      // Auto-match based on account type and hierarchy
+      const autoMatch = autoMatchAccount(account, fullPath, accountMap);
       
       result.push({
         sourceAccount: account,
+        fullSourcePath: fullPath,
         targetGroup: autoMatch.group,
         targetAccount: autoMatch.account,
         isSettled: false,
-        isResolved: autoMatch.confidence === 'high' || (account.placeholder && autoMatch.group !== null),
+        isResolved: autoMatch.confidence === 'high',
         confidence: autoMatch.confidence,
         depth,
-        isImplicitPlaceholder
+        hasChildren
       });
       
       // Add children recursively
@@ -174,15 +313,27 @@
       children.forEach(child => addAccountAndChildren(child));
     }
     
-    // Start with root accounts
-    const rootAccounts = accounts.filter(acc => !acc.parentGuid);
+    // Find root accounts: either no parent, or parent doesn't exist in filtered set
+    const rootAccounts = accounts.filter(acc => 
+      !acc.parentGuid || !accountMap.has(acc.parentGuid)
+    );
+    
+    log.ui.info('[Import] Root accounts found:', {
+      count: rootAccounts.length,
+      sample: rootAccounts.slice(0, 5).map(a => a.name)
+    });
+    
     rootAccounts.sort((a, b) => a.name.localeCompare(b.name));
     rootAccounts.forEach(acc => addAccountAndChildren(acc));
     
     return result;
   }
   
-  function autoMatchAccount(account: typeof parsedData.accounts[0]): {
+  function autoMatchAccount(
+    account: typeof parsedData.accounts[0],
+    fullPath: string,
+    accountMap: Map<string, typeof account>
+  ): {
     group: string | null;
     account: string | null;
     confidence: 'high' | 'medium' | 'low';
@@ -190,43 +341,51 @@
     // Simple auto-matching logic based on GnuCash account types
     // In production, this would query existing account groups from the database
     
+    // Mock hierarchical account groups (in production, query from DB)
     const typeMap: Record<string, string> = {
-      'BANK': 'Cash & Bank',
-      'CASH': 'Cash & Bank',
-      'ASSET': 'Other Assets',
-      'STOCK': 'Investments',
-      'MUTUAL': 'Investments',
-      'CREDIT': 'Credit Cards',
-      'LIABILITY': 'Loans & Other Liabilities',
-      'PAYABLE': 'Loans & Other Liabilities',
-      'EQUITY': 'Owner\'s Equity',
+      'BANK': 'Assets:Current Assets:Cash & Bank',
+      'CASH': 'Assets:Current Assets:Cash & Bank',
+      'ASSET': 'Assets:Other Assets',
+      'STOCK': 'Assets:Investments',
+      'MUTUAL': 'Assets:Investments',
+      'CREDIT': 'Liabilities:Credit Cards',
+      'LIABILITY': 'Liabilities:Other Liabilities',
+      'PAYABLE': 'Liabilities:Payables',
+      'EQUITY': 'Equity:Owner\'s Equity',
       'INCOME': 'Income',
       'EXPENSE': 'Expenses',
     };
     
     const group = typeMap[account.type] || null;
-    const confidence: 'high' | 'medium' | 'low' = 
-      typeMap[account.type] ? 'high' : 'low';
     
-    // Placeholder accounts map to group only (no specific account)
+    // Placeholder accounts map to group only
     if (account.placeholder) {
-      return { group, account: null, confidence };
+      return { 
+        group, 
+        account: null, 
+        confidence: group ? 'high' : 'low' 
+      };
     }
     
-    // Regular accounts map to group + account name
-    return { group, account: account.name, confidence };
-  }
-  
-  function toggleSettled(index: number) {
-    mappings[index].isSettled = !mappings[index].isSettled;
-  }
-  
-  function toggleAllSelected() {
-    if (selectedMappings.size > 0) {
-      selectedMappings.clear();
-    } else {
-      selectedMappings = new Set(mappings.map((_, i) => i));
+    // Check if parent is a matched placeholder
+    if (account.parentGuid) {
+      const parent = accountMap.get(account.parentGuid);
+      if (parent?.placeholder && typeMap[parent.type]) {
+        // Parent matched, use same account name under matched group
+        return { 
+          group: typeMap[parent.type], 
+          account: account.name, 
+          confidence: 'high' 
+        };
+      }
     }
+    
+    // No perfect match - use full source path as account path
+    return { 
+      group, 
+      account: fullPath, 
+      confidence: group ? 'medium' : 'low' 
+    };
   }
   
   function toggleSelection(index: number) {
@@ -236,6 +395,14 @@
       selectedMappings.add(index);
     }
     selectedMappings = selectedMappings; // Trigger reactivity
+  }
+  
+  function toggleAllSelected() {
+    if (selectedMappings.size > 0) {
+      selectedMappings.clear();
+    } else {
+      selectedMappings = new Set(mappings.map((_, i) => i));
+    }
   }
   
   function markSelectedAsSettled() {
@@ -250,19 +417,27 @@
   
   function rescanMappings() {
     // Re-attempt automatic matching for unsettled accounts only
+    if (!parsedData) return;
+    
+    const accountMap = new Map(parsedData.accounts.map(acc => [acc.guid, acc]));
+    
     mappings = mappings.map(mapping => {
       if (mapping.isSettled) {
         return mapping; // Don't touch settled mappings
       }
       
       // Re-run auto-matching
-      const autoMatch = autoMatchAccount(mapping.sourceAccount);
+      const autoMatch = autoMatchAccount(
+        mapping.sourceAccount, 
+        mapping.fullSourcePath,
+        accountMap
+      );
+      
       return {
         ...mapping,
         targetGroup: autoMatch.group,
         targetAccount: autoMatch.account,
-        isResolved: autoMatch.confidence === 'high' || 
-          (mapping.sourceAccount.placeholder && autoMatch.group !== null),
+        isResolved: autoMatch.confidence === 'high',
         confidence: autoMatch.confidence
       };
     });
@@ -270,11 +445,61 @@
     log.ui.info('[Import] Rescan complete');
   }
   
-  function updateMapping(index: number, targetGroup: string | null, targetAccount: string | null) {
-    mappings[index].targetGroup = targetGroup;
-    mappings[index].targetAccount = targetAccount;
-    mappings[index].isResolved = targetGroup !== null;
-    mappings = mappings; // Trigger reactivity
+  async function updateTargetGroup(index: number, newGroup: string) {
+    const trimmed = newGroup.trim();
+    
+    // Check if group exists (mock - in production query database)
+    const existingGroups = [
+      'Assets:Current Assets:Cash & Bank',
+      'Assets:Current Assets:Receivables',
+      'Assets:Fixed Assets:Property & Equipment',
+      'Assets:Investments',
+      'Assets:Other Assets',
+      'Liabilities:Credit Cards',
+      'Liabilities:Payables',
+      'Liabilities:Other Liabilities',
+      'Equity:Owner\'s Equity',
+      'Income',
+      'Expenses'
+    ];
+    
+    if (!existingGroups.includes(trimmed) && trimmed.length > 0) {
+      // Group doesn't exist - prompt for creation
+      const confirmed = confirm(
+        `Account group "${trimmed}" does not exist.\n\n` +
+        `Create it now? This will affect all entities.`
+      );
+      
+      if (confirmed) {
+        // Create group immediately (not waiting for import)
+        // In production: await createAccountGroup(trimmed);
+        log.ui.info('[Import] Created new account group:', trimmed);
+      } else {
+        return; // User cancelled, don't update mapping
+      }
+    }
+    
+    mappings[index].targetGroup = trimmed || null;
+    mappings[index].isResolved = trimmed.length > 0;
+    mappings = mappings;
+    editingGroupIndex = null;
+  }
+  
+  function updateTargetAccount(index: number, newAccount: string) {
+    const trimmed = newAccount.trim();
+    
+    // Validate syntax
+    if (trimmed.length > 0 && !isCompleteAccountPath(trimmed)) {
+      // Invalid syntax - show warning
+      return;
+    }
+    
+    mappings[index].targetAccount = trimmed || null;
+    mappings[index].isResolved = 
+      mappings[index].targetGroup !== null && 
+      (trimmed.length === 0 || isCompleteAccountPath(trimmed));
+    mappings = mappings;
+    editingAccountIndex = null;
   }
   
   function goBack() {
@@ -296,7 +521,6 @@
       log.ui.info('[Import] Starting import for entity:', entityName);
       
       // Pass mappings to import service
-      // In production, this would use the mappings to create the correct account structure
       importResult = await importService.importBooks(parsedData, {
         entityName: entityName.trim(),
         skipDuplicates: true,
@@ -305,18 +529,41 @@
       
       if (importResult.errors.length > 0) {
         error = importResult.errors.join(', ');
-        step = 'mapping'; // Stay on mapping screen so user can fix
+        step = 'mapping'; // Stay on mapping screen
         return;
       }
       
       log.ui.info('[Import] Import complete:', importResult);
-      step = 'complete';
+      
+      // Show toast and navigate to entity
+      showToast(`Entity "${entityName}" created`);
+      
+      // Navigate to entity page (Trial Balance mode)
+      // In production, use importResult.entityId to navigate
+      goto('/?view=trial-balance');
       
     } catch (err) {
       log.ui.error('[Import] Error during import:', err);
       error = `Import failed: ${err instanceof Error ? err.message : 'Unknown error'}`;
-      step = 'mapping'; // Return to mapping screen with error
+      step = 'mapping'; // Return to mapping screen
     }
+  }
+  
+  function showToast(message: string) {
+    // Simple toast notification (in production, use proper toast component)
+    const toast = document.createElement('div');
+    toast.className = 'toast-notification';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+      toast.classList.add('show');
+    }, 10);
+    
+    setTimeout(() => {
+      toast.classList.remove('show');
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
   }
   
   function getConfidenceIcon(confidence: 'high' | 'medium' | 'low'): string {
@@ -333,6 +580,13 @@
       case 'medium': return 'confidence-medium';
       case 'low': return 'confidence-low';
     }
+  }
+  
+  function formatTransactionCount(account: typeof parsedData.accounts[0]): string {
+    if (account.placeholder) {
+      return '—'; // Em dash for placeholder accounts
+    }
+    return (account.transactionCount ?? 0).toString();
   }
 </script>
 
@@ -446,7 +700,7 @@
                 </span>
               </div>
             </div>
-            <p class="help-text">Review account mappings. Mark rows as settled to protect them from rescan.</p>
+            <p class="help-text">Review account mappings. Hover over accounts to see full path and GUID. Mark rows as settled to protect from rescan.</p>
           </div>
           
           <div class="mapping-toolbar">
@@ -467,8 +721,9 @@
             <div class="mappings-header">
               <div class="col-select"></div>
               <div class="col-source">Source Account</div>
-              <div class="col-placeholder">Placeholder</div>
-              <div class="col-target">Bonum Target</div>
+              <div class="col-txcount">Tx Count</div>
+              <div class="col-target-group">Target Group</div>
+              <div class="col-target-account">Target Account</div>
               <div class="col-status">Status</div>
             </div>
             <div class="mappings-list">
@@ -481,45 +736,79 @@
                       onchange={() => toggleSelection(i)}
                     />
                   </div>
-                  <div class="col-source" style="padding-left: {mapping.depth * 1.5}rem;">
+                  <div 
+                    class="col-source" 
+                    style="padding-left: {mapping.depth * 1.5}rem;"
+                    title="{mapping.fullSourcePath}\nGUID: {mapping.sourceAccount.guid}"
+                  >
                     <span class="account-name">{mapping.sourceAccount.name}</span>
                     {#if mapping.sourceAccount.code}
                       <span class="account-code">({mapping.sourceAccount.code})</span>
                     {/if}
-                    <span class="account-type">{mapping.sourceAccount.type}</span>
                   </div>
-                  <div class="col-placeholder">
-                    {#if mapping.sourceAccount.placeholder}
-                      <span class="badge badge-placeholder">Explicit</span>
-                    {:else if mapping.isImplicitPlaceholder}
-                      <span class="badge badge-implicit">Implicit</span>
-                    {:else}
-                      <span class="text-muted">—</span>
-                    {/if}
+                  <div class="col-txcount">
+                    <span class="tx-count">{formatTransactionCount(mapping.sourceAccount)}</span>
                   </div>
-                  <div class="col-target">
-                    {#if mapping.targetGroup}
-                      <div class="target-display">
-                        <span class="target-group">{mapping.targetGroup}</span>
-                        {#if mapping.targetAccount}
-                          <span class="target-separator">:</span>
-                          <span class="target-account">{mapping.targetAccount}</span>
-                        {/if}
+                  <div class="col-target-group">
+                    {#if editingGroupIndex === i}
+                      <div class="editable-group">
+                        <input
+                          type="text"
+                          value={mapping.targetGroup || ''}
+                          onblur={(e) => updateTargetGroup(i, e.currentTarget.value)}
+                          onkeydown={(e) => e.key === 'Enter' && updateTargetGroup(i, e.currentTarget.value)}
+                          class="inline-input"
+                          placeholder="Type group path or use tree..."
+                          autofocus
+                        />
+                        <button 
+                          class="tree-btn" 
+                          title="Tree selector (coming soon)"
+                          disabled
+                        >
+                          ▼
+                        </button>
                       </div>
                     {:else}
-                      <span class="text-muted">Not mapped</span>
+                      <span 
+                        class="target-group editable"
+                        onclick={() => editingGroupIndex = i}
+                        title="Click to edit"
+                      >
+                        {mapping.targetGroup || '(not mapped)'}
+                      </span>
+                    {/if}
+                  </div>
+                  <div class="col-target-account">
+                    {#if editingAccountIndex === i}
+                      <input
+                        type="text"
+                        value={mapping.targetAccount || ''}
+                        onblur={(e) => updateTargetAccount(i, e.currentTarget.value)}
+                        onkeydown={(e) => e.key === 'Enter' && updateTargetAccount(i, e.currentTarget.value)}
+                        class="inline-input"
+                        class:invalid={mapping.targetAccount && !isCompleteAccountPath(mapping.targetAccount)}
+                        autofocus
+                      />
+                    {:else}
+                      <span 
+                        class="target-account editable"
+                        onclick={() => editingAccountIndex = i}
+                      >
+                        {mapping.targetAccount || '(auto)'}
+                      </span>
                     {/if}
                   </div>
                   <div class="col-status">
                     <div class="status-indicators">
                       <span 
                         class="confidence-icon {getConfidenceClass(mapping.confidence)}"
-                        title="{mapping.confidence} confidence"
+                        title="{mapping.confidence} confidence (auto-matched)"
                       >
                         {getConfidenceIcon(mapping.confidence)}
                       </span>
                       {#if mapping.isSettled}
-                        <span class="settled-icon" title="Settled">✓</span>
+                        <span class="settled-icon" title="User marked as settled">✓</span>
                       {/if}
                     </div>
                   </div>
@@ -556,39 +845,6 @@
           </div>
         </div>
       </div>
-      
-    {:else if step === 'complete'}
-      <!-- Step 5: Complete -->
-      <div class="dialog">
-        <div class="dialog-header">
-          <h2>{$t('import.import_complete')}</h2>
-        </div>
-        
-        <div class="dialog-body">
-          <div class="success-message">
-            <span class="success-icon">✓</span>
-            <p><strong>Entity "{entityName}" created successfully</strong></p>
-            {#if importResult}
-              <div class="import-stats">
-                <p>{importResult.accountsCreated} accounts created</p>
-                <p>{importResult.transactionsImported} transactions imported</p>
-                {#if parsedData}
-                  <p class="text-muted">
-                    Date range: {parsedData.transactions[0]?.date} to {parsedData.transactions[parsedData.transactions.length - 1]?.date}
-                  </p>
-                {/if}
-              </div>
-            {/if}
-          </div>
-        </div>
-        
-        <div class="dialog-footer">
-          <button class="btn-secondary" onclick={cancel}>{$t('common.close') || 'Close'}</button>
-          <button class="btn-primary" onclick={() => window.location.href = '/'}>
-            {$t('import.view_entity') || 'View Entity'}
-          </button>
-        </div>
-      </div>
     {/if}
     
   </div>
@@ -611,7 +867,7 @@
   }
   
   .import-container.wide {
-    max-width: 1200px;
+    max-width: 1400px;
   }
   
   .dialog {
@@ -858,8 +1114,8 @@
   
   .mappings-header {
     display: grid;
-    grid-template-columns: 40px 2fr 120px 2fr 100px;
-    gap: 1rem;
+    grid-template-columns: 40px 2.5fr 80px 1.5fr 1.5fr 100px;
+    gap: 0.75rem;
     padding: 0.75rem 1rem;
     background: var(--surface-secondary);
     border-bottom: 2px solid var(--border-color);
@@ -876,8 +1132,8 @@
   
   .mapping-row {
     display: grid;
-    grid-template-columns: 40px 2fr 120px 2fr 100px;
-    gap: 1rem;
+    grid-template-columns: 40px 2.5fr 80px 1.5fr 1.5fr 100px;
+    gap: 0.75rem;
     padding: 0.75rem 1rem;
     border-bottom: 1px solid var(--border-light);
     align-items: center;
@@ -899,7 +1155,7 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    flex-wrap: wrap;
+    cursor: help;
   }
   
   .account-name {
@@ -912,36 +1168,24 @@
     font-size: 0.875rem;
   }
   
-  .account-type {
-    font-family: monospace;
-    font-size: 0.75rem;
-    padding: 0.125rem 0.375rem;
-    background: var(--surface-secondary);
-    border-radius: 3px;
-    color: var(--text-muted);
+  .col-txcount {
+    text-align: center;
   }
   
-  .badge {
-    font-size: 0.75rem;
+  .tx-count {
+    font-family: monospace;
+    color: var(--text-primary);
+  }
+  
+  .editable {
+    cursor: pointer;
     padding: 0.25rem 0.5rem;
     border-radius: 3px;
-    font-weight: 500;
+    transition: background 0.15s;
   }
   
-  .badge-placeholder {
-    background: var(--warning-color-light, rgba(255, 193, 7, 0.2));
-    color: var(--warning-color, #ff9800);
-  }
-  
-  .badge-implicit {
-    background: var(--info-color-light, rgba(33, 150, 243, 0.2));
-    color: var(--info-color, #2196f3);
-  }
-  
-  .target-display {
-    display: flex;
-    align-items: center;
-    gap: 0.375rem;
+  .editable:hover {
+    background: var(--surface-hover, #e8e8e8);
   }
   
   .target-group {
@@ -949,23 +1193,66 @@
     color: var(--primary-color);
   }
   
-  .target-separator {
-    color: var(--text-muted);
-  }
-  
   .target-account {
     color: var(--text-primary);
+  }
+  
+  .editable-group {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+  
+  .inline-input {
+    flex: 1;
+    padding: 0.375rem 0.5rem;
+    border: 1px solid var(--primary-color);
+    border-radius: 3px;
+    font-size: 0.875rem;
+    background: var(--surface-primary);
+    color: var(--text-primary);
+  }
+  
+  .inline-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px var(--primary-color-light, rgba(0, 102, 204, 0.2));
+  }
+  
+  .inline-input.invalid {
+    border-color: var(--danger-color);
+  }
+  
+  .tree-btn {
+    padding: 0.375rem 0.5rem;
+    background: var(--surface-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 0.75rem;
+  }
+  
+  .tree-btn:hover:not(:disabled) {
+    background: var(--surface-hover, #e8e8e8);
+  }
+  
+  .tree-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
   
   .status-indicators {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    justify-content: center;
   }
   
   .confidence-icon {
     font-weight: bold;
     font-size: 1.125rem;
+    cursor: default;
+    user-select: none;
   }
   
   .confidence-high {
@@ -983,43 +1270,8 @@
   .settled-icon {
     color: var(--success-color);
     font-weight: bold;
-  }
-  
-  .text-muted {
-    color: var(--text-muted);
-  }
-  
-  .success-message {
-    text-align: center;
-    padding: 2rem 0;
-  }
-  
-  .success-icon {
-    display: inline-block;
-    width: 64px;
-    height: 64px;
-    line-height: 64px;
-    border-radius: 50%;
-    background: var(--success-color);
-    color: white;
-    font-size: 2rem;
-    font-weight: bold;
-    margin-bottom: 1rem;
-  }
-  
-  .success-message p {
-    margin: 0.5rem 0;
-    font-size: 1.125rem;
-    color: var(--text-primary);
-  }
-  
-  .import-stats {
-    margin-top: 1rem;
-  }
-  
-  .import-stats p {
-    margin: 0.25rem 0;
-    font-size: 1rem;
+    cursor: default;
+    user-select: none;
   }
   
   .dialog-footer {
@@ -1063,5 +1315,26 @@
   
   .btn-secondary:hover {
     background: var(--surface-hover, #e8e8e8);
+  }
+  
+  /* Toast notification */
+  :global(.toast-notification) {
+    position: fixed;
+    top: 2rem;
+    right: 2rem;
+    padding: 1rem 1.5rem;
+    background: var(--success-color);
+    color: white;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    opacity: 0;
+    transform: translateY(-1rem);
+    transition: all 0.3s ease;
+    z-index: 10000;
+  }
+  
+  :global(.toast-notification.show) {
+    opacity: 1;
+    transform: translateY(0);
   }
 </style>

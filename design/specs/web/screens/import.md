@@ -52,16 +52,16 @@ Entry point for importing data into Bonum - either creating new entities from ex
   - Top-level accounts at left edge
   - Sub-accounts indented beneath parents
   - Multi-level nesting preserved from import
-  - Each account can be hovered over to reveal the full path and GUID
+  - Each account can be hovered over to reveal the full path and GUID.  This hover uses the same presentation method as hovering over an account in the [ledger](./ledger.md).
 - **Columns shown:**
   - Source account path (from import file)
-  - Transaction Count: how many transactions in this account (- for explicit placeholder accounts)
-  - Proposed Target Group: Full account group path
-  - Proposed Target Account: Full account path
-  - Resolution status with visual indicator
-- **Rows shown:**
-  - Exclude the "Root Account" from specifically Gnucash import
-  - Exclude any other account which does not contain transactions or children
+  - Transaction Count: how many transactions directly in this account (-, N/A, or similar for explicit placeholder accounts)
+  - Proposed Target Group: Full account group path (hierarchical, see [Catalog](../screens/catalog.md) and [Schema](../../../docs/schema.md#accountgroup))
+  - Proposed Target Account: Entity-specific account path only (excluding group components)
+  - Resolution status with visual indicator (non-interactive)
+- **Excluded Accounts:**
+  - Do not present the "Root Account" from specifically Gnucash import
+  - Exclude any other account which does not contain transactions or children (can be done at parse time)
 
 **Automatic Matching:**
 - Placeholder accounts matching existing groups → mapped to group, no account.  Mark as resolved.
@@ -70,9 +70,9 @@ Entry point for importing data into Bonum - either creating new entities from ex
 - GUID from import tracked behind scenes (not shown in UI).
 
 **User Actions:**
-- **Pick different group:** User can click on the selected target group and either type with completion or select a pull-down to get a hierarchical expandable tree selector to search for a desired account group.  If the user types in a path for an account group that doesn't exist, the system will prompt for confirmation and then create it.  Manual selection of a target account group markes the line as resolved.
-- **Change Account Path:** User can edit the path of the target account.  Resolved checkmark is not selectable and gives visual warning until typed path is syntactically valid.
-- **Mark rows as settled:** If selection is valid, user can toggle individual or multiple rows to indicate "I'm satisfied with this mapping"
+- **Pick different group:** User can click on the selected target group and either type with completion or optionally select a nearby pull-down icon to get a hierarchical expandable tree selector (see [Account Group Tree Selector](../components/account-group-tree-selector.md)) to search for a desired account group.  If the user types in a path for an account group that doesn't exist, the system will prompt for confirmation and then create it immediately (not waiting for import transaction).  Warn that this will affect all entities.  Manual selection of a target account group marks the line as resolved.
+- **Change Account Path:** User can edit the path of the target account.  Typing validates account path syntax only (no autocomplete, as these accounts may not exist yet).  Resolved status blocked and shows visual warning until typed path is syntactically complete (colon-separated segments, no leading/trailing colons).
+- **Mark rows as settled:** As long as selections are valid, user can toggle individual or multiple rows to indicate "I'm satisfied with this mapping"
   - Settled rows show checkmark on right
   - Prevents "Rescan" from modifying these rows
 - **Rescan button:** Re-attempts automatic matching for unsettled rows only

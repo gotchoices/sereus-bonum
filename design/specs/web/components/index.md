@@ -13,6 +13,7 @@ List reusable UI components for this target.
 | Component Name | Spec File | Used By | Status |
 |----------------|----------|---------|--------|
 | AccountAutocomplete | account-autocomplete.md | Ledger, Search, Import | complete |
+| AccountGroupTreeSelector | account-group-tree-selector.md | Import, Account Management | draft |
 | TransactionEditor | transaction-edit.md | Ledger, Import Review | complete |
 | TransactionResultsTable | transaction-results-table.md | Search | draft |
 | AIAssistant | ai-assistant.md | All screens (overlay) | draft |
