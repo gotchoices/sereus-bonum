@@ -1,5 +1,6 @@
 <script lang="ts">
   import { browser } from '$app/environment';
+  import { onMount } from 'svelte';
   import { t } from '$lib/i18n';
   import { 
     accountGroups, 
@@ -17,37 +18,34 @@
   // LocalStorage key for expanded state
   const EXPAND_STORAGE_KEY = 'bonum-catalog-expand';
   
-  // Load account groups on mount and restore expanded state
-  let groupsLoaded = false;
-  $effect(() => {
-    if (browser && !groupsLoaded && $accountGroups.length === 0) {
-      groupsLoaded = true;
+  // Expanded state for groups (persisted in localStorage)
+  let expandedGroups = $state<Set<string>>(new Set());
+  let hasInitialized = $state(false);
+  
+  // Load groups on mount
+  onMount(() => {
+    if ($accountGroups.length === 0) {
       loadAccountGroups();
-      // Restore expanded state from localStorage
-      try {
-        const saved = localStorage.getItem(EXPAND_STORAGE_KEY);
-        if (saved) {
-          expandedGroups = new Set(JSON.parse(saved));
-        }
-      } catch (e) {
-        // Ignore parse errors
-      }
     }
   });
   
-  // Set initial expand state: top-level groups expanded, others collapsed (spec line 49)
+  // Initialize expand state once groups are loaded
   $effect(() => {
-    if (browser && $accountGroups.length > 0 && expandedGroups.size === 0) {
-      // Check if localStorage had a saved state
+    if ($accountGroups.length > 0 && !hasInitialized) {
       const saved = localStorage.getItem(EXPAND_STORAGE_KEY);
-      if (!saved) {
-        // No saved state - expand only top-level groups (Assets, Liabilities, etc.)
-        const topLevelIds = $accountGroups
-          .filter(g => !g.parentId)
-          .map(g => g.id);
-        expandedGroups = new Set(topLevelIds);
-        saveExpandedState();
+      if (saved !== null) {
+        // User has state saved - restore their exact preferences
+        try {
+          expandedGroups = new Set(JSON.parse(saved));
+        } catch (e) {
+          // Parse error - fall back to default
+          collapseAll();
+        }
+      } else {
+        // First visit - start with "Collapse All" (only top-level visible)
+        collapseAll();
       }
+      hasInitialized = true;
     }
   });
   
@@ -61,9 +59,6 @@
   };
   
   const accountTypes: AccountType[] = ['ASSET', 'LIABILITY', 'EQUITY', 'INCOME', 'EXPENSE'];
-  
-  // Expanded state for groups (persisted in localStorage)
-  let expandedGroups = $state<Set<string>>(new Set());
   
   function saveExpandedState() {
     if (browser) {
@@ -94,7 +89,11 @@
   }
   
   function collapseAll() {
-    expandedGroups = new Set();
+    // Collapse all except top-level groups (per spec line 50)
+    const topLevelIds = $accountGroups
+      .filter(g => !g.parentId)
+      .map(g => g.id);
+    expandedGroups = new Set(topLevelIds);
     saveExpandedState();
   }
   

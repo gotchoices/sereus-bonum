@@ -46,7 +46,10 @@ Manage the shared classification structure for organizing accounts (see [Account
 - Child groups indented beneath parents
 - Leaf groups (no children) show no arrow
 - Count shows number of groups per type
-- Initial state: toplevel accounts expanded, others collapsed
+- Expand All button expands all parents
+- Collapse All button collapses all except the very toplevel accounts, which remain expanded
+- Initial state (pre user-interaction): Save as Collapse All button (toplevel expanded)
+- Any user-selected expansion state is persistent from then on
 
 ---
 
@@ -103,7 +106,7 @@ Manage the shared classification structure for organizing accounts (see [Account
 **Behavior:**
 - Toggles child visibility
 - Icon changes: ▶ ↔ ▼
-- State persists in local storage (key: `bonum-catalog-expand-{typeId}`)
+- State persists in local storage (key: `bonum-catalog-expand`)
 
 ---
 
