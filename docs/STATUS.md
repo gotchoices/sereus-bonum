@@ -19,6 +19,19 @@ To enable the test data generator:
 
 ---
 
+## Immediate Next Steps
+- Got kind of log-jammed with AI context
+- Too may spec files with too much info, agents got jammed up
+- Need to use discipline: Must hand-write spec files in human-readable format
+- Spec files need to be clear about what slice/screen they apply to
+- Global specs are a problem because they cloud context.  Need strategy for this
+- Next time we pick this project up:
+  - Wait for quereus backend to be ready/feasible (at least with local cadre)
+  - Hand-review/edit all specs
+  - Import sequence needs its own clear set of specs, like its own app almost
+  - docs/schema file should probably go under design somewhere
+  - Is there a persistent place we can save account mapping info from past imports?
+
 ## Current Sprint (Active Development)
 
 ### 🔄 Web MVP - Core Screens
