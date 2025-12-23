@@ -13,10 +13,14 @@
   } from '$lib/import';
   import { 
     accountGroups, 
-    loadAccountGroups, 
+    loadAccountGroups,
+    createAccountGroup,
     type AccountGroup,
     type AccountType
   } from '$lib/stores/accounts';
+  import { Check, AlertTriangle, Lock } from 'lucide-svelte';
+  import AccountGroupTreeSelector from '$lib/components/AccountGroupTreeSelector.svelte';
+  import AccountGroupAutocomplete from '$lib/components/AccountGroupAutocomplete.svelte';
   
   let entityName = $state('');
   let selectedFile = $state<File | null>(null);
@@ -30,28 +34,8 @@
   let error = $state<string | null>(null);
   let editingGroupIndex = $state<number | null>(null);
   let editingAccountIndex = $state<number | null>(null);
-  let showGroupTreeIndex = $state<number | null>(null);
-  let groupInputValue = $state<string>('');
-  let showGroupSuggestions = $state<boolean>(false);
-  
-  // Compute matching group paths for autocomplete
-  let groupSuggestions = $derived(() => {
-    if (!groupInputValue || groupInputValue.length < 1) return [];
-    const groups = $accountGroups;
-    const allPaths = groups.map(g => buildGroupPath(g.id, groups));
-    const query = groupInputValue.toLowerCase();
-    return allPaths
-      .filter(path => path.toLowerCase().includes(query))
-      .sort((a, b) => {
-        // Prefer paths that start with the query
-        const aStarts = a.toLowerCase().startsWith(query);
-        const bStarts = b.toLowerCase().startsWith(query);
-        if (aStarts && !bStarts) return -1;
-        if (!aStarts && bStarts) return 1;
-        return a.localeCompare(b);
-      })
-      .slice(0, 10); // Limit to 10 suggestions
-  });
+  let showTreeSelector = $state(false);
+  let treeSelectorIndex = $state<number | null>(null);
   
   // Computed state
   let allResolved = $derived(mappings.every(m => m.isResolved));
@@ -328,10 +312,8 @@
       // Auto-match based on account type and hierarchy
       const autoMatch = autoMatchAccount(account, fullPath, accountMap);
       
-      // Determine if resolved: has group, and either no account (placeholder) or valid account
-      const isResolved = 
-        autoMatch.group !== null && 
-        (autoMatch.account === null || (autoMatch.account !== null && autoMatch.account.length > 0));
+      // Determine if resolved based on confidence: high/medium = resolved, low = unresolved
+      const isResolved = autoMatch.confidence === 'high' || autoMatch.confidence === 'medium';
       
       result.push({
         sourceAccount: account,
@@ -387,10 +369,13 @@
    * Find account group by matching name (placeholder accounts match to groups)
    */
   function findMatchingGroup(accountName: string, accountType: string, groups: AccountGroup[]): { groupId: string; groupPath: string; confidence: 'high' | 'medium' | 'low' } | null {
+    const bonumType = mapAccountTypeToBonum(accountType);
+    const nameLower = accountName.toLowerCase();
+    
     // Try exact name match first (case-insensitive)
     const exactMatch = groups.find(g => 
-      g.name.toLowerCase() === accountName.toLowerCase() &&
-      g.accountType === mapAccountTypeToBonum(accountType)
+      g.name.toLowerCase() === nameLower &&
+      g.accountType === bonumType
     );
     
     if (exactMatch) {
@@ -401,16 +386,20 @@
       };
     }
     
-    // Try partial name match (e.g., "Current Assets" matches "Current Assets")
-    const partialMatch = groups.find(g => 
-      accountName.toLowerCase().includes(g.name.toLowerCase()) &&
-      g.accountType === mapAccountTypeToBonum(accountType)
-    );
+    // Try word-boundary match (e.g., "Current Assets" matches "Current Assets", not "Assets")
+    // Split by common separators and check if all words in group name are in account name
+    const wordMatch = groups.find(g => {
+      if (g.accountType !== bonumType) return false;
+      const groupWords = g.name.toLowerCase().split(/[\s:_-]+/);
+      const accountWords = nameLower.split(/[\s:_-]+/);
+      // All group words must appear in account name in order
+      return groupWords.every(gw => accountWords.includes(gw));
+    });
     
-    if (partialMatch) {
+    if (wordMatch) {
       return {
-        groupId: partialMatch.id,
-        groupPath: buildGroupPath(partialMatch.id, groups),
+        groupId: wordMatch.id,
+        groupPath: buildGroupPath(wordMatch.id, groups),
         confidence: 'medium'
       };
     }
@@ -418,7 +407,7 @@
     // Fallback: find top-level group by type
     const typeMatch = groups.find(g => 
       !g.parentId && 
-      g.accountType === mapAccountTypeToBonum(accountType)
+      g.accountType === bonumType
     );
     
     if (typeMatch) {
@@ -521,42 +510,6 @@
     };
   }
   
-  function startEditingGroup(index: number) {
-    editingGroupIndex = index;
-    groupInputValue = mappings[index].targetGroup || '';
-    showGroupSuggestions = true;
-  }
-  
-  function handleGroupInput(e: Event) {
-    groupInputValue = (e.target as HTMLInputElement).value;
-    showGroupSuggestions = true;
-  }
-  
-  function selectGroupSuggestion(index: number, path: string) {
-    groupInputValue = path;
-    showGroupSuggestions = false;
-    updateTargetGroup(index, path);
-  }
-  
-  function handleGroupKeydown(e: KeyboardEvent, index: number) {
-    if (e.key === 'Enter') {
-      showGroupSuggestions = false;
-      updateTargetGroup(index, groupInputValue);
-    } else if (e.key === 'Escape') {
-      showGroupSuggestions = false;
-      editingGroupIndex = null;
-    }
-  }
-  
-  function handleGroupBlur(index: number) {
-    // Delay to allow click on suggestion
-    setTimeout(() => {
-      if (editingGroupIndex === index) {
-        showGroupSuggestions = false;
-        updateTargetGroup(index, groupInputValue);
-      }
-    }, 200);
-  }
   
   function toggleSelection(index: number) {
     if (selectedMappings.has(index)) {
@@ -603,10 +556,8 @@
         accountMap
       );
       
-      // Check if resolved: has group, and either no account (placeholder) or valid account
-      const isResolved = 
-        autoMatch.group !== null && 
-        (autoMatch.account === null || (autoMatch.account !== null && autoMatch.account.length > 0));
+      // Check if resolved based on confidence: high/medium = resolved, low = unresolved
+      const isResolved = autoMatch.confidence === 'high' || autoMatch.confidence === 'medium';
       
       return {
         ...mapping,
@@ -760,6 +711,104 @@
       return '—'; // Em dash for placeholder accounts
     }
     return (account.transactionCount ?? 0).toString();
+  }
+  
+  // Handle autocomplete input with create-new-group check
+  async function handleGroupAutocompleteInput(index: number, value: string) {
+    mappings[index].targetGroup = value;
+    // Don't update resolved status until they finish editing
+  }
+  
+  // Handle group selection from autocomplete or tree
+  async function handleGroupSelect(index: number, path: string, groupId?: string) {
+    // Check if group exists
+    if (!groupPathExists(path)) {
+      const confirmed = confirm(
+        `The group "${path}" does not exist.\n\n` +
+        `Do you want to create it now?\n\n` +
+        `Warning: This will create a new account group and affect all entities.`
+      );
+      
+      if (!confirmed) {
+        return;
+      }
+      
+      // Create the group
+      try {
+        await createNewGroupFromPath(path);
+        // Reload groups to get the new one
+        await loadAccountGroups();
+      } catch (err) {
+        error = `Failed to create group: ${err}`;
+        return;
+      }
+    }
+    
+    // Update mapping
+    mappings[index].targetGroup = path;
+    mappings[index].isResolved = true;
+    mappings[index].isSettled = false;
+    mappings = mappings;
+    editingGroupIndex = null;
+  }
+  
+  // Handle blur on autocomplete
+  function handleGroupBlur(index: number) {
+    // Validate and potentially prompt for creation
+    const path = mappings[index].targetGroup;
+    if (path && !groupPathExists(path)) {
+      // Will be prompted on next interaction
+    }
+    editingGroupIndex = null;
+  }
+  
+  // Create new group from path
+  async function createNewGroupFromPath(path: string) {
+    const segments = path.split(':').map(s => s.trim()).filter(s => s.length > 0);
+    if (segments.length === 0) return;
+    
+    const groups = $accountGroups;
+    let parentId: string | null = null;
+    
+    // Create each segment if it doesn't exist
+    for (let i = 0; i < segments.length; i++) {
+      const segmentPath = segments.slice(0, i + 1).join(':');
+      const existing = groups.find(g => buildGroupPath(g.id, groups) === segmentPath);
+      
+      if (existing) {
+        parentId = existing.id;
+      } else {
+        // Need to create this segment
+        // Infer type from parent or default to ASSET
+        const accountType: AccountType = parentId 
+          ? groups.find(g => g.id === parentId)?.accountType || 'ASSET'
+          : 'ASSET'; // Default for top-level
+        
+        const newGroup = await createAccountGroup({
+          name: segments[i],
+          accountType,
+          parentId,
+          description: ''
+        });
+        
+        parentId = newGroup.id;
+      }
+    }
+  }
+  
+  // Handle tree selector close
+  function handleTreeClose() {
+    showTreeSelector = false;
+    treeSelectorIndex = null;
+  }
+  
+  // Handle selection from tree
+  function handleTreeSelect(path: string, groupId: string) {
+    if (treeSelectorIndex !== null) {
+      handleGroupSelect(treeSelectorIndex, path, groupId);
+    }
+    showTreeSelector = false;
+    treeSelectorIndex = null;
   }
 </script>
 
@@ -924,41 +973,29 @@
                   </div>
                   <div class="col-target-group">
                     {#if editingGroupIndex === i}
-                      <div class="editable-group">
-                        <input
-                          type="text"
-                          value={groupInputValue}
-                          oninput={handleGroupInput}
-                          onblur={() => handleGroupBlur(i)}
-                          onkeydown={(e) => handleGroupKeydown(e, i)}
-                          class="inline-input"
-                          placeholder="Type to search groups..."
-                          autofocus
+                      <div class="group-edit-wrapper">
+                        <AccountGroupAutocomplete
+                          groups={$accountGroups}
+                          value={mapping.targetGroup || ''}
+                          onInput={(val) => {
+                            mappings[i].targetGroup = val;
+                            mappings = mappings;
+                          }}
+                          onSelect={(path, id) => handleGroupSelect(i, path, id)}
+                          onBlur={() => handleGroupBlur(i)}
                         />
                         <button 
                           class="tree-btn" 
-                          title="Tree selector (coming soon)"
-                          disabled
+                          title="Show group tree"
+                          onclick={() => { treeSelectorIndex = i; showTreeSelector = true; }}
                         >
                           ▼
                         </button>
-                        {#if showGroupSuggestions && groupSuggestions.length > 0}
-                          <div class="group-suggestions">
-                            {#each groupSuggestions as suggestion}
-                              <button 
-                                class="suggestion-item"
-                                onmousedown={() => selectGroupSuggestion(i, suggestion)}
-                              >
-                                {suggestion}
-                              </button>
-                            {/each}
-                          </div>
-                        {/if}
                       </div>
                     {:else}
                       <span 
                         class="target-group editable"
-                        onclick={() => startEditingGroup(i)}
+                        onclick={() => editingGroupIndex = i}
                         title="Click to edit"
                       >
                         {mapping.targetGroup || '(not mapped)'}
@@ -1355,7 +1392,7 @@
   }
   
   .col-txcount {
-    text-align: center;
+    text-align: right;
   }
   
   .tx-count {
@@ -1550,4 +1587,20 @@
     opacity: 1;
     transform: translateY(0);
   }
+  
+  .group-edit-wrapper {
+    display: flex;
+    gap: 0.25rem;
+    align-items: center;
+  }
 </style>
+
+<!-- Tree Selector Modal -->
+{#if showTreeSelector}
+  <AccountGroupTreeSelector
+    groups={$accountGroups}
+    selected={treeSelectorIndex !== null ? mappings[treeSelectorIndex]?.targetGroup : null}
+    onSelect={handleTreeSelect}
+    onClose={handleTreeClose}
+  />
+{/if}

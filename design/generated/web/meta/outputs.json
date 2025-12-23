@@ -27,7 +27,7 @@
       ],
       "depHashes": {
         "design/stories/web/01-firstlook.md": "4a2e1ab0116f02c46bffa08d709f535054645e687c054ebbc14d1260705cefcd",
-        "design/specs/web/screens/import.md": "a50235afea36d58cc09ed2d6df8b3193f1ca836fe0799f045f5772cdbc83a6ac",
+        "design/specs/web/screens/import.md": "507dc1303169d3de1046732e7f26270e1f407f3cfcc6f37f6d90236d100678b0",
         "design/specs/web/global/import.md": "672670dda7ac5891d8330af476afd2418a085b97794d91cfdbe4ee480529a284",
         "design/specs/web/global/account-groups.md": "2cb5757a1e8c2bbf732941a7d5c83532b503bf3eadc2557026fa4340d45266d4"
       }
