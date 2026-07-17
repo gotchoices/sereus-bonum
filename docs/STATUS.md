@@ -164,25 +164,28 @@ Tracked in detail in [`design/stories/web/STATUS.md`](../design/stories/web/STAT
 - Note: mock (`sql.js`) remains the default backend (`VITE_BACKEND` unset → `mock`); quereus-local is
   opt-in via env. Both share the same schema + seed data.
 
-**C3 (wired, but BLOCKED on browser support):** `quereus-p2p` — Optimystic single node.
-- Implemented `production/cadre.ts` (a web CadreService mirroring health's) + wired `initOptimystic`
-  in `db.ts`: boots `@serfab/cadre-core` `CadreNode` over libp2p, opens the strand's Quereus Database
-  (`StrandDatabase`), seeds an empty strand. Schema is derived from `schema.qsql` as `declare schema`
-  inner DDL (StrandDatabase re-wraps it). Single node only — multi-node cadre is deferred (experimental).
-- **Version alignment (important):** the p2p stack must be pinned to health's mutually-tested set —
-  `@quereus/* 4.3.1` + `@optimystic/* 0.14.1` (via `resolutions`). quereus 4.3.2 removed the
-  `resolveCollation` export that optimystic 0.14.1's plugin imports (build-breaks under rollup).
-- **Build + type-check pass.** But at runtime the stack **does not work in a browser**: cadre-core /
-  p2p-fret / libp2p call Node/React-Native APIs the browser lacks — verified failures: `crypto.createHash`
-  (p2p-fret hashPeerId), timer `.unref()` (libp2p ClusterMember), `fs/promises` and `node:http2`
-  (cadre-core). `vite-plugin-node-polyfills` only surfaced the next missing API; it's architectural, not
-  a few polyfills. Health/chat run this on **React Native** (Metro provides these), not a browser.
-- **Status:** `initOptimystic` throws a clear "not runnable in browser yet" error; mock + quereus-local
-  are unaffected (default stays mock). The integration is complete and will light up when a
-  browser-compatible cadre-core/libp2p build ships — matching the user's expectation that Bonum waits
-  on Sereus cadre progress.
-- **Open decision:** the libp2p/optimystic deps (~125 MB) sit in `package.json` for the ready wiring.
-  Keep them (integration primed) or trim until browser support lands — user's call.
+**C3 (WORKING in the browser — single node, on latest Sereus):** `quereus-p2p` — Optimystic.
+- `production/cadre.ts` (web CadreService) + `initOptimystic` in `db.ts` boot `@serfab/cadre-core`
+  `CadreNode` over libp2p, open the strand's Quereus Database (`StrandDatabase`), seed, and serve the
+  same DataService. Single node only — multi-node cadre is still experimental/upstream-in-progress.
+- **On LATEST:** `@optimystic/* 0.16.2` + `@quereus/* 4.3.2` (the old `resolveCollation` collation trap
+  is fixed upstream in 0.16.2's plugin, which uses `builtinCollationResolver`). The `resolutions` block
+  is updated accordingly.
+- **Three fixes made it run in the browser** (per `tmp/optimystic-review.md`'s diagnosis):
+  1. `vite.config.ts`: `resolve.conditions: ['browser', …]` (so multiformats' browser `sha2` /
+     `crypto.subtle` is used, not `node:crypto.createHash`) + `optimizeDeps` for multiformats +
+     `resolve.alias.chai` → empty stub (`src/lib/empty-module.js`) for a stray test import.
+  2. **Patched `@optimystic/db-p2p`** via `yarn patch`: guard 7 unconditional `.unref()` calls
+     (`?.unref?.()`) — the one genuine source defect (still present in 0.16.2). Patch lives in
+     `.yarn/patches/`.
+  3. Dropped `vite-plugin-node-polyfills` (its shims caused the `fs/promises` error; the real fix is
+     the browser condition above).
+- **Verified via Playwright** (`VITE_BACKEND=quereus-p2p`): CadreNode starts (peer id assigned), strand
+  DB opens, seeds, Home renders the 2 seeded entities. `yarn build` clean, `yarn check` 0 errors.
+- **Upstream feedback filed for latest:** `tmp/optimystic-web-browser-incompat.md` (rewritten for
+  0.16.2) — Issue 1 the `.unref()` guard, Issue 2 the `chai` test-import packaging. Both worked around
+  locally; upstream fixes would remove the patch/alias.
+- Note: mock remains the default backend; `quereus-local` and `quereus-p2p` are opt-in via `VITE_BACKEND`.
 
 ### ✅ Done — Track D: green the app (type-clean + builds)
 Cleared all **53** pre-existing `svelte-check` errors → **0 errors**; `yarn build` succeeds. Root
