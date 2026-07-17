@@ -124,8 +124,28 @@ Tracked in detail in [`design/stories/web/STATUS.md`](../design/stories/web/STAT
   quereus-p2p`, exposing `USE_QUEREUS` (mock vs real DB) and `USE_OPTIMYSTIC` (local vs distributed).
   Higher-level code checks only `USE_QUEREUS`.
 - **Spec:** `design/specs/web/global/data-backend.md` documents modes, packages, and status.
-- ⬜ **Remaining (regeneration):** implement `data/production/service.ts` against Quereus SQL
-  (IndexedDB plugin for `quereus-local`; Optimystic + libp2p peers for `quereus-p2p`).
+### 🔄 Track C — Quereus backend
+
+**C1 (done, build-verified):** the quereus-local plumbing is in place.
+- Canonical executable schema authored: `design/specs/domain/schema.qsql` (Quereus declarative
+  DDL, mirrored app-side in `apps/web/src/lib/data/production/schema.qsql`). Listed in domain index.
+- `production/db.ts` — connection singleton: `new Database()` + `registerPlugin(@quereus/plugin-indexeddb)`
+  + apply schema on fresh DB; `USE_OPTIMYSTIC` branches to a p2p stub (throws, pending Mode C).
+  Query helpers `all/get/run` over `eval`/`exec` with `SqlValue[]` params.
+- `production/service.ts` — implemented **entities, units, account groups** (full CRUD) as the proof
+  vertical; accounts, transactions/entries, balances, ledger, search remain typed stubs.
+- `yarn check` 0 errors, `yarn build` succeeds — the `?raw` schema import, the plugin subpath, and
+  `@quereus/quereus` all resolve and bundle.
+- ⚠️ **Not runtime-verified.** IndexedDB needs a browser; I can't run it in Node. Verifying that the
+  schema executes and CRUD works needs the Playwright harness (offered) or a manual `VITE_BACKEND=quereus-local`
+  test in Chrome. Also unverified: exact Quereus `eval(sql, params)` behavior and the indexeddb plugin
+  config shape (`databaseName`/`moduleName`) on the 4.3.2 line.
+
+**C2 (next):** implement the remaining DataService methods (accounts, transactions/entries with the
+zero-sum balance rule, balance sheet, ledger, search) against Quereus SQL, plus fresh-DB **seeding**
+(base units + account-group catalog). Best done after runtime verification is set up.
+
+**C3 (later):** `quereus-p2p` — Optimystic + CadreNode + libp2p peer deps.
 
 ### ✅ Done — Track D: green the app (type-clean + builds)
 Cleared all **53** pre-existing `svelte-check` errors → **0 errors**; `yarn build` succeeds. Root

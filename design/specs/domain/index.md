@@ -12,7 +12,8 @@ topic appears in both, docs stays narrative and links here for the specifics.
 
 | Area | File | What it covers |
 |------|------|----------------|
-| Schema | [schema.md](./schema.md) | Entities, fields, relationships, invariants (the data model) |
+| Schema (human) | [schema.md](./schema.md) | Entities, fields, relationships, invariants — the readable data model |
+| Schema (executable) | [schema.qsql](./schema.qsql) | Canonical Quereus DDL the production backend runs; mirrors schema.md |
 | Account groups | [account-groups.md](./account-groups.md) | Shared account taxonomy: 5 types, seed hierarchy, rules |
 | Rules | [rules.md](./rules.md) | Double-entry integrity, imbalance account, closed periods, reconciliation, audit trail |
 | Units & exchange | [units.md](./units.md) | Multi-unit balancing, rendering in a chosen unit, costing policy |
