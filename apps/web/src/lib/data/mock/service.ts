@@ -11,7 +11,7 @@ import type {
   Unit, UnitInput,
   BalanceSheetData, GroupBalance, AccountBalance,
   LedgerEntry, SplitEntry,
-  AccountType
+  AccountType, BulkImportData
 } from '../types';
 import { NORMAL_BALANCE } from '../types';
 import { getDb, saveDb, closeDb, uuid, now } from './sqlite';
@@ -1076,6 +1076,42 @@ class SqliteDataService implements DataService {
     
     log.data.info(`Found ${entries.length} entries across all entities`);
     return entries;
+  }
+
+  // ===========================================================================
+  // Bulk import (atomic) — one transaction, single save
+  // ===========================================================================
+
+  async bulkImport(data: BulkImportData): Promise<void> {
+    const db = this.getDb();
+    db.run('BEGIN');
+    try {
+      for (const a of data.accounts) {
+        db.run(
+          `INSERT INTO account (id, entity_id, account_group_id, parent_id, code, name, description,
+            unit, costing_method, closed_date, partner_id, linked_account_id, is_active, source_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [a.id, a.entityId, a.accountGroupId, a.parentId ?? null, a.code ?? null, a.name,
+            a.description ?? null, a.unit, a.costingMethod ?? null, a.closedDate ?? null,
+            a.partnerId ?? null, a.linkedAccountId ?? null, a.isActive ? 1 : 0, a.sourceId ?? null,
+            a.createdAt, a.updatedAt]);
+      }
+      for (const t of data.transactions) {
+        db.run(
+          'INSERT INTO txn (id, entity_id, date, memo, reference, source_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          [t.id, t.entityId, t.date, t.memo ?? null, t.reference ?? null, t.sourceId ?? null, t.createdAt, t.updatedAt]);
+      }
+      for (const e of data.entries) {
+        db.run(
+          'INSERT INTO entry (id, txn_id, account_id, amount, note, tag_id, reconciliation_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [e.id, e.transactionId, e.accountId, e.amount, e.note ?? null, e.tagId ?? null, e.reconciliationId ?? null]);
+      }
+      db.run('COMMIT');
+    } catch (err) {
+      try { db.run('ROLLBACK'); } catch { /* ignore */ }
+      throw err;
+    }
+    this.save();
   }
 }
 

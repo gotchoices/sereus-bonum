@@ -18,7 +18,7 @@ import type {
   Entry, EntryInput,
   Unit, UnitInput,
   BalanceSheetData, AccountBalance, GroupBalance,
-  LedgerEntry, SplitEntry
+  LedgerEntry, SplitEntry, BulkImportData
 } from '../types';
 import type { Database, SqlValue } from '@quereus/quereus';
 import { getQuereusDb, closeQuereusDb, all, get, run, uuid, nowIso } from './db';
@@ -610,6 +610,41 @@ class QuereusDataService implements DataService {
       result.push(le);
     }
     return result;
+  }
+
+  // ===========================================================================
+  // Bulk import (atomic)
+  // ===========================================================================
+
+  async bulkImport(data: BulkImportData): Promise<void> {
+    const db = this.getDb();
+    await run(db, 'BEGIN');
+    try {
+      for (const a of data.accounts) {
+        await run(db,
+          `INSERT INTO account (id, entity_id, account_group_id, parent_id, code, name, description,
+            unit, costing_method, closed_date, partner_id, linked_account_id, is_active, source_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [a.id, a.entityId, a.accountGroupId, a.parentId ?? null, a.code ?? null, a.name,
+            a.description ?? null, a.unit, a.costingMethod ?? null, a.closedDate ?? null,
+            a.partnerId ?? null, a.linkedAccountId ?? null, a.isActive ? 1 : 0, a.sourceId ?? null,
+            a.createdAt, a.updatedAt]);
+      }
+      for (const t of data.transactions) {
+        await run(db,
+          'INSERT INTO txn (id, entity_id, date, memo, reference, source_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          [t.id, t.entityId, t.date, t.memo ?? null, t.reference ?? null, t.sourceId ?? null, t.createdAt, t.updatedAt]);
+      }
+      for (const e of data.entries) {
+        await run(db,
+          'INSERT INTO entry (id, txn_id, account_id, amount, note, tag_id, reconciliation_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [e.id, e.transactionId, e.accountId, e.amount, e.note ?? null, e.tagId ?? null, e.reconciliationId ?? null]);
+      }
+      await run(db, 'COMMIT');
+    } catch (err) {
+      try { await run(db, 'ROLLBACK'); } catch { /* ignore */ }
+      throw err;
+    }
   }
 }
 

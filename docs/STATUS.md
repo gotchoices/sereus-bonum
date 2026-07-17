@@ -216,9 +216,24 @@ incomplete** and writes only new ones. Milestones:
   quereus-local still renders. **Migration note:** existing `quereus-local` IndexedDB (or mock
   localStorage) has the old schema — clear it (fresh DB) after this change; a schema-version bump is a
   TODO.
-- ⬜ **M2 — import-service merge logic:** classify exists/new/incomplete against the target's stored
-  `sourceId`s; resolve accounts by stored account `sourceId` (skip mapping when all resolve); merge
-  execution (write only new/completed, persist identities, atomic).
+- ✅ **M2 — import-service merge logic (VERIFIED with real data).** `import-service.ts` rewritten from a
+  no-op stub into a real merge engine: `buildMergePlan` (resolve accounts by stored `sourceId`/name +
+  type auto-match; classify each txn exists/new/incomplete against stored txn `sourceId`s) and
+  `executeMerge`. Added an **atomic `bulkImport`** to `DataService` (both backends: one
+  `BEGIN…COMMIT`) since 17k individual `createTransaction` calls were untenable. A compat `importBooks`
+  keeps the current screen working until M3.
+  - **Verified:** drove the current screen with `tmp/Kyle.gnucash` on quereus-local — parsed **161
+    accounts / 17,756 transactions / 162 commodities**, auto-mapped 149/149, and **imported +137
+    accounts + 17,756 transactions atomically** into a new entity. (Import was a no-op stub before —
+    it now actually works.)
+  - ⚠️ **SCALE BOTTLENECK (blocks "browse real data"):** the bulk write took ~110s, and the entity's
+    **Balance Sheet won't render** for 17k txns — `getBalanceSheet` loads all ~35k entries and joins
+    them with **no indexes** (the Quereus schema has 0 indexes; mock has 6). Also `getBalanceSheet`
+    aggregates in JS. **Needs a performance pass before large real books are usable:** (1) add indexes
+    to the Quereus schema (verify Quereus accepts `create index` with the store vtable), (2) optimize
+    `getBalanceSheet` (SQL aggregation or per-account, not load-all-entries), (3) likely ledger/search
+    too, (4) consider virtualized rendering (project.md targets 10K–100K txns). This is a distinct
+    effort from the import feature.
 - ⬜ **M3 — rebuild import screen:** new-or-existing target, conditional mapping, Transaction Preview &
   Merge Review (grouped dispositions, hide already-imported by default + toggle, complete-incomplete inline).
 - ⬜ **M4 — test with real data** (`tmp/Kyle.gnucash`) on quereus-local; refresh the import consolidation.

@@ -49,6 +49,51 @@ export interface ImportResult {
   errors: string[];
 }
 
+// --- Merge model (see design/specs/domain/import.md) ---
+
+/** How a source account resolves to a Bonum account. */
+export type AccountDisposition = 'existing' | 'create' | 'unresolved';
+
+export interface ResolvedAccount {
+  sourceGuid: string;
+  sourceName: string;
+  sourcePath: string;               // full source hierarchy path
+  disposition: AccountDisposition;
+  existingAccountId?: string;       // when 'existing' (matched by stored sourceId or path)
+  targetGroupId?: string;           // when 'create' — the Bonum account group to create under
+  targetGroupPath?: string;         // human-readable group path
+  targetAccountName?: string;       // account name to create
+  usedInTransactions: boolean;      // referenced by at least one transaction entry
+}
+
+/** Disposition of a source transaction against the target entity's current books. */
+export type TxnDisposition = 'exists' | 'new' | 'incomplete';
+
+export interface PreviewEntry {
+  accountGuid: string;
+  accountId?: string;               // resolved Bonum account id (undefined → unresolved)
+  amount: number;                   // smallest unit; +debit / -credit
+  note?: string;
+}
+
+export interface PreviewTransaction {
+  sourceGuid: string;
+  date: string;
+  description: string;
+  reference?: string;
+  disposition: TxnDisposition;
+  reason?: string;                  // why 'incomplete'
+  entries: PreviewEntry[];
+  excluded?: boolean;               // user chose to skip this 'new' transaction
+}
+
+export interface MergePlan {
+  entityId: string;
+  resolved: ResolvedAccount[];      // by source account
+  transactions: PreviewTransaction[];
+  counts: { exists: number; new: number; incomplete: number };
+}
+
 export interface ImportOptions {
   entityId?: string; // If provided, merge into existing entity
   entityName?: string; // If no entityId, create new entity with this name

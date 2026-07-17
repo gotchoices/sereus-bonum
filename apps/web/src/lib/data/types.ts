@@ -284,5 +284,15 @@ export interface DataService {
   
   // Transaction search (cross-entity)
   getAllTransactions(): Promise<LedgerEntry[]>;
+
+  // Bulk import — write pre-formed accounts, transactions, and entries in ONE atomic
+  // db transaction (used by the merge importer; rows carry caller-assigned ids).
+  bulkImport(data: BulkImportData): Promise<void>;
+}
+
+export interface BulkImportData {
+  accounts: Account[];
+  transactions: Transaction[];
+  entries: Entry[];
 }
 
