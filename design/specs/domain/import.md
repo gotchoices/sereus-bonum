@@ -64,12 +64,12 @@ Source account types mapped to [Bonum groups](./account-groups.md):
 ### Transaction Files (CSV/QIF/OFX)
 - **OFX:** Uses transaction ID (FITID) for exact matching
 - **Others:** Fuzzy match (date + amount + account within $0.01)
-- **User reviews:** Suspected duplicates shown with checkboxes
+- Suspected duplicates are surfaced for the user to review and confirm before import.
 
 ### Account Handling (Transactions Mode)
 - Match by name or GUID
 - Create missing accounts automatically
-- Show mapping UI if ambiguous
+- Prompt the user to resolve ambiguous matches
 
 ---
 

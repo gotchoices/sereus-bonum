@@ -66,21 +66,31 @@ contracts (code/config detail deferred to generated consolidations):
   pointers repointed to `domain/units.md`.
 - ✅ **`domain/rules.md`** created — double-entry integrity, imbalance account, closed periods,
   reconciliation invariants, audit trail.
-- Result: `web/global/` now holds only view/target-specific specs (navigation, ui, toolchain, i18n,
-  view-state). See `design/specs/domain/index.md` for the full contract map.
+- Result: `web/global/` now holds only view/target-specific specs (ui, toolchain, i18n, view-state).
+  See `design/specs/domain/index.md` for the full contract map.
 
-### ⬜ Spec integrity fixes (independent of domain move)
-- ⬜ `web/navigation.md` is still an **unedited template** (ItemList / UserProfile / `myapp://`).
-  Rewrite for the real screens (Home, Catalog, Entity Accounts, Ledger, Search, Import, Settings) or
-  defer to `design/generated/web/navigation.md`.
-- ⬜ `web/components/index.md` lists `TransactionResultsTable → transaction-results-table.md`, but
-  that spec file **doesn't exist**. Create it or remove the row.
-- ⬜ `web/screens/index.md`: "Entity Accounts" lists spec file as `(entity-accounts)` but the real
-  file is `accounts-view.md`; `saved-reports-ux.md` exists but isn't listed. Reconcile.
-- ⬜ Strip leftover template "Instructions" boilerplate from `web/screens/index.md` and
-  `web/components/index.md`.
-- ⬜ Mobile specs are pure template stubs (Item/User). Label clearly as "not started" so they don't
-  read as real-but-empty (project is web-focused for now).
+### ✅ Done — Platform-agnosticism & leanness pass (domain)
+Reviewed every domain file so it carries only platform-neutral principles (web-specific detail lives
+in web specs); tightened for context economy:
+- ✅ `domain/interfaces.md` — dropped browser/SQLite/WASM/localStorage specifics; mock backend now
+  described as a generic "on-device local store."
+- ✅ `domain/export.md` — removed web delivery mechanics (browser download prompt, memory fallback,
+  export button); kept the format/layout/amount contract only. Delivery is per-target.
+- ✅ `domain/import.md` — generalized UI phrasings (checkboxes, "mapping UI"); the web wizard remains
+  in `web/screens/import.md`.
+- ✅ `domain/rules.md` — generalized "lock separator in the ledger"; removed a web-story link.
+- Verified: no `browser/svelte/click/tap/keyboard/window/scroll` vocabulary remains in `domain/`.
+
+### ✅ Done — Spec integrity fixes
+- ✅ `web/navigation.md` rewritten as a real, crisp nav spec (sitemap, global menu, entity context
+  menu, window model, `bonum://`); the mislabeled `web/global/navigation.md` (menu chrome) was folded
+  in and deleted.
+- ✅ Removed the phantom `TransactionResultsTable → transaction-results-table.md` row from
+  `web/components/index.md`; noted that `web/screens/search.md` owns that table.
+- ✅ `web/screens/index.md` reconciled (Entity Accounts → `accounts-view.md`, Saved Reports added) and
+  both index files stripped of template "Instructions" boilerplate.
+- ✅ Mobile `navigation.md` and `screens/index.md` replaced with crisp "not started" markers (were
+  Item/User templates).
 
 ### ⬜ Stories gaps
 Tracked in detail in [`design/stories/web/STATUS.md`](../design/stories/web/STATUS.md) → "Known Gaps":

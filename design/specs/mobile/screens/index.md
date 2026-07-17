@@ -1,24 +1,6 @@
-# Screens Plan
+# Screens (Mobile)
 
-List of screens for this target with routes and status.
+**Not started.** No mobile screens are specified yet — the project is web-focused.
 
-## Instructions
-
-- List each screen with a clear, stable name
-- Add the route name (PascalCase, used for navigation and deep links)
-- Spec file uses kebab-case (`item-list.md` for route `ItemList`)
-- Note variants to support (happy, empty, error)
-
-## Screens
-
-| Screen Name | Route | Spec File | Variants | Status |
-|-------------|-------|-----------|----------|--------|
-| Item List | ItemList | item-list.md | happy, empty, error | draft |
-| Item Detail | ItemDetail | item-detail.md | happy, error | draft |
-| User Profile | UserProfile | user-profile.md | happy, empty | draft |
-
-## Notes
-
-- Add/remove rows as needed
-- Screen-specific requirements go in spec files
-- Agent proposes screens from stories if this is empty
+When mobile work begins, list screens here (name, route, spec, status) and derive them from the
+mobile stories and the shared [domain contract](../../domain/index.md).

@@ -1,28 +1,14 @@
-# Screens Plan
+# Screens (Web)
 
-List of screens for this target with routes and status.
+| Screen | Route | Spec | Status |
+|--------|-------|------|--------|
+| Home | `/` | — | implemented |
+| Account Catalog | `/catalog` | catalog.md | implemented |
+| Entity Accounts | `/entities/[id]` | accounts-view.md | implemented |
+| Ledger | `/ledger/[accountId]` | ledger.md | implemented |
+| Transaction Search | `/search` | search.md | implemented |
+| Import | `/import` | import.md | draft |
+| Settings | `/settings` | settings.md | implemented |
+| Saved Reports | (within Entity Accounts) | saved-reports-ux.md | future |
 
-## Instructions
-
-- List each screen with a clear, stable name
-- Add the route name (PascalCase, used for navigation and deep links)
-- Spec file uses kebab-case (`item-list.md` for route `ItemList`)
-- Note variants to support (happy, empty, error)
-
-## Screens
-
-| Screen Name | Route | Spec File | Variants | Status |
-|-------------|-------|-----------|----------|--------|
-| Home | / | (home) | - | implemented |
-| Catalog | /catalog | catalog.md | - | implemented |
-| Entity Accounts | /entities/[id] | (entity-accounts) | - | implemented |
-| Ledger | /ledger/[accountId] | ledger.md | - | implemented |
-| Search | /search | search.md | - | implemented |
-| Import | /import | import.md | - | draft |
-| Settings | /settings | settings.md | - | implemented |
-
-## Notes
-
-- Add/remove rows as needed
-- Screen-specific requirements go in spec files
-- Agent proposes screens from stories if this is empty
+Navigation and the global menu: [../navigation.md](../navigation.md).

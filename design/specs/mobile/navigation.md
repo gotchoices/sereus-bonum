@@ -1,27 +1,8 @@
-# Navigation Spec
+# Navigation (Mobile)
 
-Purpose
-- Define app-wide navigation structure, deep links, and route options.
+**Not started.** Bonum is web-focused for now; the mobile target is planned but unspecified.
 
-Sitemap (example)
-- HOME Tab
-  - ItemList (root)
-  - ItemDetail (push from ItemList)
-- SETTINGS Tab
-  - UserProfile (push)
-
-Deep Links
-- Scheme: myapp://
-- Patterns:
-  - myapp://screen/ItemList
-  - myapp://screen/ItemDetail?id=123&variant=happy
-  - myapp://screen/UserProfile
-
-Route Options
-- ItemDetail: title "Item", headerLarge=true
-- ItemList: title "Items"
-- UserProfile: title "Profile"
-
-Notes
-- Human spec overrides any AI-generated navigation consolidation.
-- Adjust scheme to match app identifier (e.g., bonum://, health://)
+When mobile work begins, define the sitemap, tab/stack structure, and deep-link scheme here, drawing
+on the shared [domain contract](../domain/index.md) and mobile stories under
+`design/stories/mobile/`. Mobile is "quick and nimble" (lookups, quick entries, capture) per
+[project.md](../project.md) — not a port of the web multi-window paradigm.

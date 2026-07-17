@@ -32,7 +32,7 @@ there rather than repeating it.
 ## Closed Periods
 
 - An account's `closedDate` locks it: **no new or modified entries dated on or before that date.**
-- The UI presents locked transactions as read-only (e.g. below a lock separator in the ledger).
+- Locked entries are presented as read-only.
 
 ## Reconciliation
 
@@ -41,8 +41,7 @@ there rather than repeating it.
 - **Finalize is allowed only when the reconciled (checked) balance equals the statement's ending
   balance.** On finalize, those entries link to the statement record and are marked reconciled.
 - Reconciliation is reversible: individual entries can be unreconciled, and an entire statement can
-  be unreconciled (releasing all its entries). See story
-  [05-reconciliation](../../stories/web/05-reconciliation.md).
+  be unreconciled (releasing all its entries).
 
 ## Audit Trail
 
