@@ -164,7 +164,25 @@ Tracked in detail in [`design/stories/web/STATUS.md`](../design/stories/web/STAT
 - Note: mock (`sql.js`) remains the default backend (`VITE_BACKEND` unset → `mock`); quereus-local is
   opt-in via env. Both share the same schema + seed data.
 
-**C3 (later):** `quereus-p2p` — Optimystic + CadreNode + libp2p peer deps.
+**C3 (wired, but BLOCKED on browser support):** `quereus-p2p` — Optimystic single node.
+- Implemented `production/cadre.ts` (a web CadreService mirroring health's) + wired `initOptimystic`
+  in `db.ts`: boots `@serfab/cadre-core` `CadreNode` over libp2p, opens the strand's Quereus Database
+  (`StrandDatabase`), seeds an empty strand. Schema is derived from `schema.qsql` as `declare schema`
+  inner DDL (StrandDatabase re-wraps it). Single node only — multi-node cadre is deferred (experimental).
+- **Version alignment (important):** the p2p stack must be pinned to health's mutually-tested set —
+  `@quereus/* 4.3.1` + `@optimystic/* 0.14.1` (via `resolutions`). quereus 4.3.2 removed the
+  `resolveCollation` export that optimystic 0.14.1's plugin imports (build-breaks under rollup).
+- **Build + type-check pass.** But at runtime the stack **does not work in a browser**: cadre-core /
+  p2p-fret / libp2p call Node/React-Native APIs the browser lacks — verified failures: `crypto.createHash`
+  (p2p-fret hashPeerId), timer `.unref()` (libp2p ClusterMember), `fs/promises` and `node:http2`
+  (cadre-core). `vite-plugin-node-polyfills` only surfaced the next missing API; it's architectural, not
+  a few polyfills. Health/chat run this on **React Native** (Metro provides these), not a browser.
+- **Status:** `initOptimystic` throws a clear "not runnable in browser yet" error; mock + quereus-local
+  are unaffected (default stays mock). The integration is complete and will light up when a
+  browser-compatible cadre-core/libp2p build ships — matching the user's expectation that Bonum waits
+  on Sereus cadre progress.
+- **Open decision:** the libp2p/optimystic deps (~125 MB) sit in `package.json` for the ready wiring.
+  Keep them (integration primed) or trim until browser support lands — user's call.
 
 ### ✅ Done — Track D: green the app (type-clean + builds)
 Cleared all **53** pre-existing `svelte-check` errors → **0 errors**; `yarn build` succeeds. Root

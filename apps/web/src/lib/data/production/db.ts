@@ -58,10 +58,39 @@ async function initLocal(): Promise<Database> {
 }
 
 async function initOptimystic(): Promise<Database> {
-  // quereus-p2p: boot @serfab/cadre-core (CadreNode over libp2p / p2p-fret), open the
-  // strand's Quereus Database through @optimystic/quereus-plugin-optimystic. Requires the
-  // libp2p peer deps (see data-backend.md). Deferred to the distributed slice.
-  throw new Error('quereus-p2p backend not yet implemented (see data-backend.md)');
+  // quereus-p2p: boot @serfab/cadre-core (CadreNode over libp2p), open the strand's
+  // Quereus Database. Single-node only for now (see cadre.ts). StrandDatabase applies
+  // the sApp schema itself, so we only set the schema path and seed an empty strand.
+  //
+  // KNOWN LIMITATION: cadre-core / p2p-fret / libp2p currently assume Node/React-Native
+  // runtime APIs (crypto.createHash, timer .unref(), fs/promises, node:http2) that a
+  // browser doesn't provide. The wiring below is complete and correct, but the stack does
+  // not yet run in a browser. It works on React Native today (health/chat). This path will
+  // light up when a browser-compatible cadre-core/libp2p build lands. See docs/STATUS.md.
+  log.data.info('[Quereus] Initializing p2p (optimystic) backend...');
+  let webCadreService: typeof import('./cadre')['webCadreService'];
+  try {
+    ({ webCadreService } = await import('./cadre'));
+    await webCadreService.ensureStarted();
+  } catch (e) {
+    throw new Error(
+      'quereus-p2p (Sereus/optimystic) is not yet runnable in the browser — cadre-core/libp2p ' +
+      'require Node/React-Native APIs. Use VITE_BACKEND=mock or quereus-local for now. ' +
+      `(cause: ${e instanceof Error ? e.message : String(e)})`,
+    );
+  }
+  const database = webCadreService.getDatabase();
+  await database.exec("pragma schema_path = 'app,main'");
+
+  const row = await get<{ c: number }>(database, 'SELECT count(*) as c FROM entity');
+  if (!row || Number(row.c) === 0) {
+    log.data.info('[Quereus] Seeding optimystic strand...');
+    const { seedQuereus } = await import('./seed');
+    await seedQuereus(database);
+  }
+
+  log.data.info('[Quereus] p2p backend ready');
+  return database;
 }
 
 // Split a .qsql file into individual statements: strip `--` comment lines, split on `;`.

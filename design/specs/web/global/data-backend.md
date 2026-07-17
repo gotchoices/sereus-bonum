@@ -35,7 +35,11 @@ Bonum consumes the Sereus stack from npm — **no local clones**. Versions track
 
 ## Status
 
-- `mock` is implemented and is the default.
-- `quereus-local` and `quereus-p2p` share one service at `apps/web/src/lib/data/production/service.ts`,
-  currently **stubbed** (every method throws "not yet implemented"). Implementing it against Quereus
-  SQL is a regeneration task.
+- `mock` is implemented and is the **default** (`VITE_BACKEND` unset).
+- `quereus-local` is **fully implemented and runtime-verified** — real Quereus SQL over browser
+  IndexedDB, seeded, all screens working.
+- `quereus-p2p` is **wired but not runnable in a browser yet**: cadre-core / p2p-fret / libp2p require
+  Node/React-Native APIs (`crypto.createHash`, timer `.unref()`, `fs/promises`, `node:http2`) the
+  browser lacks. It runs on React Native today (health/chat); a browser-compatible build is needed.
+  Selecting it throws a clear error. The p2p deps are pinned to health's tested set
+  (`@quereus/* 4.3.1`, `@optimystic/* 0.14.1`) via `resolutions`.
