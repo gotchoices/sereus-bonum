@@ -126,8 +126,22 @@ Tracked in detail in [`design/stories/web/STATUS.md`](../design/stories/web/STAT
 - **Spec:** `design/specs/web/global/data-backend.md` documents modes, packages, and status.
 - ⬜ **Remaining (regeneration):** implement `data/production/service.ts` against Quereus SQL
   (IndexedDB plugin for `quereus-local`; Optimystic + libp2p peers for `quereus-p2p`).
-- ⬜ **Separate cleanup:** 53 pre-existing type errors in the app (components/screens) — address
-  during regeneration.
+
+### ✅ Done — Track D: green the app (type-clean + builds)
+Cleared all **53** pre-existing `svelte-check` errors → **0 errors**; `yarn build` succeeds. Root
+causes and fixes:
+- Svelte 5 rune typing: `let x: T | null = $state(null)` inferred `null` → used `$state<T | null>(null)`
+  (VisualBalanceSheet).
+- `$derived(() => …)` returned the function itself → `$derived.by(() => …)` (AccountGroupAutocomplete).
+- **Schema drift:** code used `account.groupId`; the field is `accountGroupId` (ledger).
+- `EntryInput` required `transactionId`, but `createTransaction` assigns it → `Omit<Entry,'id'|'transactionId'>`.
+- Nullable SvelteKit route params (`$page.params.*`) asserted where the route guarantees them.
+- Focus-handler plumbing typed through AccountAutocomplete → TransactionEditor → ledger; `unit` prop
+  widened to accept the `Unit` shape; import page `parsedData` type-positions and a missing
+  `groupPathExists` helper.
+- ⬜ **Not addressed (separate pass):** 93 `svelte-check` **warnings** — 55 dead CSS, ~28 a11y
+  (relevant to the WCAG target), 4 Svelte-4 `on:click` deprecations, and **1 real reactivity warning**
+  ("only captures the initial value of `groups`") worth investigating.
 
 ---
 

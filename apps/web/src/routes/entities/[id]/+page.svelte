@@ -19,7 +19,7 @@
   type ReportMode = 'balance_sheet' | 'trial_balance' | 'income_statement' | 'cash_flow' | 'custom';
   
   // Get entity ID from route
-  let entityId = $derived($page.params.id);
+  let entityId = $derived($page.params.id!);
   let entity = $derived($entities.find(e => e.id === entityId));
   
   // Balance sheet data

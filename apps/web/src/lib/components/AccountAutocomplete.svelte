@@ -10,6 +10,7 @@
     placeholder = 'Search accounts',
     disabled = false,
     onselect = () => {},
+    onfocus = undefined,
     class: className = ''
   }: {
     entityId: string;
@@ -18,6 +19,7 @@
     placeholder?: string;
     disabled?: boolean;
     onselect?: (result: { id: string; name: string; path: string }) => void;
+    onfocus?: (e: FocusEvent) => void;
     class?: string;
   } = $props();
   
@@ -154,7 +156,7 @@
     bind:value={value}
     oninput={handleInput}
     onkeydown={handleKeydown}
-    onfocus={() => handleSearch()}
+    onfocus={(e) => { onfocus?.(e); handleSearch(); }}
     onblur={handleBlur}
     {placeholder}
     {disabled}

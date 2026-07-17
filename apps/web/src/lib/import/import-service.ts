@@ -73,6 +73,7 @@ export class ImportService {
     const dataService = await getDataService();
     
     const result: ImportResult = {
+      entityId: '',
       accountsCreated: 0,
       accountsMatched: 0,
       accountsSkipped: 0,

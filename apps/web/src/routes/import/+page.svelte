@@ -161,8 +161,8 @@
   }
   
   function filterAccounts(
-    accounts: typeof parsedData.accounts, 
-    transactions: typeof parsedData.transactions
+    accounts: ParsedBooks['accounts'],
+    transactions: ParsedBooks['transactions']
   ): typeof accounts {
     if (!accounts || accounts.length === 0) return [];
     if (!transactions) transactions = [];
@@ -236,8 +236,8 @@
   }
   
   function buildAccountMappings(
-    accounts: typeof parsedData.accounts,
-    transactions: typeof parsedData.transactions
+    accounts: ParsedBooks['accounts'],
+    transactions: ParsedBooks['transactions']
   ): AccountMapping[] {
     if (!accounts) return [];
     
@@ -447,7 +447,7 @@
   }
   
   function autoMatchAccount(
-    account: typeof parsedData.accounts[0],
+    account: ParsedBooks['accounts'][0],
     fullPath: string,
     accountMap: Map<string, typeof account>
   ): {
@@ -706,13 +706,19 @@
     }, 3000);
   }
   
-  function formatTransactionCount(account: typeof parsedData.accounts[0]): string {
+  function formatTransactionCount(account: ParsedBooks['accounts'][0]): string {
     if (account.placeholder) {
       return '—'; // Em dash for placeholder accounts
     }
     return (account.transactionCount ?? 0).toString();
   }
   
+  // Does a full account-group path already exist in the catalog?
+  function groupPathExists(path: string): boolean {
+    const groups = $accountGroups;
+    return groups.some(g => buildGroupPath(g.id, groups) === path);
+  }
+
   // Handle autocomplete input with create-new-group check
   async function handleGroupAutocompleteInput(index: number, value: string) {
     mappings[index].targetGroup = value;
@@ -787,10 +793,10 @@
         const newGroup = await createAccountGroup({
           name: segments[i],
           accountType,
-          parentId,
+          parentId: parentId ?? undefined,
           description: ''
         });
-        
+        if (!newGroup) throw new Error(`Failed to create group segment: ${segments[i]}`);
         parentId = newGroup.id;
       }
     }

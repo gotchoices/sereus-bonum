@@ -47,7 +47,7 @@
   })));
   
   // Filter and sort suggestions
-  const suggestions = $derived(() => {
+  const suggestions = $derived.by(() => {
     if (!value || value.length === 0) return [];
     
     const query = value.toLowerCase().trim();

@@ -14,8 +14,8 @@
   import { formatDate as formatDateUtil } from '$lib/utils/formatDate';
   import { ENABLE_TEST_DATA } from '$lib/config';
   
-  // Route param
-  let accountId = $derived($page.params.accountId);
+  // Route param (guaranteed by the [accountId] route)
+  let accountId = $derived($page.params.accountId!);
   
   // Account info
   let account: Account | null = $state(null);
@@ -202,7 +202,7 @@
     }
     
     if (!accountGroup) {
-      log.ui.debug('[Ledger] getAccountPath: no accountGroup, account:', account.name, 'groupId:', account.groupId);
+      log.ui.debug('[Ledger] getAccountPath: no accountGroup, account:', account.name, 'groupId:', account.accountGroupId);
       return account.name;
     }
     

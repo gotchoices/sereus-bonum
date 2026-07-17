@@ -25,7 +25,7 @@
     accountId: string;
     accountName: string;
     accountPath: string;
-    unit: { symbol: string; displayDivisor: number } | null;
+    unit: { symbol?: string; displayDivisor: number } | null;
     onSave: () => void;
     onCancel: () => void;
     onDelete?: (txnId: string) => void;
@@ -35,7 +35,7 @@
     onCurrentCreditBlur: () => void;
     onSplitDebitBlur: (splitId: string) => void;
     onSplitCreditBlur: (splitId: string) => void;
-    onFocus: () => void;
+    onFocus: (e: FocusEvent) => void;
     getEditTotals: () => { debits: number; credits: number; balance: number };
     transactionId?: string;
   }

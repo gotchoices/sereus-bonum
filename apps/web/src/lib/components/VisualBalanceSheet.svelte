@@ -22,9 +22,9 @@
   ];
   
   // State (must use $state for Svelte 5 reactivity)
-  let data: BalanceSheetData | null = $state(null);
+  let data = $state<BalanceSheetData | null>(null);
   let loading = $state(true);
-  let error: string | null = $state(null);
+  let error = $state<string | null>(null);
   
   // Load balance sheet data
   async function loadData() {
