@@ -92,10 +92,13 @@ in web specs); tightened for context economy:
 - ✅ Mobile `navigation.md` and `screens/index.md` replaced with crisp "not started" markers (were
   Item/User templates).
 
-### ⬜ Stories gaps
-Tracked in detail in [`design/stories/web/STATUS.md`](../design/stories/web/STATUS.md) → "Known Gaps":
-acceptance criteria missing in 01–03; no happy/empty/error variants or error paths; missing stories
-for multi-currency/units, multi-user/Sereus sharing, and tags.
+### 🔄 Stories gaps
+Tracked in detail in [`design/stories/web/STATUS.md`](../design/stories/web/STATUS.md) → "Known Gaps".
+- ✅ Acceptance criteria filled for stories 01–03.
+- ✅ Variant/error template established (01–03, 08, 09); extend to 04, 06, 07.
+- ✅ Added story 08 (Multiple Units of Account) and story 09 (AI-Assisted Capture & Import).
+- ⬜ Remaining: multi-user/Sereus **sharing** story (would host the sync-conflict variant) and a
+  **tags** story.
 
 ---
 

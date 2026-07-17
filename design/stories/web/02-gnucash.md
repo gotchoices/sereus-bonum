@@ -39,9 +39,15 @@ Alternative Path B: Investigate Ledgers
 9.8. Remembering the welcome instructions, he uses the option to open the offset account in a new window.  Now he has two ledger windows open, the one he jumped from and the one he jumped to.
 
 ## Acceptance Criteria
-- [ ] <specific, testable criterion>
-- [ ] <another criterion>
-- [ ] <performance requirement>
-- [ ] <error handling requirement>
-- [ ] <usability requirement>
+- [ ] "Import Books" accepts a GnuCash file by browse or drag-and-drop and requires a new entity name.
+- [ ] The account-mapping view shows source accounts beside their proposed Bonum accounts/groups, and names can be edited before approval.
+- [ ] Approving creates the entity, which then appears on Home with a Visual Balance Sheet.
+- [ ] Accounts View shows Assets, Liabilities, and Equity, with Income and Expense collapsible under Retained Earnings (collapsed looks like a balance sheet).
+- [ ] The ledger shows Date, Number, Memo, Account, Debit, Credit, and Balance; split transactions expand to show all offset accounts.
+- [ ] Offset accounts are hyperlinks; opening one in a new window leaves the original ledger open.
+
+## Variants
+- **happy:** A valid GnuCash file imports cleanly and lands the user in the new entity's Accounts View.
+- **empty:** A file with no transactions still creates the entity, with its account structure zeroed.
+- **error:** An unreadable, corrupt, or unsupported file is reported clearly and no entity is created. If any step fails mid-import, the whole import rolls back and the user's mapping is preserved so they can fix it and retry.
 

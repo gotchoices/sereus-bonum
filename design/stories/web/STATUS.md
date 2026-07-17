@@ -7,41 +7,40 @@ Keep it in sync whenever a story is added, renamed, or promoted.
 
 | # | Story | Scope | Status |
 |---|-------|-------|--------|
-| 01 | [First Look](./01-firstlook.md) | MVP | draft — acceptance criteria missing |
-| 02 | [GnuCash Import](./02-gnucash.md) | MVP | draft — acceptance criteria missing |
-| 03 | [Manual Entries](./03-entries.md) | MVP | draft — acceptance criteria missing |
+| 01 | [First Look](./01-firstlook.md) | MVP | draft |
+| 02 | [GnuCash Import](./02-gnucash.md) | MVP | draft |
+| 03 | [Manual Entries](./03-entries.md) | MVP | draft |
 | 04 | [Reports and Views](./04-reporting.md) | MVP | draft |
 | 05 | [Reconciliation](./05-reconciliation.md) | MVP | draft |
 | 06 | [Transaction Search](./06-search.md) | MVP | draft |
 | 07 | [AI Assistant](./07-ai-assistant.md) | Post-MVP (phased) | draft |
+| 08 | [Multiple Units of Account](./08-multi-unit.md) | Core capability | draft |
+| 09 | [AI-Assisted Capture & Import](./09-ai-capture-import.md) | Post-MVP | draft / exploratory |
 
 ---
 
 ## Known Gaps (tracked)
 
-Findings from the July 2026 review. These are **not yet fixed** — captured here so they aren't lost.
+Findings from the July 2026 review, with current status.
 
-1. **Acceptance criteria are placeholder stubs in stories 01–03.** They still contain the
-   template bullets (`<specific, testable criterion>`). Stories 04–07 have real, testable
-   criteria; back-fill 01–03 to match. Highest priority.
-2. **Keep this index in sync.** The prior version listed only 01–05; stories 06 and 07 existed
-   but were absent. Any new/renamed story must be reflected here.
-3. **No Variants / error + empty coverage.** No story has a `happy / empty / error` Variants
-   section, and error paths are largely unnarrated. This is out of step with the
-   Production/Industrial-strength posture in `design/specs/project.md`, which explicitly requires
-   graceful handling of corrupted imports, partial data, and sync conflicts. Add at least:
-   corrupt/malformed import file (story 02), and a sync-conflict path.
-4. **Missing capability stories** (schema/specs assume them, but no narrative exists to infer UI):
-   - **Multi-currency / units / exchange** — a core pillar (see `docs/Units-and-Exchange.md`), but
-     no story exercises a foreign-currency or inventory entry, or setting an exchange rate.
-   - **Multi-user / Sereus sharing** — the headline differentiator (story 02 overview mentions
-     "multi-user access"; settings mentions cadre/partner nodes) but no story dramatizes sharing
-     books with an accountant/partner.
-   - **Tags** — schema has a `Tag` entity and story 06 references them ("when tags are
-     implemented"), but no story introduces them.
+1. ✅ **Acceptance criteria filled for stories 01–03** (a few basics each, harmonious with the
+   narrative). 04–07 already had them.
+2. **Keep this index in sync.** Any new/renamed story must be reflected in the table above.
+3. 🔄 **Variants / error coverage — template established.** Stories 01–03 and 08–09 now carry a
+   `happy / empty / error` Variants section demonstrating how errors read (user-observable outcomes,
+   not exhaustive). Remaining to extend the same pattern: **04, 06, 07** (05 already narrates
+   mismatch paths). A dedicated **sync-conflict** path is still unwritten and belongs wherever
+   multi-user sharing lands (see gap 4).
+4. **Missing capability stories:**
+   - ✅ **Multi-currency / units / exchange** — added as story 08 (to the many-units limit:
+     CHIPs/Taleus/Sereus).
+   - ✅ **AI capture & import** — added as story 09 (receipts/bills + arbitrary-source import).
+   - ⬜ **Multi-user / Sereus sharing** — still unwritten; the headline differentiator. Would also
+     host the sync-conflict variant from gap 3.
+   - ⬜ **Tags** — schema has a `Tag` entity and story 06 references them; no story introduces them.
 5. **Mild "how" leakage.** A few stories drift into UI mechanics (belongs in specs) — most notably
    the AI conversation-interface detail in story 07. Trim toward "what happens" when revising.
-6. **Fixed:** story 07 pointed to `components/ai-wizard.md`; corrected to `components/ai-assistant.md`.
+6. ✅ **Fixed:** story 07 pointed to `components/ai-wizard.md`; corrected to `components/ai-assistant.md`.
 
 ---
 

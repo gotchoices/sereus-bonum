@@ -27,8 +27,14 @@ Alternative Path A: Split Entry
 6.6. She repeats this until all splits are in.  On the last one, the default amount to balance is correct so she accepts it and the transaction is complete.
 
 ## Acceptance Criteria
-- [ ] <specific, testable criterion>
-- [ ] <another criterion>
-- [ ] <performance requirement>
-- [ ] <error handling requirement>
-- [ ] <usability requirement>
+- [ ] A blank entry line is always available at the ledger for starting a new transaction.
+- [ ] The account field opens an autocomplete searchable by full path, with tab-completion and the path separator to move between segments.
+- [ ] A complete transaction can be entered and saved using the keyboard alone (no mouse round-trip).
+- [ ] A single-offset transaction is stored as two balanced entries and can be revealed in split view.
+- [ ] In a split, each new line pre-fills the amount needed to balance, and the user can override it.
+- [ ] Account balances in the Accounts View update as entries are saved.
+
+## Variants
+- **happy:** Simple and split entries save cleanly, fingers never leaving the keyboard.
+- **empty:** A brand-new account shows an empty ledger with just the blank entry line ready.
+- **error:** A transaction that doesn't balance can't be committed — the app holds the entry and shows what's needed to balance (or routes the remainder to the Imbalance account). An unrecognized account is rejected until a valid one is chosen.

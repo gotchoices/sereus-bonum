@@ -55,8 +55,15 @@ Alternative Path D: Exploring Settings
   - Selecting his preferred language
 
 ## Acceptance Criteria
-- [ ] <specific, testable criterion>
-- [ ] <another criterion>
-- [ ] <performance requirement>
-- [ ] <error handling requirement>
-- [ ] <usability requirement>
+- [ ] Home lists entities, pre-seeded with "Home Finance Template" and "Small Business Template", plus a clear way to add new ones.
+- [ ] Selecting an entity shows its Visual Balance Sheet; clicking the entity name opens its Accounts View.
+- [ ] The entity context menu offers Edit, Accounts, Import, Boilerplate, and Delete.
+- [ ] The global menu offers Home, Account Catalog, Import Books, and Settings.
+- [ ] Creating an entity captures at least a name, plus optional tax id, accounting method, and unit of account.
+- [ ] The Account Catalog shows the five account types with hierarchical groups that can be added, edited, reordered, and deleted.
+- [ ] The welcome message can be dismissed permanently ("don't show again").
+
+## Variants
+- **happy:** Entities are present; the Visual Balance Sheet renders when one is selected.
+- **empty:** No entities yet — the welcome message stands in for the balance sheet; the Catalog still shows the seeded groups.
+- **error:** Creating an entity with a blank or duplicate name is rejected with an inline message; deleting an entity asks for confirmation before it is removed.
