@@ -89,7 +89,7 @@ export const ACCOUNT_GROUPS = [
 // Home Finance Template
 // =============================================================================
 
-const HOME_ENTITY = {
+export const HOME_ENTITY = {
   id: 'entity-home',
   name: 'Home Finance',
   description: 'Personal and household finances',
@@ -97,7 +97,7 @@ const HOME_ENTITY = {
   fiscalYearEnd: '12-31',
 };
 
-const HOME_ACCOUNTS = [
+export const HOME_ACCOUNTS = [
   // Assets
   { id: 'acc-home-checking', groupId: 'grp-bank', code: '1010', name: 'Checking Account' },
   { id: 'acc-home-savings', groupId: 'grp-bank', code: '1020', name: 'Savings Account' },
@@ -130,7 +130,7 @@ const HOME_ACCOUNTS = [
 // Small Business Template
 // =============================================================================
 
-const BIZ_ENTITY = {
+export const BIZ_ENTITY = {
   id: 'entity-biz',
   name: 'Small Business',
   description: 'Small business accounting',
@@ -138,7 +138,7 @@ const BIZ_ENTITY = {
   fiscalYearEnd: '12-31',
 };
 
-const BIZ_ACCOUNTS = [
+export const BIZ_ACCOUNTS = [
   // Assets
   { id: 'acc-biz-checking', groupId: 'grp-bank', code: '1010', name: 'Business Checking' },
   { id: 'acc-biz-savings', groupId: 'grp-bank', code: '1020', name: 'Business Savings' },
@@ -177,7 +177,7 @@ interface DebugTxn {
   entries: { accountId: string; amount: number }[];
 }
 
-const DEBUG_TRANSACTIONS: DebugTxn[] = [
+export const DEBUG_TRANSACTIONS: DebugTxn[] = [
   // Home entity: Opening balances
   {
     id: 'txn-home-001',

@@ -17,8 +17,8 @@ import type {
   Transaction, TransactionInput,
   Entry, EntryInput,
   Unit, UnitInput,
-  BalanceSheetData,
-  LedgerEntry
+  BalanceSheetData, AccountBalance, GroupBalance,
+  LedgerEntry, SplitEntry
 } from '../types';
 import type { Database, SqlValue } from '@quereus/quereus';
 import { getQuereusDb, closeQuereusDb, all, get, run, uuid, nowIso } from './db';
@@ -60,6 +60,57 @@ function toAccountGroup(r: Row): AccountGroup {
     description: r.description ?? undefined,
     displayOrder: r.display_order ?? undefined,
   };
+}
+
+function toAccount(r: Row): Account {
+  return {
+    id: r.id,
+    entityId: r.entity_id,
+    accountGroupId: r.account_group_id,
+    parentId: r.parent_id ?? undefined,
+    code: r.code ?? undefined,
+    name: r.name,
+    description: r.description ?? undefined,
+    unit: r.unit,
+    costingMethod: r.costing_method ?? undefined,
+    closedDate: r.closed_date ?? undefined,
+    partnerId: r.partner_id ?? undefined,
+    linkedAccountId: r.linked_account_id ?? undefined,
+    isActive: Boolean(r.is_active),
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+function toTransaction(r: Row): Transaction {
+  return {
+    id: r.id,
+    entityId: r.entity_id,
+    date: r.date,
+    memo: r.memo ?? undefined,
+    reference: r.reference ?? undefined,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+function toEntry(r: Row): Entry {
+  return {
+    id: r.id,
+    transactionId: r.txn_id,
+    accountId: r.account_id,
+    amount: Number(r.amount),
+    note: r.note ?? undefined,
+    tagId: r.tag_id ?? undefined,
+    reconciliationId: r.reconciliation_id ?? undefined,
+  };
+}
+
+const TYPE_NAMES: Record<string, string> = {
+  ASSET: 'Assets', LIABILITY: 'Liabilities', EQUITY: 'Equity', INCOME: 'Income', EXPENSE: 'Expenses',
+};
+function pathFor(accountType: string, groupName: string, accountName: string): string {
+  return `${TYPE_NAMES[accountType] ?? accountType} : ${groupName} : ${accountName}`;
 }
 
 class QuereusDataService implements DataService {
@@ -219,44 +270,345 @@ class QuereusDataService implements DataService {
   }
 
   // ===========================================================================
-  // Accounts — stubbed (Track C2)
+  // Accounts
   // ===========================================================================
 
-  async getAccounts(_entityId: string): Promise<Account[]> { throw new Error(NOT_IMPLEMENTED); }
-  async getAccount(_id: string): Promise<Account | null> { throw new Error(NOT_IMPLEMENTED); }
-  async createAccount(_data: AccountInput): Promise<Account> { throw new Error(NOT_IMPLEMENTED); }
-  async updateAccount(_id: string, _data: Partial<AccountInput>): Promise<Account> { throw new Error(NOT_IMPLEMENTED); }
-  async deleteAccount(_id: string): Promise<void> { throw new Error(NOT_IMPLEMENTED); }
+  async getAccounts(entityId: string): Promise<Account[]> {
+    const rows = await all<Row>(this.getDb(),
+      'SELECT * FROM account WHERE entity_id = ? ORDER BY code, name', [entityId]);
+    return rows.map(toAccount);
+  }
+
+  async getAccount(id: string): Promise<Account | null> {
+    const row = await get<Row>(this.getDb(), 'SELECT * FROM account WHERE id = ?', [id]);
+    return row ? toAccount(row) : null;
+  }
+
+  async createAccount(data: AccountInput): Promise<Account> {
+    const id = uuid();
+    const ts = nowIso();
+    await run(this.getDb(),
+      `INSERT INTO account (id, entity_id, account_group_id, parent_id, code, name, description,
+        unit, costing_method, closed_date, partner_id, linked_account_id, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, data.entityId, data.accountGroupId, data.parentId ?? null, data.code ?? null, data.name,
+        data.description ?? null, data.unit, data.costingMethod ?? null, data.closedDate ?? null,
+        data.partnerId ?? null, data.linkedAccountId ?? null, data.isActive ? 1 : 0, ts, ts]);
+    return (await this.getAccount(id))!;
+  }
+
+  async updateAccount(id: string, data: Partial<AccountInput>): Promise<Account> {
+    const cols: Record<string, string> = {
+      accountGroupId: 'account_group_id', parentId: 'parent_id', code: 'code', name: 'name',
+      description: 'description', unit: 'unit', costingMethod: 'costing_method', closedDate: 'closed_date',
+      partnerId: 'partner_id', linkedAccountId: 'linked_account_id',
+    };
+    const sets: string[] = [];
+    const vals: SqlValue[] = [];
+    for (const [key, col] of Object.entries(cols)) {
+      if (key in data) { sets.push(`${col} = ?`); vals.push((data as Row)[key] ?? null); }
+    }
+    if ('isActive' in data) { sets.push('is_active = ?'); vals.push(data.isActive ? 1 : 0); }
+    sets.push('updated_at = ?');
+    vals.push(nowIso(), id);
+    await run(this.getDb(), `UPDATE account SET ${sets.join(', ')} WHERE id = ?`, vals);
+    return (await this.getAccount(id))!;
+  }
+
+  async deleteAccount(id: string): Promise<void> {
+    await run(this.getDb(), 'DELETE FROM account WHERE id = ?', [id]);
+  }
 
   // ===========================================================================
-  // Transactions & Entries — stubbed (Track C2)
+  // Transactions & Entries
   // ===========================================================================
 
-  async getTransactions(_entityId: string, _options?: {
+  async getTransactions(entityId: string, options?: {
     accountId?: string; startDate?: string; endDate?: string; limit?: number;
-  }): Promise<Transaction[]> { throw new Error(NOT_IMPLEMENTED); }
-  async getTransaction(_id: string): Promise<Transaction | null> { throw new Error(NOT_IMPLEMENTED); }
-  async createTransaction(_data: TransactionInput, _entries: EntryInput[]): Promise<Transaction> { throw new Error(NOT_IMPLEMENTED); }
-  async updateTransaction(_id: string, _data: Partial<TransactionInput>): Promise<Transaction> { throw new Error(NOT_IMPLEMENTED); }
-  async deleteTransaction(_id: string): Promise<void> { throw new Error(NOT_IMPLEMENTED); }
-  async getEntries(_transactionId: string): Promise<Entry[]> { throw new Error(NOT_IMPLEMENTED); }
-  async getEntriesForAccount(_accountId: string, _options?: {
+  }): Promise<Transaction[]> {
+    let sql = 'SELECT DISTINCT t.id, t.entity_id, t.date, t.memo, t.reference, t.created_at, t.updated_at FROM txn t';
+    const params: SqlValue[] = [entityId];
+    const conds = ['t.entity_id = ?'];
+    if (options?.accountId) { sql += ' JOIN entry e ON e.txn_id = t.id'; conds.push('e.account_id = ?'); params.push(options.accountId); }
+    if (options?.startDate) { conds.push('t.date >= ?'); params.push(options.startDate); }
+    if (options?.endDate) { conds.push('t.date <= ?'); params.push(options.endDate); }
+    sql += ` WHERE ${conds.join(' AND ')} ORDER BY t.date DESC, t.created_at DESC`;
+    if (options?.limit) { sql += ' LIMIT ?'; params.push(options.limit); }
+    const rows = await all<Row>(this.getDb(), sql, params);
+    return rows.map(toTransaction);
+  }
+
+  async getTransaction(id: string): Promise<Transaction | null> {
+    const row = await get<Row>(this.getDb(), 'SELECT * FROM txn WHERE id = ?', [id]);
+    return row ? toTransaction(row) : null;
+  }
+
+  async createTransaction(data: TransactionInput, entries: EntryInput[]): Promise<Transaction> {
+    const total = entries.reduce((sum, e) => sum + e.amount, 0);
+    if (Math.abs(total) > 0.001) throw new Error(`Transaction entries do not balance: ${total}`);
+    const db = this.getDb();
+    const id = uuid();
+    const ts = nowIso();
+    await run(db, 'INSERT INTO txn (id, entity_id, date, memo, reference, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [id, data.entityId, data.date, data.memo ?? null, data.reference ?? null, ts, ts]);
+    for (const e of entries) {
+      await run(db, 'INSERT INTO entry (id, txn_id, account_id, amount, note, tag_id, reconciliation_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [uuid(), id, e.accountId, e.amount, e.note ?? null, e.tagId ?? null, e.reconciliationId ?? null]);
+    }
+    return (await this.getTransaction(id))!;
+  }
+
+  async updateTransaction(id: string, data: Partial<TransactionInput>): Promise<Transaction> {
+    const cols: Record<string, string> = { date: 'date', memo: 'memo', reference: 'reference' };
+    const sets: string[] = [];
+    const vals: SqlValue[] = [];
+    for (const [key, col] of Object.entries(cols)) {
+      if (key in data) { sets.push(`${col} = ?`); vals.push((data as Row)[key] ?? null); }
+    }
+    sets.push('updated_at = ?');
+    vals.push(nowIso(), id);
+    await run(this.getDb(), `UPDATE txn SET ${sets.join(', ')} WHERE id = ?`, vals);
+    return (await this.getTransaction(id))!;
+  }
+
+  async deleteTransaction(id: string): Promise<void> {
+    // Manual cascade (no ON DELETE CASCADE): entries first, then the transaction.
+    const db = this.getDb();
+    await run(db, 'DELETE FROM entry WHERE txn_id = ?', [id]);
+    await run(db, 'DELETE FROM txn WHERE id = ?', [id]);
+  }
+
+  async getEntries(transactionId: string): Promise<Entry[]> {
+    const rows = await all<Row>(this.getDb(), 'SELECT * FROM entry WHERE txn_id = ?', [transactionId]);
+    return rows.map(toEntry);
+  }
+
+  async getEntriesForAccount(accountId: string, options?: {
     startDate?: string; endDate?: string; unreconciled?: boolean;
-  }): Promise<Entry[]> { throw new Error(NOT_IMPLEMENTED); }
+  }): Promise<Entry[]> {
+    let sql = 'SELECT e.* FROM entry e JOIN txn t ON t.id = e.txn_id WHERE e.account_id = ?';
+    const params: SqlValue[] = [accountId];
+    if (options?.startDate) { sql += ' AND t.date >= ?'; params.push(options.startDate); }
+    if (options?.endDate) { sql += ' AND t.date <= ?'; params.push(options.endDate); }
+    if (options?.unreconciled) { sql += ' AND e.reconciliation_id IS NULL'; }
+    sql += ' ORDER BY t.date';
+    const rows = await all<Row>(this.getDb(), sql, params);
+    return rows.map(toEntry);
+  }
 
   // ===========================================================================
-  // Balances, ledger, search — stubbed (Track C2)
+  // Balances
   // ===========================================================================
 
-  async getAccountBalance(_accountId: string, _asOf?: string): Promise<number> { throw new Error(NOT_IMPLEMENTED); }
-  async getBalanceSheet(_entityId: string, _endDate?: string, _startDate?: string): Promise<BalanceSheetData> { throw new Error(NOT_IMPLEMENTED); }
-  async getLedgerEntries(_accountId: string, _options?: {
+  async getAccountBalance(accountId: string, asOf?: string): Promise<number> {
+    let sql = 'SELECT COALESCE(SUM(e.amount), 0) as balance FROM entry e JOIN txn t ON t.id = e.txn_id WHERE e.account_id = ?';
+    const params: SqlValue[] = [accountId];
+    if (asOf) { sql += ' AND t.date <= ?'; params.push(asOf); }
+    const row = await get<Row>(this.getDb(), sql, params);
+    return row ? Number(row.balance) : 0;
+  }
+
+  // Aggregation done in JS (avoids Quereus GROUP BY quirks).
+  async getBalanceSheet(entityId: string, endDate?: string, startDate?: string): Promise<BalanceSheetData> {
+    const end = endDate || new Date().toISOString().split('T')[0];
+    const db = this.getDb();
+    const accts = await all<Row>(db,
+      `SELECT a.id, a.name, a.code, a.unit, g.id as group_id, g.name as group_name,
+              g.account_type, g.display_order
+       FROM account a JOIN account_group g ON g.id = a.account_group_id
+       WHERE a.entity_id = ? AND a.is_active = 1
+       ORDER BY g.display_order, a.code`, [entityId]);
+    const entries = await all<Row>(db,
+      `SELECT e.account_id, e.amount, t.date
+       FROM entry e JOIN txn t ON t.id = e.txn_id JOIN account a ON a.id = e.account_id
+       WHERE a.entity_id = ? AND t.date <= ?`, [entityId, end]);
+
+    const typeByAccount = new Map<string, string>(accts.map((a) => [a.id, a.account_type]));
+    const balByAccount = new Map<string, number>();
+    for (const e of entries) {
+      const t = typeByAccount.get(e.account_id);
+      // A/L/E: cumulative through end. I/E: whole period through end, or [start,end] if start given.
+      if ((t === 'INCOME' || t === 'EXPENSE') && startDate && !(e.date >= startDate && e.date <= end)) continue;
+      balByAccount.set(e.account_id, (balByAccount.get(e.account_id) ?? 0) + Number(e.amount));
+    }
+
+    const accountBalances: AccountBalance[] = [];
+    const groupTotals = new Map<string, GroupBalance>();
+    let totalAssets = 0, totalLiabilities = 0, totalEquity = 0, totalIncome = 0, totalExpense = 0;
+    for (const a of accts) {
+      const balance = balByAccount.get(a.id) ?? 0;
+      accountBalances.push({
+        accountId: a.id, accountName: a.name, accountCode: a.code ?? undefined,
+        groupId: a.group_id, groupName: a.group_name, accountType: a.account_type, balance, unit: a.unit,
+      });
+      if (!groupTotals.has(a.group_id)) {
+        groupTotals.set(a.group_id, { groupId: a.group_id, groupName: a.group_name, accountType: a.account_type, balance: 0 });
+      }
+      groupTotals.get(a.group_id)!.balance += balance;
+      switch (a.account_type) {
+        case 'ASSET': totalAssets += balance; break;
+        case 'LIABILITY': totalLiabilities += balance; break;
+        case 'EQUITY': totalEquity += balance; break;
+        case 'INCOME': totalIncome += balance; break;
+        case 'EXPENSE': totalExpense += balance; break;
+      }
+    }
+    return {
+      entityId, endDate: end, startDate: startDate || undefined,
+      netWorth: totalAssets + totalLiabilities,
+      totalAssets,
+      totalLiabilities: Math.abs(totalLiabilities),
+      totalEquity: Math.abs(totalEquity),
+      totalIncome: Math.abs(totalIncome),
+      totalExpense,
+      groupBalances: Array.from(groupTotals.values()),
+      accountBalances,
+    };
+  }
+
+  // ===========================================================================
+  // Ledger view
+  // ===========================================================================
+
+  async getLedgerEntries(accountId: string, options?: {
     startDate?: string; endDate?: string; limit?: number; sortOrder?: 'oldest' | 'newest';
-  }): Promise<LedgerEntry[]> { throw new Error(NOT_IMPLEMENTED); }
-  async searchAccounts(_entityId: string, _query: string): Promise<Array<{
+  }): Promise<LedgerEntry[]> {
+    const db = this.getDb();
+    let sql = `SELECT e.id as entry_id, t.id as txn_id, t.date, t.reference, t.memo, e.amount, e.note,
+                      (SELECT count(*) FROM entry WHERE txn_id = t.id) as entry_count
+               FROM entry e JOIN txn t ON t.id = e.txn_id WHERE e.account_id = ?`;
+    const params: SqlValue[] = [accountId];
+    if (options?.startDate) { sql += ' AND t.date >= ?'; params.push(options.startDate); }
+    if (options?.endDate) { sql += ' AND t.date <= ?'; params.push(options.endDate); }
+    sql += (options?.sortOrder === 'newest')
+      ? ' ORDER BY t.date DESC, t.created_at DESC'
+      : ' ORDER BY t.date ASC, t.created_at ASC';
+    if (options?.limit) { sql += ' LIMIT ?'; params.push(options.limit); }
+
+    const rows = await all<Row>(db, sql, params);
+    const result: LedgerEntry[] = [];
+    let running = 0;
+    for (const r of rows) {
+      const amount = Number(r.amount);
+      running += amount;
+      const isSplit = Number(r.entry_count) > 2;
+      const le: LedgerEntry = {
+        entryId: r.entry_id, transactionId: r.txn_id, date: r.date,
+        reference: r.reference ?? undefined, memo: r.memo ?? undefined,
+        accountId, amount, note: r.note ?? undefined, runningBalance: running, isSplit,
+      };
+      if (isSplit) {
+        le.splitEntries = await this.splitsFor(r.txn_id, r.entry_id);
+      } else {
+        const off = await get<Row>(db,
+          `SELECT e.account_id, a.name, g.name as group_name, g.account_type
+           FROM entry e JOIN account a ON a.id = e.account_id JOIN account_group g ON g.id = a.account_group_id
+           WHERE e.txn_id = ? AND e.id != ? LIMIT 1`, [r.txn_id, r.entry_id]);
+        if (off) {
+          le.offsetAccountId = off.account_id;
+          le.offsetAccountName = off.name;
+          le.offsetAccountPath = pathFor(off.account_type, off.group_name, off.name);
+        }
+      }
+      result.push(le);
+    }
+    return result;
+  }
+
+  private async splitsFor(txnId: string, excludeEntryId: string): Promise<SplitEntry[]> {
+    const rows = await all<Row>(this.getDb(),
+      `SELECT e.id, e.account_id, a.name, g.name as group_name, g.account_type, e.amount, e.note
+       FROM entry e JOIN account a ON a.id = e.account_id JOIN account_group g ON g.id = a.account_group_id
+       WHERE e.txn_id = ? AND e.id != ? ORDER BY e.amount DESC`, [txnId, excludeEntryId]);
+    return rows.map((r) => ({
+      entryId: r.id, accountId: r.account_id, accountName: r.name,
+      accountPath: pathFor(r.account_type, r.group_name, r.name),
+      amount: Number(r.amount), note: r.note ?? undefined,
+    }));
+  }
+
+  // ===========================================================================
+  // Search
+  // ===========================================================================
+
+  async searchAccounts(entityId: string, query: string): Promise<Array<{
     id: string; name: string; path: string; code?: string;
-  }>> { throw new Error(NOT_IMPLEMENTED); }
-  async getAllTransactions(): Promise<LedgerEntry[]> { throw new Error(NOT_IMPLEMENTED); }
+  }>> {
+    const q = query.toLowerCase();
+    const rows = await all<Row>(this.getDb(),
+      `SELECT a.id, a.name, a.code, g.name as group_name, g.account_type
+       FROM account a JOIN account_group g ON g.id = a.account_group_id
+       WHERE a.entity_id = ? AND a.is_active = 1
+       ORDER BY g.display_order, a.code, a.name`, [entityId]);
+    const results: Array<{ id: string; name: string; path: string; code?: string }> = [];
+    for (const r of rows) {
+      const path = pathFor(r.account_type, r.group_name, r.name);
+      const code: string | undefined = r.code ?? undefined;
+      if (r.name.toLowerCase().includes(q) || r.group_name.toLowerCase().includes(q) ||
+          path.toLowerCase().includes(q) || (code && code.toLowerCase().includes(q))) {
+        results.push({ id: r.id, name: r.name, path, code });
+      }
+    }
+    results.sort((a, b) => {
+      const ap = a.path.toLowerCase(), bp = b.path.toLowerCase();
+      const an = a.name.toLowerCase(), bn = b.name.toLowerCase();
+      if (an === q) return -1; if (bn === q) return 1;
+      if (ap.startsWith(q) && !bp.startsWith(q)) return -1;
+      if (!ap.startsWith(q) && bp.startsWith(q)) return 1;
+      if (an.startsWith(q) && !bn.startsWith(q)) return -1;
+      if (!an.startsWith(q) && bn.startsWith(q)) return 1;
+      return 0;
+    });
+    return results;
+  }
+
+  async getAllTransactions(): Promise<LedgerEntry[]> {
+    const db = this.getDb();
+    const rows = await all<Row>(db,
+      `SELECT e.id as entry_id, t.id as txn_id, t.date, t.reference, t.memo, e.account_id, e.amount, e.note,
+              a.name as account_name, a.entity_id, en.name as entity_name, g.name as group_name, g.account_type,
+              (SELECT count(*) FROM entry WHERE txn_id = t.id) as entry_count
+       FROM entry e
+       JOIN txn t ON t.id = e.txn_id
+       JOIN account a ON a.id = e.account_id
+       JOIN entity en ON en.id = a.entity_id
+       JOIN account_group g ON g.id = a.account_group_id
+       ORDER BY t.date DESC, t.created_at DESC, e.id ASC`);
+    const result: LedgerEntry[] = [];
+    const processedTxns = new Set<string>();
+    for (const r of rows) {
+      const isSplit = Number(r.entry_count) > 2;
+      const le = {
+        entryId: r.entry_id, transactionId: r.txn_id, date: r.date,
+        reference: r.reference ?? undefined, memo: r.memo ?? undefined,
+        accountId: r.account_id, amount: Number(r.amount), note: r.note ?? undefined,
+        runningBalance: 0, isSplit,
+      } as LedgerEntry & { entityId?: string; entityName?: string; accountName?: string; accountPath?: string };
+
+      if (!processedTxns.has(r.txn_id)) {
+        processedTxns.add(r.txn_id);
+        if (isSplit) {
+          le.splitEntries = await this.splitsFor(r.txn_id, r.entry_id);
+        } else {
+          const off = await get<Row>(db,
+            `SELECT e.account_id, a.name, g.name as group_name, g.account_type
+             FROM entry e JOIN account a ON a.id = e.account_id JOIN account_group g ON g.id = a.account_group_id
+             WHERE e.txn_id = ? AND e.id != ? LIMIT 1`, [r.txn_id, r.entry_id]);
+          if (off) {
+            le.offsetAccountId = off.account_id;
+            le.offsetAccountName = off.name;
+            le.offsetAccountPath = pathFor(off.account_type, off.group_name, off.name);
+          }
+        }
+      }
+      le.entityId = r.entity_id;
+      le.entityName = r.entity_name;
+      le.accountName = r.account_name;
+      le.accountPath = pathFor(r.account_type, r.group_name, r.account_name);
+      result.push(le);
+    }
+    return result;
+  }
 }
 
 // Export singleton

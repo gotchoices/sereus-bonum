@@ -124,7 +124,7 @@ Tracked in detail in [`design/stories/web/STATUS.md`](../design/stories/web/STAT
   quereus-p2p`, exposing `USE_QUEREUS` (mock vs real DB) and `USE_OPTIMYSTIC` (local vs distributed).
   Higher-level code checks only `USE_QUEREUS`.
 - **Spec:** `design/specs/web/global/data-backend.md` documents modes, packages, and status.
-### 🔄 Track C — Quereus backend
+### 🔄 Track C — Quereus backend (C1+C2 done; C3 = p2p remaining)
 
 **C1 (done, RUNTIME-verified):** quereus-local works end-to-end.
 - Canonical executable schema: `design/specs/domain/schema.qsql` (Quereus `create table` DDL,
@@ -135,8 +135,8 @@ Tracked in detail in [`design/stories/web/STATUS.md`](../design/stories/web/STAT
   `eval`/`exec` with `SqlValue[]` params.
 - `production/seed.ts` — seeds base units + the account-group catalog on fresh DB (reuses the mock's
   data arrays). Demo entities/accounts/txns → C2.
-- `production/service.ts` — **entities, units, account groups** (full CRUD) implemented; accounts,
-  transactions/entries, balances, ledger, search are typed stubs.
+- `production/service.ts` — **entities, units, account groups** (full CRUD) implemented at C1;
+  accounts, transactions/entries, balances, ledger, search were typed stubs (done in C2 below).
 - **Runtime-verified via Playwright** (`apps/web/scripts/shot.mjs`, headless Chromium screenshot +
   console capture): with `VITE_BACKEND=quereus-local`, the app initializes the DB, applies schema,
   seeds, and the **Catalog renders the 40 seeded account groups** with correct hierarchy — proving
@@ -148,9 +148,21 @@ Tracked in detail in [`design/stories/web/STATUS.md`](../design/stories/web/STAT
 - **Reusable harness:** `scripts/shot.mjs` (+ `playwright` devDep, Chromium installed) — the
   screenshot/console loop for verifying UI and backend behavior from here on.
 
-**C2 (next):** implement the remaining DataService methods (accounts, transactions/entries with the
-zero-sum balance rule, balance sheet, ledger, search) against Quereus SQL, plus fresh-DB **seeding**
-(base units + account-group catalog). Best done after runtime verification is set up.
+**C2 (done, RUNTIME-verified):** the full DataService is implemented against Quereus SQL, so
+**quereus-local now runs every implemented screen**.
+- `production/service.ts` — accounts, transactions/entries (createTransaction enforces the zero-sum
+  rule), balances, ledger, and search all implemented. `getBalanceSheet` aggregates **in JS** to avoid
+  Quereus's GROUP-BY "duplicate-id-in-scope" quirk; ledger/search use scalar subqueries (the safe form).
+- `production/seed.ts` — now also seeds the two demo entities + their accounts, and (when `DEBUG_DATA`)
+  the demo transactions. Reuses the mock's exported data arrays (no drift).
+- **Verified via Playwright screenshots** with `VITE_BACKEND=quereus-local VITE_DEBUG_DATA=true`:
+  - Home lists both entities; accounts view renders the **Balance Sheet, balanced** (Assets
+    $524,375 = Liab + Equity $524,375 ✓) with Retained Earnings broken out.
+  - Ledger shows running balance, resolved offset accounts, and split detection.
+  - Search "Show All" returns 29 cross-entity transactions with splits, **Totals balanced**.
+- `yarn check` 0 errors, `yarn build` succeeds.
+- Note: mock (`sql.js`) remains the default backend (`VITE_BACKEND` unset → `mock`); quereus-local is
+  opt-in via env. Both share the same schema + seed data.
 
 **C3 (later):** `quereus-p2p` — Optimystic + CadreNode + libp2p peer deps.
 
