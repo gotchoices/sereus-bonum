@@ -8,7 +8,7 @@
 
 ## Purpose
 
-Hierarchical tree selector for choosing account groups from the shared taxonomy (see [Account Groups](../global/account-groups.md)).
+Hierarchical tree selector for choosing account groups from the shared taxonomy (see [Account Groups](../../domain/account-groups.md)).
 
 ---
 
@@ -38,7 +38,7 @@ Hierarchical tree selector for choosing account groups from the shared taxonomy 
 
 ## References
 
-- Account Groups structure: [global/account-groups.md](../global/account-groups.md)
+- Account Groups structure: [domain/account-groups.md](../../domain/account-groups.md)
 - Used in: [Import Screen](../screens/import.md)
 - Used in: [Catalog Screen](../screens/catalog.md)
 

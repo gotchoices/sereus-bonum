@@ -99,15 +99,15 @@ Sereus Fabric — a peer-to-peer network for secure, distributed data. Data is r
 
 **What will be shared across targets?**
 
-- [x] Schema (data model) — `design/specs/schema/`
-- [x] API specs — `design/specs/api/`
+- [x] Domain contract (schema, account groups, rules, interfaces) — `design/specs/domain/`
 - [x] TypeScript types — `packages/shared/`
 - [x] Mock data — `mock/data/`
 
 ## Notes
 
 - Built on Sereus Fabric — see [Vision](../../docs/Vision.md) for philosophy
-- Full data model documented in [Schema](../../docs/Schema.md)
+- Data model objectives in [docs/Schema.md](../../docs/Schema.md); authoritative field-level
+  contract in [domain/schema.md](./domain/schema.md)
 - Multi-currency/inventory model in [Units-and-Exchange](../../docs/Units-and-Exchange.md)
 - Schema decisions tracked in [STATUS](../../docs/STATUS.md)
 

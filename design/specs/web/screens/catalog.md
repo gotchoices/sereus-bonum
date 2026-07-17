@@ -7,7 +7,7 @@
 
 ## Purpose
 
-Manage the shared classification structure for organizing accounts (see [Account Groups](../global/account-groups.md)).
+Manage the shared classification structure for organizing accounts (see [Account Groups](../../domain/account-groups.md)).
 
 **Note:** This is the taxonomy/template itself, not the Accounts View (which shows entity accounts with balances).
 
@@ -118,7 +118,7 @@ Manage the shared classification structure for organizing accounts (see [Account
   No asset groups yet. Create one to get started.
 ```
 
-**Fresh install:** System seeds with standard groups (see [Account Groups](../global/account-groups.md#initial-seed-groups))
+**Fresh install:** System seeds with standard groups (see [Account Groups](../../domain/account-groups.md#initial-seed-groups))
 
 ---
 
@@ -143,7 +143,7 @@ Right-click any group:
 
 ## References
 
-- Account Groups structure: [global/account-groups.md](../global/account-groups.md)
-- Schema: [AccountGroup](../../../docs/schema.md#accountgroup)
+- Account Groups structure: [domain/account-groups.md](../../domain/account-groups.md)
+- Schema: [AccountGroup](../../domain/schema.md#accountgroup)
 
 ---

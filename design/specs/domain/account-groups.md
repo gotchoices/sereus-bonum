@@ -122,8 +122,8 @@ Expenses (top-level, type: EXPENSE)
 
 ## References
 
-- Schema: [AccountGroup](../../../docs/schema.md#accountgroup)
-- UI: [Catalog Screen](../screens/catalog.md)
+- Schema: [AccountGroup](./schema.md#accountgroup)
+- UI: [Catalog Screen](../web/screens/catalog.md)
 
 ---
 

@@ -29,8 +29,61 @@ To enable the test data generator:
   - Wait for quereus backend to be ready/feasible (at least with local cadre)
   - Hand-review/edit all specs
   - Import sequence needs its own clear set of specs, like its own app almost
-  - docs/schema file should probably go under design somewhere
+  - ✅ docs/schema file should probably go under design somewhere — done (see review below)
   - Is there a persistent place we can save account mapping info from past imports?
+
+---
+
+## Spec Reorganization — July 2026 Review
+
+Full review of stories + specs against current appeus guidance (domain-folder convention, which
+bonum predated). This section is the running todo for the cleanup.
+
+### ✅ Done (this pass)
+- **Domain folder created** (`design/specs/domain/`) with `index.md` + `AGENTS.md` symlink.
+- **Schema extracted** to `domain/schema.md` (the authoritative field-level contract). `docs/Schema.md`
+  slimmed to objectives/strategy only and points to the domain spec (docs = *why*, domain = *what*).
+- **`account-groups.md` moved** `web/global/` → `domain/`; all references repointed (catalog,
+  account-group-tree-selector, import).
+- **Stale template folders removed:** `specs/schema/` and `specs/api/` (were unedited Item/User /
+  procedure-template placeholders). `project.md` "Shared Resources" updated to point at `domain/`.
+- **i18n de-duped:** deleted floating `specs/i18n.md`; folded shared principles into
+  `web/global/i18n.md`.
+- **Stories:** `stories/web/STATUS.md` rewritten as a current index (01–07) with a tracked-gaps
+  section; fixed story 07's broken `ai-wizard.md` → `ai-assistant.md` reference.
+
+### ⬜ Domain migration — remaining (slice 2)
+Move the rest of the cross-target concerns out of `web/global/` and keep them lean (push
+env/config/code detail to generated consolidations):
+- ⬜ `web/global/backend.md` → `domain/interfaces.md` — storage & sync model; strip `BACKEND_MODE` /
+  `DEBUG_DATA` env-var detail. Also fix its "Source of Truth: docs/Schema.md" → `domain/schema.md`.
+- ⬜ `web/global/import.md` → `domain/import.md` — keep format matrix, type mapping, dedup rules;
+  drop the module-architecture sentence; leave web entry-points in `web/screens/import.md`.
+- ⬜ `web/global/export.md` → `domain/export.md` — formats, layout, amount rules.
+- ⬜ `docs/Units-and-Exchange.md` → extract the concrete unit/exchange tactics to `domain/units.md`;
+  keep high-level rationale in docs (same docs-vs-domain split as schema).
+- ⬜ `domain/rules.md` — capture double-entry invariants, the Imbalance account, and period-close
+  rules that are currently only implicit in schema + stories.
+
+### ⬜ Spec integrity fixes (independent of domain move)
+- ⬜ `web/navigation.md` is still an **unedited template** (ItemList / UserProfile / `myapp://`).
+  Rewrite for the real screens (Home, Catalog, Entity Accounts, Ledger, Search, Import, Settings) or
+  defer to `design/generated/web/navigation.md`.
+- ⬜ `web/components/index.md` lists `TransactionResultsTable → transaction-results-table.md`, but
+  that spec file **doesn't exist**. Create it or remove the row.
+- ⬜ `web/screens/index.md`: "Entity Accounts" lists spec file as `(entity-accounts)` but the real
+  file is `accounts-view.md`; `saved-reports-ux.md` exists but isn't listed. Reconcile.
+- ⬜ Strip leftover template "Instructions" boilerplate from `web/screens/index.md` and
+  `web/components/index.md`.
+- ⬜ Mobile specs are pure template stubs (Item/User). Label clearly as "not started" so they don't
+  read as real-but-empty (project is web-focused for now).
+
+### ⬜ Stories gaps
+Tracked in detail in [`design/stories/web/STATUS.md`](../design/stories/web/STATUS.md) → "Known Gaps":
+acceptance criteria missing in 01–03; no happy/empty/error variants or error paths; missing stories
+for multi-currency/units, multi-user/Sereus sharing, and tags.
+
+---
 
 ## Current Sprint (Active Development)
 

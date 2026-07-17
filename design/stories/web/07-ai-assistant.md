@@ -65,6 +65,6 @@ Alternative Path D: Refining the Setup
 ## Notes
 - See `docs/STATUS.md` → "AI-Assisted Features" section for implementation phasing
 - Related specs:
-  - `design/specs/web/components/ai-wizard.md` (Component spec)
+  - `design/specs/web/components/ai-assistant.md` (Component spec)
 - Integration: Vercel AI SDK (`ai` npm package)
 - Advanced features (voice, OCR, custom reports) are documented in STATUS.md as Phase 6

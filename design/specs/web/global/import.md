@@ -44,7 +44,7 @@ There will be a module specific to each import type (gnucash, QB, etc) with all 
 
 ### Books: Type Mapping
 
-Source account types mapped to [Bonum groups](./account-groups.md):
+Source account types mapped to [Bonum groups](../../domain/account-groups.md):
 
 | Source Type (GnuCash/QB) | Bonum Type | Account Group Examples |
 |--------------------------|------------|------------------------|

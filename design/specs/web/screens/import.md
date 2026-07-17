@@ -56,7 +56,7 @@ Entry point for importing data into Bonum - either creating new entities from ex
 - **Columns shown:**
   - Source account path (from import file)
   - Transaction Count: how many transactions directly in this account (-, N/A, or similar for explicit placeholder accounts).  Right justified.
-  - Proposed Target Group: Full account group path (hierarchical, see [Catalog](../screens/catalog.md) and [Schema](../../../docs/schema.md#accountgroup))
+  - Proposed Target Group: Full account group path (hierarchical, see [Catalog](../screens/catalog.md) and [Schema](../../domain/schema.md#accountgroup))
   - Proposed Target Account: Entity-specific account path only (excluding group components)
   - Resolution status with visual indicator (non-interactive)
 - **Excluded Accounts:**
