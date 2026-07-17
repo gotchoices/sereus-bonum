@@ -115,7 +115,7 @@ Import executes as single database transaction:
 
 ## References
 
-- Detailed import behaviors: `global/import.md`
-- User story: `stories/web/02-gnucash.md`
+- Detailed import behaviors: [domain/import.md](../../domain/import.md)
+- User story: [stories/web/02-gnucash.md](../../../stories/web/02-gnucash.md)
 
 ---

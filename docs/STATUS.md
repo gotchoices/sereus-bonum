@@ -39,7 +39,7 @@ To enable the test data generator:
 Full review of stories + specs against current appeus guidance (domain-folder convention, which
 bonum predated). This section is the running todo for the cleanup.
 
-### ✅ Done (this pass)
+### ✅ Done — Slice 1 (domain folder + schema)
 - **Domain folder created** (`design/specs/domain/`) with `index.md` + `AGENTS.md` symlink.
 - **Schema extracted** to `domain/schema.md` (the authoritative field-level contract). `docs/Schema.md`
   slimmed to objectives/strategy only and points to the domain spec (docs = *why*, domain = *what*).
@@ -52,18 +52,22 @@ bonum predated). This section is the running todo for the cleanup.
 - **Stories:** `stories/web/STATUS.md` rewritten as a current index (01–07) with a tracked-gaps
   section; fixed story 07's broken `ai-wizard.md` → `ai-assistant.md` reference.
 
-### ⬜ Domain migration — remaining (slice 2)
-Move the rest of the cross-target concerns out of `web/global/` and keep them lean (push
-env/config/code detail to generated consolidations):
-- ⬜ `web/global/backend.md` → `domain/interfaces.md` — storage & sync model; strip `BACKEND_MODE` /
-  `DEBUG_DATA` env-var detail. Also fix its "Source of Truth: docs/Schema.md" → `domain/schema.md`.
-- ⬜ `web/global/import.md` → `domain/import.md` — keep format matrix, type mapping, dedup rules;
-  drop the module-architecture sentence; leave web entry-points in `web/screens/import.md`.
-- ⬜ `web/global/export.md` → `domain/export.md` — formats, layout, amount rules.
-- ⬜ `docs/Units-and-Exchange.md` → extract the concrete unit/exchange tactics to `domain/units.md`;
-  keep high-level rationale in docs (same docs-vs-domain split as schema).
-- ⬜ `domain/rules.md` — capture double-entry invariants, the Imbalance account, and period-close
-  rules that are currently only implicit in schema + stories.
+### ✅ Done — Slice 2 (remaining domain migration)
+The rest of the cross-target concerns are out of `web/global/` and trimmed to lean, outcome-based
+contracts (code/config detail deferred to generated consolidations):
+- ✅ `web/global/backend.md` → **`domain/interfaces.md`** — storage & sync model; env-var mechanics
+  dropped; schema pointer fixed to `domain/schema.md`; added selective-sharing section.
+- ✅ `web/global/import.md` → **`domain/import.md`** — format matrix, type mapping, dedup rules kept;
+  module-architecture sentence dropped; web entry-points stay in `web/screens/import.md`.
+- ✅ `web/global/export.md` → **`domain/export.md`** — format contract; refs repointed (search,
+  saved-reports).
+- ✅ `docs/Units-and-Exchange.md` split: concrete tactics → **`domain/units.md`** (balancing,
+  rendering, costing); docs slimmed to rationale/objectives. `domain/schema.md` unit/exchange
+  pointers repointed to `domain/units.md`.
+- ✅ **`domain/rules.md`** created — double-entry integrity, imbalance account, closed periods,
+  reconciliation invariants, audit trail.
+- Result: `web/global/` now holds only view/target-specific specs (navigation, ui, toolchain, i18n,
+  view-state). See `design/specs/domain/index.md` for the full contract map.
 
 ### ⬜ Spec integrity fixes (independent of domain move)
 - ⬜ `web/navigation.md` is still an **unedited template** (ItemList / UserProfile / `myapp://`).

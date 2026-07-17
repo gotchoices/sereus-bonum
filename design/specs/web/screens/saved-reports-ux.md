@@ -247,7 +247,7 @@ When checked, inserts variance columns between data columns:
 **Export:**
 - All columns export to separate spreadsheet columns
 - Variance columns included if shown
-- See [Export Spec](../global/export.md) for details
+- See [Export Spec](../../domain/export.md) for details
 
 ## 3. Persistence
 

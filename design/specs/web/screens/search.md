@@ -132,7 +132,7 @@ Date,Entity,Memo,Reference,Account,Debit,Credit,Note
 ,,,,Balanced,,,
 ```
 
-**See also:** [Export Specification](../global/export.md) for detailed format rules.
+**See also:** [Export Specification](../../domain/export.md) for detailed format rules.
 
 ### Navigation Links
 

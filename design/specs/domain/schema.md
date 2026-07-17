@@ -268,7 +268,7 @@ A unit of measure for account balances. Can represent currencies, inventory item
 **Note:** All amounts are stored as integers in the smallest unit. Divide by `displayDivisor` for
 display. Examples: USD uses 100 (cents → dollars), labor-minutes uses 60 (minutes → hours).
 
-See [docs/Units-and-Exchange.md](../../../docs/Units-and-Exchange.md) for the full model.
+See [units.md](./units.md) for the full model (rationale in docs/Units-and-Exchange.md).
 
 ---
 
@@ -291,8 +291,7 @@ standalone (reference rate).
 
 **Interpretation:** `1 unitA = (rateNumerator / rateDenominator) unitB`
 
-See [docs/Units-and-Exchange.md](../../../docs/Units-and-Exchange.md) for balancing algorithm and
-usage.
+See [units.md](./units.md) for the balancing algorithm and usage.
 
 ---
 

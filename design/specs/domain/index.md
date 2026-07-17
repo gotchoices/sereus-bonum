@@ -14,16 +14,20 @@ topic appears in both, docs stays narrative and links here for the specifics.
 |------|------|----------------|
 | Schema | [schema.md](./schema.md) | Entities, fields, relationships, invariants (the data model) |
 | Account groups | [account-groups.md](./account-groups.md) | Shared account taxonomy: 5 types, seed hierarchy, rules |
+| Rules | [rules.md](./rules.md) | Double-entry integrity, imbalance account, closed periods, reconciliation, audit trail |
+| Units & exchange | [units.md](./units.md) | Multi-unit balancing, rendering in a chosen unit, costing policy |
+| Interfaces | [interfaces.md](./interfaces.md) | Storage & sync model (mock ↔ Sereus/Quereus), selective sharing |
+| Import | [import.md](./import.md) | Formats accepted, source→Bonum type mapping, duplicate handling |
+| Export | [export.md](./export.md) | Export formats, layout, amount formatting |
 
-## Planned (migration in progress)
+## What stays per-target (not domain)
 
-These concerns are currently under `design/specs/web/global/` and should move here (they transcend
-web/mobile). Tracked in `docs/STATUS.md`:
+These are view/target-specific and remain under `design/specs/web/`:
 
-| Area | Current location | Target |
-|------|------------------|--------|
-| Storage & sync | `web/global/backend.md` | `domain/interfaces.md` (strip env-var/config detail) |
-| Import contract | `web/global/import.md` | `domain/import.md` (format matrix, type mapping, dedup rules) |
-| Export contract | `web/global/export.md` | `domain/export.md` (formats, layout, amount rules) |
-| Units & exchange | `docs/Units-and-Exchange.md` | `domain/units.md` (concrete unit/exchange tactics; keep rationale in docs) |
-| Balancing rules | (implicit in schema + stories) | `domain/rules.md` (double-entry invariants, imbalance account, period close) |
+- `web/global/navigation.md`, `web/global/ui.md`, `web/global/toolchain.md` — web presentation & tooling
+- `web/global/i18n.md` — web i18n wiring (shared principles inlined)
+- `web/global/view-state.md` — browser-local view persistence
+- `web/screens/*`, `web/components/*` — screens and components
+
+The per-target import **wizard UI** lives in `web/screens/import.md`; its shared behavior (formats,
+mapping, dedup) is here in [import.md](./import.md).

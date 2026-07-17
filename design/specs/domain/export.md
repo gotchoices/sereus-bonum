@@ -1,8 +1,13 @@
-# Spec: Data Export
+# Export Contract
+
+The shared rules for exporting financial data to external programs — formats, layout, and amount
+formatting. Applies to every target; screens that show data (Search, Ledger, reports) offer export
+using these rules.
 
 ## Purpose
 
-Users need to export financial data (transactions, reports) to external programs for analysis, backup, or sharing with accountants/partners.
+Users need to export financial data (transactions, reports) to external programs for analysis,
+backup, or sharing with accountants/partners.
 
 ## Supported Formats
 
