@@ -28,10 +28,9 @@ Findings from the July 2026 review, with current status.
 1. ✅ **Acceptance criteria filled for stories 01–03** (a few basics each, harmonious with the
    narrative). 04–07 already had them.
 2. **Keep this index in sync.** Any new/renamed story must be reflected in the table above.
-3. 🔄 **Variants / error coverage — template established.** Stories 01–03 and 08–10 carry a
-   `happy / empty / error` Variants section demonstrating how errors read (user-observable outcomes,
-   not exhaustive). The **sync-conflict** path now lives in story 10. Remaining to extend the same
-   pattern: **04, 06, 07** (05 already narrates mismatch paths).
+3. ✅ **Variants / error coverage complete.** Every web story (01–11) now carries a
+   `happy / empty / error` Variants section with user-observable outcomes (not exhaustive). Story 05
+   narrates its mismatch paths inline; the sync-conflict path lives in story 10.
 4. **Missing capability stories:**
    - ✅ **Multi-currency / units / exchange** — story 08 (to the many-units limit: CHIPs/Taleus/Sereus).
    - ✅ **AI capture & import** — story 09 (receipts/bills + arbitrary-source import).

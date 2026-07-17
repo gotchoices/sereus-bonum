@@ -75,3 +75,8 @@ Alternative Path G: Recalling Saved Reports
 - [ ] Print/PDF renders a clean, printable document
 - [ ] Saved reports persist across sessions
 - [ ] Reports update in real-time as underlying data changes
+
+## Variants
+- **happy:** Each mode renders with balances, and the verification line reads "Assets = Liabilities + Equity ✓".
+- **empty:** A brand-new entity with no transactions still renders a valid report — all lines zero and the verification line balances at $0 = $0 — rather than a blank screen.
+- **error:** If the books don't balance, the verification line shows the imbalance (⚠ with the amount) instead of ✓. A period-based mode (Income Statement, Cash Flow) with no date range prompts for one rather than showing misleading totals.

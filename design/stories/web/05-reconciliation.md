@@ -75,3 +75,8 @@ Alternative Path E: First-Time Reconciliation
 - [ ] Reconciliation history shows past statements with dates and balances
 - [ ] PDF statements can be attached to reconciliation records
 
+## Variants
+- **happy:** The statement and calculated balances match; Finalize marks the checked entries reconciled.
+- **empty:** An account with no unreconciled entries (or a first-time reconciliation after import) opens cleanly — the user checks what has cleared to bring the account current.
+- **error:** When balances don't match, Finalize stays disabled and the difference is shown, so an uncleared check or a missing fee is found rather than force-closed.
+

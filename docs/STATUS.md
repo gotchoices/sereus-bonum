@@ -102,7 +102,8 @@ Tracked in detail in [`design/stories/web/STATUS.md`](../design/stories/web/STAT
 - ✅ Variant/error template established (01–03, 08, 09); extend to 04, 06, 07.
 - ✅ Added stories 08 (Multiple Units of Account), 09 (AI-Assisted Capture & Import),
   10 (Sharing & Multi-User Books), and 11 (Tagging Entries). All capability gaps now covered.
-- ⬜ Remaining: extend the happy/empty/error variant pattern to stories 04, 06, 07.
+- ✅ Variants (happy/empty/error) present on every web story (01–11).
+- Stories are complete and consistent — no remaining known gaps.
 
 ---
 

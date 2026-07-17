@@ -62,6 +62,11 @@ Alternative Path D: Refining the Setup
 - [ ] AI maintains context throughout the conversation (remembers previous questions)
 - [ ] AI provides helpful suggestions based on user's current screen/context
 
+## Variants
+- **happy:** A multi-turn conversation guides the user through setup, and proposed changes are applied only after the user approves them.
+- **empty:** With no AI provider or API key configured yet, the assistant opens but explains it needs a provider and points the user to Settings to add one — the rest of the app is unaffected.
+- **error:** If the provider fails (network, invalid key, rate limit), the assistant shows a clear message and preserves the conversation so the user can retry. Nothing is written to the books on a failed or low-confidence response.
+
 ## Notes
 - See `docs/STATUS.md` → "AI-Assisted Features" section for implementation phasing
 - Related specs:

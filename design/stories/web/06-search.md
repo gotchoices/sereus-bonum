@@ -83,3 +83,8 @@ Alternative Path D: Deleting Saved Search
 - [ ] Search preview shows human-readable query before running
 - [ ] At least 100 transaction results can be displayed efficiently (pagination or virtual scroll)
 
+## Variants
+- **happy:** A valid search returns matching transactions across entities with debit/credit totals that balance.
+- **empty:** No saved searches yet shows an inviting "create a search" state; a search that matches nothing shows a clear "no results" message, not an empty grid.
+- **error:** An invalid criterion (e.g. a malformed regular expression or a non-numeric amount) is flagged before the search runs; if matching results don't balance, the totals line shows the imbalance warning rather than a false ✓.
+
