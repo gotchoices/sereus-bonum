@@ -38,6 +38,7 @@
     "@sveltejs/vite-plugin-svelte": "^4.0.0",
     "@types/pako": "^2.0.4",
     "@types/sql.js": "^1.4.9",
+    "playwright": "^1.61.1",
     "svelte": "^5.0.0",
     "svelte-check": "^4.0.0",
     "typescript": "^5.0.0",

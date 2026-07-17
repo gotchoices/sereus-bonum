@@ -41,10 +41,16 @@ async function initLocal(): Promise<Database> {
     moduleName: 'store',
   });
 
+  // Tables bind to the registered store module.
+  await database.exec("pragma default_vtab_module = 'store'");
   if (!(await schemaExists(database))) {
     log.data.info('[Quereus] Applying schema...');
-    await database.exec("pragma default_vtab_module = 'store'");
-    await database.exec(SCHEMA_QSQL);
+    for (const stmt of splitStatements(SCHEMA_QSQL)) {
+      await database.exec(stmt);
+    }
+    const { seedQuereus } = await import('./seed');
+    await seedQuereus(database);
+    log.data.info('[Quereus] Seeded base units + account groups');
   }
 
   log.data.info('[Quereus] Local backend ready');
@@ -56,6 +62,14 @@ async function initOptimystic(): Promise<Database> {
   // strand's Quereus Database through @optimystic/quereus-plugin-optimystic. Requires the
   // libp2p peer deps (see data-backend.md). Deferred to the distributed slice.
   throw new Error('quereus-p2p backend not yet implemented (see data-backend.md)');
+}
+
+// Split a .qsql file into individual statements: strip `--` comment lines, split on `;`.
+// (Our DDL contains no semicolons inside literals, so this is safe.)
+function splitStatements(sql: string): string[] {
+  return sql
+    .split('\n').filter((l) => !l.trim().startsWith('--')).join('\n')
+    .split(';').map((s) => s.trim()).filter((s) => s.length > 0);
 }
 
 async function schemaExists(database: Database): Promise<boolean> {

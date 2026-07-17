@@ -126,20 +126,27 @@ Tracked in detail in [`design/stories/web/STATUS.md`](../design/stories/web/STAT
 - **Spec:** `design/specs/web/global/data-backend.md` documents modes, packages, and status.
 ### 🔄 Track C — Quereus backend
 
-**C1 (done, build-verified):** the quereus-local plumbing is in place.
-- Canonical executable schema authored: `design/specs/domain/schema.qsql` (Quereus declarative
-  DDL, mirrored app-side in `apps/web/src/lib/data/production/schema.qsql`). Listed in domain index.
-- `production/db.ts` — connection singleton: `new Database()` + `registerPlugin(@quereus/plugin-indexeddb)`
-  + apply schema on fresh DB; `USE_OPTIMYSTIC` branches to a p2p stub (throws, pending Mode C).
-  Query helpers `all/get/run` over `eval`/`exec` with `SqlValue[]` params.
-- `production/service.ts` — implemented **entities, units, account groups** (full CRUD) as the proof
-  vertical; accounts, transactions/entries, balances, ledger, search remain typed stubs.
-- `yarn check` 0 errors, `yarn build` succeeds — the `?raw` schema import, the plugin subpath, and
-  `@quereus/quereus` all resolve and bundle.
-- ⚠️ **Not runtime-verified.** IndexedDB needs a browser; I can't run it in Node. Verifying that the
-  schema executes and CRUD works needs the Playwright harness (offered) or a manual `VITE_BACKEND=quereus-local`
-  test in Chrome. Also unverified: exact Quereus `eval(sql, params)` behavior and the indexeddb plugin
-  config shape (`databaseName`/`moduleName`) on the 4.3.2 line.
+**C1 (done, RUNTIME-verified):** quereus-local works end-to-end.
+- Canonical executable schema: `design/specs/domain/schema.qsql` (Quereus `create table` DDL,
+  mirrored app-side in `apps/web/src/lib/data/production/schema.qsql`). Listed in the domain index.
+- `production/db.ts` — connection singleton: `new Database()` + `registerPlugin(@quereus/plugin-indexeddb,
+  {databaseName,moduleName})` + `pragma default_vtab_module='store'` + apply schema (statement-split)
+  on fresh DB, then seed. `USE_OPTIMYSTIC` branches to a p2p stub. Helpers `all/get/run` over
+  `eval`/`exec` with `SqlValue[]` params.
+- `production/seed.ts` — seeds base units + the account-group catalog on fresh DB (reuses the mock's
+  data arrays). Demo entities/accounts/txns → C2.
+- `production/service.ts` — **entities, units, account groups** (full CRUD) implemented; accounts,
+  transactions/entries, balances, ledger, search are typed stubs.
+- **Runtime-verified via Playwright** (`apps/web/scripts/shot.mjs`, headless Chromium screenshot +
+  console capture): with `VITE_BACKEND=quereus-local`, the app initializes the DB, applies schema,
+  seeds, and the **Catalog renders the 40 seeded account groups** with correct hierarchy — proving
+  init → schema → INSERT (FK-ordered) → SELECT → render.
+- **Key finding:** `exec("declare schema main {…}")` silently creates **no tables** on a plain
+  `Database` (that form is for StrandDatabase; health's leveldb path is effectively untested since it
+  defaults to optimystic). The working form is individual `create table … ` statements with
+  `default_vtab_module='store'`. `yarn check` 0 errors, `yarn build` succeeds.
+- **Reusable harness:** `scripts/shot.mjs` (+ `playwright` devDep, Chromium installed) — the
+  screenshot/console loop for verifying UI and backend behavior from here on.
 
 **C2 (next):** implement the remaining DataService methods (accounts, transactions/entries with the
 zero-sum balance rule, balance sheet, ledger, search) against Quereus SQL, plus fresh-DB **seeding**

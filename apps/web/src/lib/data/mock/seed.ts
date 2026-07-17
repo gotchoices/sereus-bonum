@@ -10,7 +10,7 @@ const NOW = new Date().toISOString();
 // Standard Units
 // =============================================================================
 
-const UNITS = [
+export const UNITS = [
   { code: 'USD', name: 'US Dollar', symbol: '$', unitType: 'FIAT', displayDivisor: 100 },
   { code: 'EUR', name: 'Euro', symbol: '€', unitType: 'FIAT', displayDivisor: 100 },
 ];
@@ -22,7 +22,7 @@ const UNITS = [
 // Hierarchical account groups
 // parentId creates nesting: parent groups contain child groups
 // Structure matches specs/web/global/account-groups.md
-const ACCOUNT_GROUPS = [
+export const ACCOUNT_GROUPS = [
   // =========== ASSETS (top-level + children) ===========
   { id: 'grp-assets', name: 'Assets', accountType: 'ASSET', parentId: null, displayOrder: 1 },
   

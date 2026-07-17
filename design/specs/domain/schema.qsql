@@ -1,153 +1,146 @@
--- Bonum Canonical Schema (Quereus Declarative Schema)
+-- Bonum Canonical Schema (Quereus SQL)
 -- Authoritative executable schema for all targets/backends.
 -- Human-readable field documentation: schema.md (this file is the executable form).
 --
 -- Notes:
 --   * Amounts are integers in the smallest unit (see units.md).
+--   * Tables are backed by a Quereus vtable module (the app sets
+--     `pragma default_vtab_module = 'store'` before applying, so plain
+--     `create table` binds to the active store — IndexedDB for the web).
 --   * Quereus does not enforce ON DELETE CASCADE — deletes that must cascade
 --     (e.g. removing a transaction's entries) are ordered explicitly in the data
 --     service. See rules.md for the invariants.
 --   * Entry.amount: positive = debit, negative = credit; a transaction's entries
 --     sum to zero (multi-unit balancing via exchange, see units.md).
 
-declare schema main {
-  table unit (
-    code text primary key,
-    name text,
-    symbol text null,
-    unit_type text,
-    display_divisor integer default 100,
-    constraint chk_unit_type check (unit_type in ('FIAT','CRYPTO','COMMODITY','SECURITY','INVENTORY','OTHER'))
-  );
+create table unit (
+  code text primary key,
+  name text,
+  symbol text null,
+  unit_type text,
+  display_divisor integer default 100,
+  constraint chk_unit_type check (unit_type in ('FIAT','CRYPTO','COMMODITY','SECURITY','INVENTORY','OTHER'))
+);
 
-  table account_group (
-    id text primary key,
-    name text,
-    account_type text,
-    parent_id text null,
-    description text null,
-    display_order integer null,
-    constraint chk_ag_type check (account_type in ('ASSET','LIABILITY','EQUITY','INCOME','EXPENSE')),
-    constraint fk_ag_parent foreign key (parent_id) references account_group(id)
-  );
+create table account_group (
+  id text primary key,
+  name text,
+  account_type text,
+  parent_id text null,
+  description text null,
+  display_order integer null,
+  constraint chk_ag_type check (account_type in ('ASSET','LIABILITY','EQUITY','INCOME','EXPENSE')),
+  constraint fk_ag_parent foreign key (parent_id) references account_group(id)
+);
 
-  table entity (
-    id text primary key,
-    name text,
-    description text null,
-    fiscal_year_end text null,
-    base_unit text,
-    default_costing_method text null,
-    created_at text,
-    updated_at text,
-    constraint fk_entity_unit foreign key (base_unit) references unit(code),
-    constraint chk_entity_costing check (default_costing_method is null or default_costing_method in ('FIFO','LIFO','AVERAGE'))
-  );
+create table entity (
+  id text primary key,
+  name text,
+  description text null,
+  fiscal_year_end text null,
+  base_unit text,
+  default_costing_method text null,
+  created_at text,
+  updated_at text,
+  constraint fk_entity_unit foreign key (base_unit) references unit(code),
+  constraint chk_entity_costing check (default_costing_method is null or default_costing_method in ('FIFO','LIFO','AVERAGE'))
+);
 
-  table partner (
-    id text primary key,
-    name text,
-    type text null,
-    email text null,
-    phone text null,
-    address text null,
-    notes text null,
-    is_active integer default 1,
-    created_at text,
-    updated_at text,
-    constraint chk_partner_type check (type is null or type in ('VENDOR','CUSTOMER','BOTH'))
-  );
+create table partner (
+  id text primary key,
+  name text,
+  type text null,
+  email text null,
+  phone text null,
+  address text null,
+  notes text null,
+  is_active integer default 1,
+  created_at text,
+  updated_at text,
+  constraint chk_partner_type check (type is null or type in ('VENDOR','CUSTOMER','BOTH'))
+);
 
-  table account (
-    id text primary key,
-    entity_id text,
-    account_group_id text,
-    parent_id text null,
-    code text null,
-    name text,
-    description text null,
-    unit text,
-    costing_method text null,
-    closed_date text null,
-    partner_id text null,
-    linked_account_id text null,
-    is_active integer default 1,
-    created_at text,
-    updated_at text,
-    constraint uq_account_code unique (entity_id, code),
-    constraint fk_account_entity foreign key (entity_id) references entity(id),
-    constraint fk_account_group foreign key (account_group_id) references account_group(id),
-    constraint fk_account_parent foreign key (parent_id) references account(id),
-    constraint fk_account_unit foreign key (unit) references unit(code),
-    constraint fk_account_partner foreign key (partner_id) references partner(id),
-    constraint fk_account_linked foreign key (linked_account_id) references account(id),
-    constraint chk_account_costing check (costing_method is null or costing_method in ('FIFO','LIFO','AVERAGE'))
-  );
+create table account (
+  id text primary key,
+  entity_id text,
+  account_group_id text,
+  parent_id text null,
+  code text null,
+  name text,
+  description text null,
+  unit text,
+  costing_method text null,
+  closed_date text null,
+  partner_id text null,
+  linked_account_id text null,
+  is_active integer default 1,
+  created_at text,
+  updated_at text,
+  constraint uq_account_code unique (entity_id, code),
+  constraint fk_account_entity foreign key (entity_id) references entity(id),
+  constraint fk_account_group foreign key (account_group_id) references account_group(id),
+  constraint fk_account_parent foreign key (parent_id) references account(id),
+  constraint fk_account_unit foreign key (unit) references unit(code),
+  constraint fk_account_partner foreign key (partner_id) references partner(id),
+  constraint fk_account_linked foreign key (linked_account_id) references account(id),
+  constraint chk_account_costing check (costing_method is null or costing_method in ('FIFO','LIFO','AVERAGE'))
+);
 
-  table tag (
-    id text primary key,
-    name text,
-    description text null,
-    parent_id text null,
-    constraint fk_tag_parent foreign key (parent_id) references tag(id)
-  );
+create table tag (
+  id text primary key,
+  name text,
+  description text null,
+  parent_id text null,
+  constraint fk_tag_parent foreign key (parent_id) references tag(id)
+);
 
-  table txn (
-    id text primary key,
-    entity_id text,
-    date text,
-    memo text null,
-    reference text null,
-    created_at text,
-    updated_at text,
-    constraint fk_txn_entity foreign key (entity_id) references entity(id)
-  );
+create table txn (
+  id text primary key,
+  entity_id text,
+  date text,
+  memo text null,
+  reference text null,
+  created_at text,
+  updated_at text,
+  constraint fk_txn_entity foreign key (entity_id) references entity(id)
+);
 
-  table reconciliation (
-    id text primary key,
-    account_id text,
-    statement_date text,
-    ending_balance integer,
-    reconciled_at text null,
-    notes text null,
-    constraint fk_recon_account foreign key (account_id) references account(id)
-  );
+create table reconciliation (
+  id text primary key,
+  account_id text,
+  statement_date text,
+  ending_balance integer,
+  reconciled_at text null,
+  notes text null,
+  constraint fk_recon_account foreign key (account_id) references account(id)
+);
 
-  table entry (
-    id text primary key,
-    txn_id text,
-    account_id text,
-    amount integer,
-    note text null,
-    tag_id text null,
-    reconciliation_id text null,
-    constraint fk_entry_txn foreign key (txn_id) references txn(id),
-    constraint fk_entry_account foreign key (account_id) references account(id),
-    constraint fk_entry_tag foreign key (tag_id) references tag(id),
-    constraint fk_entry_recon foreign key (reconciliation_id) references reconciliation(id)
-  );
+create table entry (
+  id text primary key,
+  txn_id text,
+  account_id text,
+  amount integer,
+  note text null,
+  tag_id text null,
+  reconciliation_id text null,
+  constraint fk_entry_txn foreign key (txn_id) references txn(id),
+  constraint fk_entry_account foreign key (account_id) references account(id),
+  constraint fk_entry_tag foreign key (tag_id) references tag(id),
+  constraint fk_entry_recon foreign key (reconciliation_id) references reconciliation(id)
+);
 
-  table exchange (
-    id text primary key,
-    txn_id text null,
-    date text,
-    unit_a text,
-    unit_b text,
-    rate_numerator integer,
-    rate_denominator integer,
-    source text,
-    notes text null,
-    constraint fk_exchange_txn foreign key (txn_id) references txn(id),
-    constraint fk_exchange_unit_a foreign key (unit_a) references unit(code),
-    constraint fk_exchange_unit_b foreign key (unit_b) references unit(code),
-    constraint chk_exchange_source check (source in ('TRANSACTION','MARKET','MANUAL'))
-  );
-
-  index idx_account_entity on account(entity_id);
-  index idx_account_group on account(account_group_id);
-  index idx_txn_entity on txn(entity_id);
-  index idx_txn_date on txn(date);
-  index idx_entry_txn on entry(txn_id);
-  index idx_entry_account on entry(account_id);
-  index idx_exchange_txn on exchange(txn_id);
-}
+create table exchange (
+  id text primary key,
+  txn_id text null,
+  date text,
+  unit_a text,
+  unit_b text,
+  rate_numerator integer,
+  rate_denominator integer,
+  source text,
+  notes text null,
+  constraint fk_exchange_txn foreign key (txn_id) references txn(id),
+  constraint fk_exchange_unit_a foreign key (unit_a) references unit(code),
+  constraint fk_exchange_unit_b foreign key (unit_b) references unit(code),
+  constraint chk_exchange_source check (source in ('TRANSACTION','MARKET','MANUAL'))
+);
