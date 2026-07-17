@@ -13,7 +13,7 @@ Context: Ken has discovered Sereus Bonum and has been through the sequences desc
 5. There are sections for Assets, Liabilities and Equity
 6. There are also sections for Income and Expense.  However, he notices a way to collapse this.
 7. When expanded, all 5 categories are shown.  When collapsed, the income and expense are not shown and it looks just like a balance sheet.
-8. He notices how the toggle to show Income and Expense is associated with the Equity line for Retained Earnings.  He appreciates this association noting that retained earnings for a period are the sum of Income - Expenses.
+8. He notices how the toggle to show Income and Expense is associated with the Equity line for Retained Earnings.  He appreciates this association remembering that retained earnings for a period are the sum of Income - Expenses.
 
 Alternative Path A: Verify New Entity
 6.1. He selects the home option

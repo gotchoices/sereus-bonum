@@ -49,6 +49,12 @@ Yes — optimized for each context:
 
 - **Mobile:** Quick and nimble. Look up information, get answers, make quick entries, record transactions, capture documents/receipts.
 
+## Identity (publisher + app id)
+
+- **Publisher id (reverse-DNS domain)**: `org.sereus`
+- **Preferred app name**: `bonum`
+- **Default mobile app id (reverse-DNS)**: `org.sereus.bonum`
+
 ## Apps
 
 List the apps to be built:

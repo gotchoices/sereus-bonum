@@ -12,7 +12,7 @@ One pane contains a welcome message including some advice for basic usage and an
   - Home Finance Template
   - Small Business Template
 3. There is also an icon associated with the list which is clearly for adding new entities.
-4. He sees that each entity name is a hyperlink (clicking it navigates to the Accounts View).  He can also click elsewhere on the row to highlight/select the entity.  When he does, the Visual Balance Sheet updates to display that entity's financial position.  Right-clicking the entity shows a context menu with options:
+4. He sees that each entity name is a hyperlink (clicking it navigates to the Accounts View).  He can also click elsewhere on the row to highlight/select the entity.  When he does, the Visual Balance Sheet updates to display that entity's financial position.  He is able to access a context menu which includes these options:
   - Edit: add/update basic information about the entity
   - Accounts: view accounts for the entity
   - Import: load transactions from a file
