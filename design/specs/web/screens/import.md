@@ -13,11 +13,12 @@ Entry point for importing data into Bonum - either creating new entities from ex
 
 ## Entry Points
 
-### Import Books (Creates New Entity)
+### Import Books (New Entity or Re-Import/Merge)
 
 **Trigger:** Global menu → "Import Books..."
 
-**Context:** No entity needs to be selected
+**Context:** The target is either a **new** entity (first import) or an **existing** entity chosen by
+the user (re-import to merge in updates — see [domain/import.md](../../domain/import.md) Merge Model).
 
 ### Import Transactions (Adds to Existing Entity)
 
@@ -32,19 +33,25 @@ Entry point for importing data into Bonum - either creating new entities from ex
 ### Step 1: File Selection Dialog
 
 **User sees:**
-- Input field for new entity name (Import Books only)
+- Target: a name field for a **new** entity, or a picker to choose an **existing** entity to merge into
+  (Import Transactions always targets the pre-filled existing entity)
 - File drop zone with browse button
 - Indication of supported file types
-- "Next" button (disabled until name + file provided)
+- "Next" button (disabled until target + file provided)
 
 **User action:**
-- Enter entity name (Books) or target entity is pre-filled (Transactions)
+- Name a new entity or choose an existing one to merge into
 - Drag file or browse to select
 - Click "Next" when ready
 
-### Step 2: Account Mapping Review
+### Step 2: Account Mapping Review (conditional)
 
 **Purpose:** User reviews and adjusts how imported accounts map to Bonum structure.
+
+**When shown:** Only when one or more source accounts don't already resolve to a Bonum account. On a
+repeat import where every source account is already resolved (by stored identity — see
+[domain/import.md](../../domain/import.md) Identity persistence), this step is **skipped** and the user
+goes straight to the transaction preview.
 
 **Display Structure:**
 - Scrollable list showing all accounts from import
@@ -83,23 +90,53 @@ Entry point for importing data into Bonum - either creating new entities from ex
 - User might have a separate Bonum window open to create new account groups
 - A re-scan operation should pick up these changes from the database
 
-### Step 3: Import Execution
+### Step 3: Transaction Preview & Merge Review
 
-**Atomic Transaction:**
-Import executes as single database transaction:
-1. Create entity
-2. Create entity-specific account tree
-3. Create all transactions
+**Purpose:** Before anything is written, show every source transaction and what the import will do
+with it, so the user reviews and adjusts an effective **merge** into the target entity. Shown on every
+import (on a first import into a new entity, everything is simply "new").
 
-**Critical Constraint:**
-- If any step fails, entire import rolls back
-- Import dialog remains intact with user's mappings
-- User can fix issue (e.g., adjust mappings) and retry "Import"
-- Database never left in partial state (e.g., entity created but accounts missing)
+**Disposition** — each transaction is classified against the target's current books (rules in
+[domain/import.md](../../domain/import.md) Merge Model):
+- **Already imported** — a matching transaction already exists; will be skipped.
+- **New** — no match, complete and balanced; will be created.
+- **Incomplete** — no match, but missing/ambiguous info (unresolved offset account, missing amount or
+  date, or entries that don't balance); must be completed before it can be created.
 
-**GUID Persistence:**
-- GUIDs from imported book stored with created accounts
-- Enables future "Import Transactions" from same source to auto-map without remapping
+**Display:**
+- Transactions grouped by disposition (**Incomplete** first, then **New**, then **Already imported**),
+  with a count per group.
+- Each row shows date, reference/memo, and amount; expandable to show its entries (same split
+  presentation as the [ledger](./ledger.md)).
+- Incomplete rows are flagged with what's missing.
+
+**User actions:**
+- **Complete an incomplete transaction:** edit it inline — assign the missing account via
+  [autocomplete](../components/account-autocomplete.md), set amount/date — until it balances; it then
+  moves to **New**.
+- **Exclude / include:** a New transaction can be excluded from this import; an Already-imported one
+  can be force-included (rare).
+- **Import (Proceed):** enabled only when no **Incomplete** transactions remain unresolved (each must
+  be completed or excluded).
+
+### Step 4: Import Execution (Merge)
+
+**Merge semantics:**
+- Only **New** (and user-completed) transactions are written; **Already-imported** and **Excluded**
+  are skipped.
+- Any accounts the resolved mapping needs that don't yet exist are created first.
+- Re-importing an unchanged source writes nothing (idempotent).
+
+**Atomic:**
+- The whole merge runs as a single database transaction.
+- If any step fails, it rolls back; the preview/mappings are preserved so the user can fix and retry.
+- The database is never left in a partial state.
+
+**Identity persistence:**
+- Source **transaction** identities (GnuCash GUID / OFX FITID) are stored with created transactions, so
+  future imports classify them as already-imported.
+- Source **account** identities (GUID) are stored with created accounts, so future imports resolve them
+  automatically and skip the mapping step.
 
 ---
 
