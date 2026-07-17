@@ -77,6 +77,7 @@ function toAccount(r: Row): Account {
     partnerId: r.partner_id ?? undefined,
     linkedAccountId: r.linked_account_id ?? undefined,
     isActive: Boolean(r.is_active),
+    sourceId: r.source_id ?? undefined,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -89,6 +90,7 @@ function toTransaction(r: Row): Transaction {
     date: r.date,
     memo: r.memo ?? undefined,
     reference: r.reference ?? undefined,
+    sourceId: r.source_id ?? undefined,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -289,11 +291,11 @@ class QuereusDataService implements DataService {
     const ts = nowIso();
     await run(this.getDb(),
       `INSERT INTO account (id, entity_id, account_group_id, parent_id, code, name, description,
-        unit, costing_method, closed_date, partner_id, linked_account_id, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        unit, costing_method, closed_date, partner_id, linked_account_id, is_active, source_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [id, data.entityId, data.accountGroupId, data.parentId ?? null, data.code ?? null, data.name,
         data.description ?? null, data.unit, data.costingMethod ?? null, data.closedDate ?? null,
-        data.partnerId ?? null, data.linkedAccountId ?? null, data.isActive ? 1 : 0, ts, ts]);
+        data.partnerId ?? null, data.linkedAccountId ?? null, data.isActive ? 1 : 0, data.sourceId ?? null, ts, ts]);
     return (await this.getAccount(id))!;
   }
 
@@ -349,8 +351,8 @@ class QuereusDataService implements DataService {
     const db = this.getDb();
     const id = uuid();
     const ts = nowIso();
-    await run(db, 'INSERT INTO txn (id, entity_id, date, memo, reference, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [id, data.entityId, data.date, data.memo ?? null, data.reference ?? null, ts, ts]);
+    await run(db, 'INSERT INTO txn (id, entity_id, date, memo, reference, source_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, data.entityId, data.date, data.memo ?? null, data.reference ?? null, data.sourceId ?? null, ts, ts]);
     for (const e of entries) {
       await run(db, 'INSERT INTO entry (id, txn_id, account_id, amount, note, tag_id, reconciliation_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [uuid(), id, e.accountId, e.amount, e.note ?? null, e.tagId ?? null, e.reconciliationId ?? null]);

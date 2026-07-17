@@ -106,6 +106,10 @@ import (on a first import into a new entity, everything is simply "new").
 **Display:**
 - Transactions grouped by disposition (**Incomplete** first, then **New**, then **Already imported**),
   with a count per group.
+- **Already-imported transactions are hidden by default** — the preview shows only what will change
+  (Incomplete + New), with the already-imported count summarized. A toggle ("Show already imported")
+  reveals them so the full set can be inspected. Example: re-importing a 1,000-transaction file after
+  adding 3 shows just the 3 new by default, and 1,003 when toggled on.
 - Each row shows date, reference/memo, and amount; expandable to show its entries (same split
   presentation as the [ledger](./ledger.md)).
 - Incomplete rows are flagged with what's missing.

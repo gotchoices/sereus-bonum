@@ -42,7 +42,7 @@ Alternative Path B: Investigate Ledgers
 Alternative Path C: Re-Import & Merge (keeping both programs in sync)
 10.1. Months later Ken has kept his GnuCash books alongside Bonum and wants to bring Bonum current.  He chooses Import Books again, but this time selects his existing "Home Books" entity as the target rather than a new one.
 10.2. He drops the updated GnuCash file.  Because he imported this file before, every source account already maps to a Bonum account, so the account-mapping step is skipped entirely and he goes straight to the transaction preview.
-10.3. Most transactions are marked *already imported* — they match his prior import and will not be duplicated.  A handful are *new* since last time.  One is *incomplete* (a split whose category didn't map), which he completes.
+10.3. By default the preview shows only what will change — the handful of *new* transactions since last time (and any *incomplete* one) — with a note that the rest are already imported.  He completes an *incomplete* split whose category didn't map.  Curious, he toggles "show already imported" and sees the full file, then toggles it back.
 10.4. He proceeds.  Only the new and completed transactions are merged into Home Books; the ones already present are left untouched.  Bonum now matches GnuCash.
 10.5. Out of caution he runs the very same import once more.  This time everything shows as *already imported* and nothing is written — a safe no-op.
 
@@ -50,6 +50,7 @@ Alternative Path C: Re-Import & Merge (keeping both programs in sync)
 - [ ] "Import Books" accepts a GnuCash file by browse or drag-and-drop, targeting a new entity or an existing one (for re-import/merge).
 - [ ] The account-mapping step shows source accounts beside their proposed Bonum accounts/groups and lets names be edited — and is skipped entirely when every source account already resolves (repeat import).
 - [ ] Before writing, a transaction preview classifies each transaction as already-imported, new, or incomplete, grouped with counts.
+- [ ] Already-imported transactions are hidden by default (shown as a count); a toggle reveals them.
 - [ ] Incomplete transactions can be completed in the preview (assign missing account, set amount/date) until they balance; new ones can be excluded.
 - [ ] Proceeding merges only new/completed transactions into the target; already-imported ones are skipped — re-running an unchanged import writes nothing (idempotent).
 - [ ] A first import lands the user on the new entity's Accounts View (Assets/Liabilities/Equity, with Income/Expense collapsible under Retained Earnings).

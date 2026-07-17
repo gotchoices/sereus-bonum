@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS account (
   partner_id TEXT REFERENCES partner(id),
   linked_account_id TEXT REFERENCES account(id),
   is_active INTEGER NOT NULL DEFAULT 1,
+  source_id TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   UNIQUE(entity_id, code)
@@ -81,6 +82,7 @@ CREATE TABLE IF NOT EXISTS txn (
   date TEXT NOT NULL,
   memo TEXT,
   reference TEXT,
+  source_id TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

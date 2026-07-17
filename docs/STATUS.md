@@ -202,6 +202,27 @@ causes and fixes:
 
 ---
 
+## Import — Merge Regeneration (in progress)
+
+Reworking import into a **merge** (idempotent re-import) per the augmented specs
+([story 02](../design/stories/web/02-gnucash.md), [screens/import.md](../design/specs/web/screens/import.md),
+[domain/import.md](../design/specs/domain/import.md)). Goal: run GnuCash + Bonum in parallel and
+periodically re-import to sync; the preview classifies each transaction as **already-imported / new /
+incomplete** and writes only new ones. Milestones:
+
+- ✅ **M1 — source-identity persistence.** Added `sourceId` (source GUID/FITID) to `Transaction` +
+  `Account`: `types.ts`, all three schemas (`domain/schema.qsql` + app copy + `mock/schema.sql`),
+  `domain/schema.md`, and both services' mappers + create methods. `yarn check` 0 errors, build clean,
+  quereus-local still renders. **Migration note:** existing `quereus-local` IndexedDB (or mock
+  localStorage) has the old schema — clear it (fresh DB) after this change; a schema-version bump is a
+  TODO.
+- ⬜ **M2 — import-service merge logic:** classify exists/new/incomplete against the target's stored
+  `sourceId`s; resolve accounts by stored account `sourceId` (skip mapping when all resolve); merge
+  execution (write only new/completed, persist identities, atomic).
+- ⬜ **M3 — rebuild import screen:** new-or-existing target, conditional mapping, Transaction Preview &
+  Merge Review (grouped dispositions, hide already-imported by default + toggle, complete-incomplete inline).
+- ⬜ **M4 — test with real data** (`tmp/Kyle.gnucash`) on quereus-local; refresh the import consolidation.
+
 ## Current Sprint (Active Development)
 
 ### 🔄 Web MVP - Core Screens

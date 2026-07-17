@@ -57,6 +57,7 @@ export interface Account {
   partnerId?: string;
   linkedAccountId?: string;
   isActive: boolean;
+  sourceId?: string;           // Source-system identity (GnuCash account GUID) for import mapping reuse
   createdAt: string;
   updatedAt: string;
 }
@@ -67,6 +68,7 @@ export interface Transaction {
   date: string;
   memo?: string;
   reference?: string;
+  sourceId?: string;           // Source-system identity (GnuCash GUID / OFX FITID) for import merge
   createdAt: string;
   updatedAt: string;
 }

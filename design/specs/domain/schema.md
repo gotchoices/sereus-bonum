@@ -123,6 +123,7 @@ A specific ledger account within an entity.
 | `partnerId` | UUID | No | FK → Partner (for AR/AP accounts) |
 | `linkedAccountId` | UUID | No | FK → Account in another Entity (for inter-entity tracking) |
 | `isActive` | Boolean | Yes | Whether account accepts new entries |
+| `sourceId` | String | No | Source-system identity (GnuCash account GUID) — lets a repeat import resolve source accounts automatically and skip the mapping step |
 | `createdAt` | Timestamp | Yes | Creation timestamp |
 | `updatedAt` | Timestamp | Yes | Last modification |
 
@@ -165,6 +166,7 @@ A complete accounting transaction consisting of multiple balanced entries.
 | `date` | Date | Yes | Transaction date |
 | `memo` | String | No | Description of transaction |
 | `reference` | String | No | Check number, invoice number, etc. |
+| `sourceId` | String | No | Source-system identity (GnuCash GUID / OFX FITID) — used to detect already-imported transactions on re-import (see [import.md](./import.md)) |
 | `createdAt` | Timestamp | Yes | Creation timestamp |
 | `updatedAt` | Timestamp | Yes | Last modification |
 

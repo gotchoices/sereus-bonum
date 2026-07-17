@@ -74,6 +74,7 @@ create table account (
   partner_id text null,
   linked_account_id text null,
   is_active integer default 1,
+  source_id text null,
   created_at text,
   updated_at text,
   constraint uq_account_code unique (entity_id, code),
@@ -100,6 +101,7 @@ create table txn (
   date text,
   memo text null,
   reference text null,
+  source_id text null,
   created_at text,
   updated_at text,
   constraint fk_txn_entity foreign key (entity_id) references entity(id)

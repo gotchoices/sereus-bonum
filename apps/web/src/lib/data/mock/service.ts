@@ -188,7 +188,7 @@ class SqliteDataService implements DataService {
     const rows = this.getDb().exec(`
       SELECT id, entity_id, account_group_id, parent_id, code, name, description,
              unit, costing_method, closed_date, partner_id, linked_account_id,
-             is_active, created_at, updated_at
+             is_active, created_at, updated_at, source_id
       FROM account WHERE entity_id = ? ORDER BY code, name
     `, [entityId]);
     if (!rows.length) return [];
@@ -199,7 +199,7 @@ class SqliteDataService implements DataService {
     const rows = this.getDb().exec(`
       SELECT id, entity_id, account_group_id, parent_id, code, name, description,
              unit, costing_method, closed_date, partner_id, linked_account_id,
-             is_active, created_at, updated_at
+             is_active, created_at, updated_at, source_id
       FROM account WHERE id = ?
     `, [id]);
     if (!rows.length || !rows[0].values.length) return null;
@@ -212,12 +212,12 @@ class SqliteDataService implements DataService {
     this.getDb().run(`
       INSERT INTO account (id, entity_id, account_group_id, parent_id, code, name,
                            description, unit, costing_method, closed_date, partner_id,
-                           linked_account_id, is_active, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                           linked_account_id, is_active, source_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [id, data.entityId, data.accountGroupId, data.parentId ?? null, data.code ?? null,
         data.name, data.description ?? null, data.unit, data.costingMethod ?? null,
         data.closedDate ?? null, data.partnerId ?? null, data.linkedAccountId ?? null,
-        data.isActive ? 1 : 0, ts, ts]);
+        data.isActive ? 1 : 0, data.sourceId ?? null, ts, ts]);
     this.save();
     return (await this.getAccount(id))!;
   }
@@ -269,6 +269,7 @@ class SqliteDataService implements DataService {
       isActive: Boolean(row[12]),
       createdAt: row[13] as string,
       updatedAt: row[14] as string,
+      sourceId: row[15] as string | undefined,
     };
   }
   
@@ -283,7 +284,7 @@ class SqliteDataService implements DataService {
     limit?: number;
   }): Promise<Transaction[]> {
     let sql = `
-      SELECT DISTINCT t.id, t.entity_id, t.date, t.memo, t.reference, t.created_at, t.updated_at
+      SELECT DISTINCT t.id, t.entity_id, t.date, t.memo, t.reference, t.created_at, t.updated_at, t.source_id
       FROM txn t
     `;
     const params: (string | number)[] = [];
@@ -320,7 +321,7 @@ class SqliteDataService implements DataService {
   
   async getTransaction(id: string): Promise<Transaction | null> {
     const rows = this.getDb().exec(`
-      SELECT id, entity_id, date, memo, reference, created_at, updated_at
+      SELECT id, entity_id, date, memo, reference, created_at, updated_at, source_id
       FROM txn WHERE id = ?
     `, [id]);
     if (!rows.length || !rows[0].values.length) return null;
@@ -338,9 +339,9 @@ class SqliteDataService implements DataService {
     }
     
     this.getDb().run(`
-      INSERT INTO txn (id, entity_id, date, memo, reference, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, [id, data.entityId, data.date, data.memo ?? null, data.reference ?? null, ts, ts]);
+      INSERT INTO txn (id, entity_id, date, memo, reference, source_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `, [id, data.entityId, data.date, data.memo ?? null, data.reference ?? null, data.sourceId ?? null, ts, ts]);
     
     // Insert entries
     for (const entry of entries) {
@@ -387,6 +388,7 @@ class SqliteDataService implements DataService {
       reference: row[4] as string | undefined,
       createdAt: row[5] as string,
       updatedAt: row[6] as string,
+      sourceId: row[7] as string | undefined,
     };
   }
   
