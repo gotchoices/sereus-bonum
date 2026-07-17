@@ -20,17 +20,21 @@ To enable the test data generator:
 ---
 
 ## Immediate Next Steps
-- Got kind of log-jammed with AI context
-- Too may spec files with too much info, agents got jammed up
-- Need to use discipline: Must hand-write spec files in human-readable format
-- Spec files need to be clear about what slice/screen they apply to
-- Global specs are a problem because they cloud context.  Need strategy for this
-- Next time we pick this project up:
-  - Wait for quereus backend to be ready/feasible (at least with local cadre)
-  - Hand-review/edit all specs
-  - Import sequence needs its own clear set of specs, like its own app almost
-  - ✅ docs/schema file should probably go under design somewhere — done (see review below)
-  - Is there a persistent place we can save account mapping info from past imports?
+
+The earlier blocker — too many overlapping global specs clouding AI context — has been addressed by
+the July 2026 reorganization (see "Spec Reorganization" below): cross-target concerns are now a lean,
+human-readable **domain contract** (`design/specs/domain/`), `web/global/` holds only view-specific
+specs, and stories are current (01–03 completed, 08–09 added).
+
+**Ready to regenerate.** Recommended order:
+1. Refresh consolidations under `design/generated/` against the moved/renamed specs (they still
+   reference old `web/global/…` paths — staleness is expected and regen resolves it).
+2. Generate/update app slices from the refreshed consolidations.
+
+Still open (feature ideas / not blockers):
+- Quereus backend readiness (at least a local cadre) before wiring the production data layer.
+- A persistent place to remember account-mapping choices from past imports (see story 09).
+- Remaining stories: multi-user/Sereus **sharing** (+ sync-conflict variant) and **tags**.
 
 ---
 
@@ -96,9 +100,9 @@ in web specs); tightened for context economy:
 Tracked in detail in [`design/stories/web/STATUS.md`](../design/stories/web/STATUS.md) → "Known Gaps".
 - ✅ Acceptance criteria filled for stories 01–03.
 - ✅ Variant/error template established (01–03, 08, 09); extend to 04, 06, 07.
-- ✅ Added story 08 (Multiple Units of Account) and story 09 (AI-Assisted Capture & Import).
-- ⬜ Remaining: multi-user/Sereus **sharing** story (would host the sync-conflict variant) and a
-  **tags** story.
+- ✅ Added stories 08 (Multiple Units of Account), 09 (AI-Assisted Capture & Import),
+  10 (Sharing & Multi-User Books), and 11 (Tagging Entries). All capability gaps now covered.
+- ⬜ Remaining: extend the happy/empty/error variant pattern to stories 04, 06, 07.
 
 ---
 
@@ -186,8 +190,8 @@ Tracked in detail in [`design/stories/web/STATUS.md`](../design/stories/web/STAT
 
 ### ✅ Account Autocomplete & Transaction Entry - Specs & Help
 - **Created specs:**
-  - `/design/specs/web/global/account-autocomplete.md` (agent rules)
-  - `/design/specs/web/global/transaction-edit.md` (agent rules - renamed & refactored)
+  - `/design/specs/web/components/account-autocomplete.md` (agent rules)
+  - `/design/specs/web/components/transaction-edit.md` (agent rules - renamed & refactored)
 - **Created help content:**
   - `/apps/web/src/routes/help/en/account-autocomplete/+page.md` (user narrative)
   - `/apps/web/src/routes/help/en/transaction-entry/+page.md` (user narrative)
@@ -201,94 +205,14 @@ Tracked in detail in [`design/stories/web/STATUS.md`](../design/stories/web/STAT
 
 ---
 
-## Review Specs for Appeus Compliance
+## Spec Cleanup History
 
-**Goal:** Clean up specs to be human-centric (user-observable behavior only). Remove technical details that can be derived by agents from stories + human rules. Technical details belong in consolidations, not specs.
-
-**Process:** For each spec, review all sections. If a technical detail can be unambiguously derived from the human-centric rules, delete it. If not, enhance the rules to be clear enough that it CAN be derived.
-
-**Regeneration:** After cleaning specs, refresh consolidations to ensure technical details are properly documented there. Code regeneration only needed if behavior changed (not just documentation cleanup).
-
-### Global Specs (Web)
-- ✅ `design/specs/web/global/account-autocomplete.md` - Cleaned: kept Rules only, removed Interface/Dropdown/Search/Keyboard/Validation sections (all redundant or technical)
-- ✅ `design/specs/web/global/transaction-edit.md` - Cleaned & refactored: mode-agnostic component spec, moved screen concerns to ledger.md (122 → 180 lines)
-- ✅ **Consolidation refreshed:** `design/generated/web/screens/ledger.md` - Updated with corrected technical details from cleaned specs (colon completion behavior, tab flow, auto-balance logic)
-- ✅ **Code cleaned:** `apps/web/src/routes/ledger/[accountId]/+page.svelte` - Removed ~190 lines of dead autocomplete code, implemented Ctrl+Enter at page level
-  - ✅ Dead code removed (unused search/autocomplete state and functions from pre-refactor)
-  - ✅ Ctrl+Enter now works correctly (page-level handler)
-  - ✅ All functionality verified against specs
-  - **Ready for testing**
-- ✅ `design/specs/web/global/backend.md` - Cleaned: removed TypeScript code snippets, directory structures; kept WHAT/WHY/HOW from user perspective (121 → 77 lines)
-- ✅ `design/specs/web/global/export.md` - Cleaned: removed TypeScript code, implementation details, testing section; kept format descriptions, file structure, behavior (229 → 130 lines)
-- ✅ `design/specs/web/global/view-state.md` - Cleaned: removed TypeScript code examples; kept principle, what persists, scoping, cleanup (103 → 70 lines)
-- ✅ `design/specs/web/global/i18n.md` - Cleaned: removed TypeScript implementation, full dictionary, file structure; kept usage, MVP scope, future languages (130 → 70 lines)
-
-### Screen Specs (Web)
-- ✅ `design/specs/web/screens/accounts-view.md` - Cleaned: removed TypeScript interfaces, SQL queries, backend signatures, calculation formulas; kept report modes, date handling, UI elements, user actions (340 → 180 lines)
-- ✅ `design/specs/web/screens/catalog.md` - Cleaned: removed TypeScript interface, data model section; kept user actions, hierarchy, modals, context menu (119 → 165 lines)
-- ✅ `design/specs/web/screens/ledger.md` - Enhanced: added transaction display (collapsed/expanded), in-place editing, locked transactions, new entry workflow; references transaction-edit.md for component (189 → 344 lines)
-- ✅ **Ledger Implementation Updated:** `apps/web/src/routes/ledger/[accountId]/+page.svelte` - Added display modes, expand/collapse, edit mode, locked transactions (1218 → 1483 lines)
-  - ✅ Transaction grouping by transactionId
-  - ✅ Collapsed/expanded display modes with per-transaction toggle
-  - ✅ Expand All / Collapse All toolbar buttons
-  - ✅ In-place edit mode (placeholder for full editor)
-  - ✅ Delete transaction with confirmation
-  - ✅ Locked transaction separator (🔒) based on closedDate
-  - ✅ View state persistence (expand/collapse, expandAll)
-  - ✅ Escape key cancels edit/split modes
-  - ✅ Click-to-edit for unlocked transactions
-  - ✅ **Code Review Complete:** See `CODE_REVIEW_LEDGER.md` - 95% spec compliance
-  - ✅ **Critical Fix:** Account display now shows name only, full path on hover (per spec ledger.md:42-68)
-    - Backend: Added `offsetAccountPath` field to LedgerEntry
-    - Both `getLedgerEntries()` and `getAllTransactions()` updated
-    - Frontend: Split entries now compact and readable
-  - ✅ **Fix:** Expand/collapse buttons now show for ALL transactions (spec ledger.md:214-218)
-    - Removed conditional that hid buttons for simple transactions
-    - All transactions are now expandable to show entry breakdown
-  - ✅ **Fix:** Expanded view now shows BOTH entries correctly (spec ledger.md:194-212)
-    - Shows current account entry line
-    - Shows offset account entry line (or split entries for multi-entry transactions)
-    - Matches spec example with proper debit/credit display
-  - ✅ **CRITICAL FIX:** Expand/collapse reactivity completely rewritten (2024-12-12)
-    - **Root cause:** Single `viewState` $state object wasn't triggering $derived recalculation
-    - **Solution:** Split into individual $state variables (`expandedTransactions`, `expandAll`, `closedDate`)
-    - **Result:** Svelte 5's fine-grained reactivity now properly tracks changes
-    - Expand/collapse buttons now functional
-    - "Expand All" / "Collapse All" now work
-    - State persistence still functional
-  - ✅ **IMPLEMENTED:** Full inline transaction editor (2024-12-13)
-    - Click any unlocked transaction → full inline editor appears
-    - Shows date, ref, memo, current account (read-only), and offset entries
-    - Supports simple transactions (single offset) and split transactions (multiple entries)
-    - Auto-balance calculation with visual indicator
-    - Add/remove split entries dynamically
-    - Debit/Credit mutual exclusion
-    - Save updates transaction metadata (date, ref, memo)
-    - Cancel discards changes
-    - Delete with confirmation
-    - **UI Layout per updated specs (2024-12-13):**
-      - Actions footer: Single line under entry table
-      - Left side: [Save] [Cancel] [+ Split] [Delete] buttons
-      - Right side (split mode only): Debits total, Credits total, Balance (✓ green when balanced, ⚠ red when imbalanced)
-      - Simple mode: No totals shown (auto-balances with single offset)
-    - **Debug logging:** Extensive logging to diagnose data loading issues
-    - **Limitation:** Currently updates only transaction metadata, not individual entries (requires additional DataService methods)
-    - **Regenerated:** Consolidation and implementation updated per refined specs (2024-12-13)
-- ✅ **Consolidation updated:** `design/generated/web/screens/ledger.md` - Added transaction grouping, display modes, edit mode, locked transactions, view state persistence sections
-- ✅ **i18n updated:** Added expand/collapse, editing, balance keys to `en.ts`
-- ✅ `design/specs/web/screens/search.md` - Cleaned: removed TypeScript interfaces, component architecture, data structures, i18n keys, styling details; kept display format, export behavior, navigation (206 → 176 lines)
-- ✅ `design/specs/web/screens/saved-reports-ux.md` - Cleaned: removed TypeScript interface, component structure, file paths, accessibility section; kept UI layout, phases, persistence, user actions (351 → 290 lines)
-
-### Shared Specs
-- ✅ `design/specs/i18n.md` - Already clean: user-focused principles, dictionary format, locale detection (53 lines, no changes needed)
-- ✅ `design/specs/visual-balance-sheet.md` - Cleaned: removed TypeScript interfaces, Svelte implementation code, data adapter, mobile fallback; kept visual structure, rings, colors, interactions, usage (294 → 185 lines)
-- ✅ `design/specs/import-books.md` - Cleaned: removed XML examples, SQL tables, technical observations, implementation details; kept workflow steps, user dialogs, mappings, error handling (179 → 270 lines)
-- ✅ `design/specs/import-transactions.md` - Cleaned: removed technical format details; expanded workflow with user dialogs, duplicate detection, categorization, error states (102 → 265 lines)
-
-### Generated/Consolidations (Reference Only)
-- `design/specs/web/screens/ledger.md` - This appears to be a consolidation, should move to `design/generated/web/screens/`
-
----
+Dec 2025: an earlier pass cleaned web specs for appeus-compliance (removed TypeScript/SQL/
+implementation detail from screen, component, and global specs; kept user-observable behavior).
+July 2026: the reorganization above superseded much of that layout — several files were moved,
+renamed, or merged (schema/units/account-groups/import/export/interfaces → `design/specs/domain/`).
+Per-file detail of the Dec pass lives in git history; it is intentionally not reproduced here to
+keep this file lean and its paths current.
 
 ## Backlog (Priority Order)
 
@@ -465,7 +389,7 @@ From story 04 (Alt D):
 ### 🔄 GnuCash Import
 - ✅ XML format research
 - ✅ Parser prototype (`test/manual/gnucash-parser.ts`)
-- ✅ Format documentation (`design/specs/import-books.md`)
+- ✅ Format documentation (`design/specs/domain/import.md`)
 - ✅ **Import Strategy Spec** (`design/specs/web/global/import.md`)
   - Two entry points: "Import Books" (new entity) and "Import Transactions" (existing entity)
   - Single reusable import engine
@@ -780,7 +704,7 @@ Framework decision: NativeScript-Svelte (primary), React Native (fallback)
     - ✅ Button order: [Save] [Cancel] [+ Add Split]
     - ✅ Enter key: in field = save, on button = activate
     - ✅ Simple mode: Tab from Debit or Credit → save & new blank row
-    - ✅ Spec-driven implementation: `/design/specs/web/global/transaction-edit.md`
+    - ✅ Spec-driven implementation: `/design/specs/web/components/transaction-edit.md`
   - ✅ **Tab from last split credit → "Add Split" button → "Save" → "Cancel"**
   - ✅ Add/remove split entries (any number of debits or credits)
   - ✅ Save split transactions with multiple entries

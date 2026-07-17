@@ -16,6 +16,8 @@ Keep it in sync whenever a story is added, renamed, or promoted.
 | 07 | [AI Assistant](./07-ai-assistant.md) | Post-MVP (phased) | draft |
 | 08 | [Multiple Units of Account](./08-multi-unit.md) | Core capability | draft |
 | 09 | [AI-Assisted Capture & Import](./09-ai-capture-import.md) | Post-MVP | draft / exploratory |
+| 10 | [Sharing & Multi-User Books](./10-sharing.md) | Post-MVP (needs Quereus) | draft |
+| 11 | [Tagging Entries](./11-tags.md) | Post-MVP | draft |
 
 ---
 
@@ -26,18 +28,18 @@ Findings from the July 2026 review, with current status.
 1. ✅ **Acceptance criteria filled for stories 01–03** (a few basics each, harmonious with the
    narrative). 04–07 already had them.
 2. **Keep this index in sync.** Any new/renamed story must be reflected in the table above.
-3. 🔄 **Variants / error coverage — template established.** Stories 01–03 and 08–09 now carry a
+3. 🔄 **Variants / error coverage — template established.** Stories 01–03 and 08–10 carry a
    `happy / empty / error` Variants section demonstrating how errors read (user-observable outcomes,
-   not exhaustive). Remaining to extend the same pattern: **04, 06, 07** (05 already narrates
-   mismatch paths). A dedicated **sync-conflict** path is still unwritten and belongs wherever
-   multi-user sharing lands (see gap 4).
+   not exhaustive). The **sync-conflict** path now lives in story 10. Remaining to extend the same
+   pattern: **04, 06, 07** (05 already narrates mismatch paths).
 4. **Missing capability stories:**
-   - ✅ **Multi-currency / units / exchange** — added as story 08 (to the many-units limit:
-     CHIPs/Taleus/Sereus).
-   - ✅ **AI capture & import** — added as story 09 (receipts/bills + arbitrary-source import).
-   - ⬜ **Multi-user / Sereus sharing** — still unwritten; the headline differentiator. Would also
-     host the sync-conflict variant from gap 3.
-   - ⬜ **Tags** — schema has a `Tag` entity and story 06 references them; no story introduces them.
+   - ✅ **Multi-currency / units / exchange** — story 08 (to the many-units limit: CHIPs/Taleus/Sereus).
+   - ✅ **AI capture & import** — story 09 (receipts/bills + arbitrary-source import).
+   - ✅ **Multi-user / Sereus sharing** — story 10 (cadre redundancy, multi-device, Quoomb SQL,
+     inviting other cadres, concurrent editing).
+   - ✅ **Tags** — story 11 (orthogonal cross-account labels, hierarchy, search/rollup).
+   - All identified capability gaps are now covered. Only remaining story work: extend the
+     happy/empty/error variant pattern to stories 04, 06, 07.
 5. **Mild "how" leakage.** A few stories drift into UI mechanics (belongs in specs) — most notably
    the AI conversation-interface detail in story 07. Trim toward "what happens" when revising.
 6. ✅ **Fixed:** story 07 pointed to `components/ai-wizard.md`; corrected to `components/ai-assistant.md`.

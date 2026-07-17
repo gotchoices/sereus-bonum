@@ -100,7 +100,7 @@ Sereus Fabric — a peer-to-peer network for secure, distributed data. Data is r
 **What will be shared across targets?**
 
 - [x] Domain contract (schema, account groups, rules, interfaces) — `design/specs/domain/`
-- [x] TypeScript types — `packages/shared/`
+- [ ] TypeScript types — `packages/shared/` (planned; not yet created)
 - [x] Mock data — `mock/data/`
 
 ## Notes
