@@ -1,5 +1,5 @@
 // Data layer types
-// See: docs/Schema.md, design/specs/web/global/backend.md
+// See: design/specs/domain/schema.md, design/specs/web/global/data-backend.md
 
 // =============================================================================
 // Enums

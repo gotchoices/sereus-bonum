@@ -1,5 +1,5 @@
 // SQLite implementation of DataService
-// See: design/specs/web/global/backend.md
+// See: design/specs/web/global/data-backend.md
 
 import type { 
   DataService, 

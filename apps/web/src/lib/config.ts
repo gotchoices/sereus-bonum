@@ -1,14 +1,28 @@
 // Application configuration
-// See: design/specs/web/global/backend.md
-
-export type BackendMode = 'mock' | 'production';
+// See: design/specs/web/global/data-backend.md (three modes)
+//      design/specs/domain/interfaces.md (platform-agnostic storage/sync model)
 
 /**
- * Backend mode: 'mock' uses SQLite (sql.js), 'production' uses Quereus
- * Set via VITE_BACKEND_MODE environment variable
+ * Backend selection — three modes:
+ *   'mock'          — in-browser SQLite (sql.js), persisted to localStorage. Default.
+ *   'quereus-local' — Quereus with the browser IndexedDB store (@quereus/plugin-indexeddb).
+ *                     Real Quereus SQL, single-device, no networking.
+ *   'quereus-p2p'   — Quereus + Optimystic distributed storage over the Sereus cadre.
+ *
+ * Set via the VITE_BACKEND environment variable. Higher-level code should only ask
+ * `USE_QUEREUS` (mock vs real DB); the local-vs-p2p distinction is handled inside
+ * the production data service.
  */
-export const BACKEND_MODE: BackendMode = 
-  (import.meta.env.VITE_BACKEND_MODE as BackendMode) || 'mock';
+export type Backend = 'mock' | 'quereus-local' | 'quereus-p2p';
+
+export const BACKEND: Backend =
+  (import.meta.env.VITE_BACKEND as Backend) || 'mock';
+
+/** True for any real Quereus backend (local or p2p) — the only flag screens/data code should need. */
+export const USE_QUEREUS: boolean = BACKEND !== 'mock';
+
+/** True only for the distributed Optimystic path; consumed inside the production service. */
+export const USE_OPTIMYSTIC: boolean = BACKEND === 'quereus-p2p';
 
 /**
  * Debug mode: when true, populates demo entities with sample transactions

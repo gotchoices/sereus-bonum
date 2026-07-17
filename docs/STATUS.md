@@ -6,6 +6,13 @@
 
 ## Dev Configuration
 
+**Backend mode** — set `VITE_BACKEND` in `apps/web/.env.local` (default `mock`):
+- `mock` — in-browser SQLite (sql.js), persisted to localStorage. Default; the only implemented mode.
+- `quereus-local` — Quereus + browser IndexedDB (real SQL, single device). Service stubbed.
+- `quereus-p2p` — Quereus + Optimystic over the Sereus cadre (distributed). Service stubbed.
+
+See `design/specs/web/global/data-backend.md`.
+
 To enable the test data generator:
 1. Create `apps/web/.env.local` (not tracked by git)
 2. Add: `VITE_ENABLE_TEST_DATA=true`
@@ -104,6 +111,23 @@ Tracked in detail in [`design/stories/web/STATUS.md`](../design/stories/web/STAT
   10 (Sharing & Multi-User Books), and 11 (Tagging Entries). All capability gaps now covered.
 - ✅ Variants (happy/empty/error) present on every web story (01–11).
 - Stories are complete and consistent — no remaining known gaps.
+
+### ✅ Done — Data backend scaffold (npm, three modes)
+- **Confirmed:** the web app runs **mock-only** (in-browser `sql.js`, localStorage). It has never
+  been on sereus — `production/service.ts` was pure stubs and there were zero sereus deps. No local
+  clones were ever used, so we go **straight to npmjs.org** (no clone-switch file needed).
+- **Deps added** to `apps/web/package.json` from npm (latest published, ahead of the local clones):
+  `@quereus/* ^4.3.2` (incl. `plugin-indexeddb`), `@optimystic/* ^0.16.2` (incl. `db-p2p-storage-web`),
+  `@serfab/cadre-core ^0.8.1`, `p2p-fret ^0.6.0`. `yarn install` clean (mock build still compiles;
+  the only errors under `yarn check` are 53 **pre-existing** app type errors, unrelated).
+- **Three-mode toggle** in `apps/web/src/lib/config.ts`: `VITE_BACKEND = mock | quereus-local |
+  quereus-p2p`, exposing `USE_QUEREUS` (mock vs real DB) and `USE_OPTIMYSTIC` (local vs distributed).
+  Higher-level code checks only `USE_QUEREUS`.
+- **Spec:** `design/specs/web/global/data-backend.md` documents modes, packages, and status.
+- ⬜ **Remaining (regeneration):** implement `data/production/service.ts` against Quereus SQL
+  (IndexedDB plugin for `quereus-local`; Optimystic + libp2p peers for `quereus-p2p`).
+- ⬜ **Separate cleanup:** 53 pre-existing type errors in the app (components/screens) — address
+  during regeneration.
 
 ---
 

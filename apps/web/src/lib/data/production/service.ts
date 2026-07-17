@@ -1,6 +1,17 @@
 // Quereus/Sereus implementation of DataService (STUBS)
-// Production backend - to be implemented when Quereus is ready
-// See: design/specs/web/global/backend.md
+// Production backend — to be implemented during regeneration.
+// See: design/specs/web/global/data-backend.md, design/specs/domain/interfaces.md
+//
+// This one service covers both real-DB modes; it branches on USE_OPTIMYSTIC from $lib/config:
+//   quereus-local (USE_OPTIMYSTIC=false): build a Quereus Database backed by the browser
+//     IndexedDB store — register @quereus/plugin-indexeddb. Single-device, no networking.
+//   quereus-p2p   (USE_OPTIMYSTIC=true):  boot @serfab/cadre-core (CadreNode over libp2p /
+//     p2p-fret), open the strand's Quereus Database through @optimystic/quereus-plugin-optimystic
+//     backed by @optimystic/db-p2p + @optimystic/db-p2p-storage-web.
+//     NOTE: Mode C also requires the libp2p peer deps (@libp2p/interface, @libp2p/peer-id,
+//     libp2p, @libp2p/crypto, @noble/hashes) pinned to versions compatible with the installed
+//     @optimystic/* line — add them when implementing this path.
+// Both paths execute the same schema (design/specs/domain/schema.md) and honor the same rules.
 
 import type { 
   DataService, 

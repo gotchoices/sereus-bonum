@@ -1,5 +1,5 @@
 // SQLite initialization using sql.js
-// See: design/specs/web/global/backend.md
+// See: design/specs/web/global/data-backend.md
 
 import initSqlJs, { type Database } from 'sql.js';
 import SCHEMA_SQL from './schema.sql?raw';

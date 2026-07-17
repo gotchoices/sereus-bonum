@@ -1,8 +1,8 @@
 // Data layer entry point
 // Exports the active DataService based on configuration
-// See: design/specs/web/global/backend.md
+// See: design/specs/web/global/data-backend.md
 
-import { BACKEND_MODE } from '$lib/config';
+import { BACKEND, USE_QUEREUS } from '$lib/config';
 import { log } from '$lib/logger';
 import type { DataService } from './types';
 
@@ -22,10 +22,10 @@ export async function getDataService(): Promise<DataService> {
     return _dataService;
   }
   
-  log.data.info(`Initializing ${BACKEND_MODE} backend...`);
-  
+  log.data.info(`Initializing ${BACKEND} backend...`);
+
   try {
-    if (BACKEND_MODE === 'production') {
+    if (USE_QUEREUS) {
       log.data.debug('Loading Quereus service...');
       const { quereusService } = await import('./production/service');
       _dataService = quereusService;
@@ -34,10 +34,10 @@ export async function getDataService(): Promise<DataService> {
       const { sqliteService } = await import('./mock/service');
       _dataService = sqliteService;
     }
-    
+
     log.data.debug('Calling service.initialize()...');
     await _dataService.initialize();
-    log.data.info(`${BACKEND_MODE} backend initialized`);
+    log.data.info(`${BACKEND} backend initialized`);
     
     return _dataService;
   } catch (e) {
