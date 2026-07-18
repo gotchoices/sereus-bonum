@@ -134,3 +134,12 @@ create table exchange (
   constraint fk_exchange_unit_b foreign key (unit_b) references unit(code),
   constraint chk_exchange_source check (source in ('TRANSACTION','MARKET','MANUAL'))
 );
+
+-- Secondary indexes for common joins/filters (FKs are NOT auto-indexed).
+-- Without these the entry⋈txn⋈account joins degrade to nested scans at scale.
+create index idx_account_entity on account(entity_id);
+create index idx_account_group on account(account_group_id);
+create index idx_txn_entity on txn(entity_id);
+create index idx_txn_date on txn(date);
+create index idx_entry_txn on entry(txn_id);
+create index idx_entry_account on entry(account_id);

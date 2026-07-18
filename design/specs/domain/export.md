@@ -9,6 +9,9 @@ screen that offers export.
 - **CSV** — plain text, opens in any spreadsheet or accounting program. Universal, unformatted.
 - **XLSX** — Excel workbook with formatting (bold header, number columns, color-coded verification,
   auto-sized widths). For polished, shareable reports.
+- **Native JSON dump** — a lossless full-entity dump that Bonum can restore (round-trip). Distinct
+  from CSV/XLSX (which are one-way, spreadsheet-oriented). See the native books dump/restore in
+  [import.md](./import.md).
 
 ## Amounts
 

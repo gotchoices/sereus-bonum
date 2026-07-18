@@ -22,6 +22,7 @@ import type {
 } from '../types';
 import type { Database, SqlValue } from '@quereus/quereus';
 import { getQuereusDb, closeQuereusDb, all, get, run, uuid, nowIso } from './db';
+import { log } from '$lib/logger';
 
 const NOT_IMPLEMENTED = 'Quereus backend: method not yet implemented (Track C2)';
 
@@ -414,16 +415,33 @@ class QuereusDataService implements DataService {
   async getBalanceSheet(entityId: string, endDate?: string, startDate?: string): Promise<BalanceSheetData> {
     const end = endDate || new Date().toISOString().split('T')[0];
     const db = this.getDb();
+    const tA = performance.now();
     const accts = await all<Row>(db,
       `SELECT a.id, a.name, a.code, a.unit, g.id as group_id, g.name as group_name,
               g.account_type, g.display_order
        FROM account a JOIN account_group g ON g.id = a.account_group_id
        WHERE a.entity_id = ? AND a.is_active = 1
        ORDER BY g.display_order, a.code`, [entityId]);
-    const entries = await all<Row>(db,
-      `SELECT e.account_id, e.amount, t.date
-       FROM entry e JOIN txn t ON t.id = e.txn_id JOIN account a ON a.id = e.account_id
-       WHERE a.entity_id = ? AND t.date <= ?`, [entityId, end]);
+    const tB = performance.now();
+    // Two single-table reads (each index-eligible), joined in JS — avoids the
+    // per-row async nested-loop that a SQL JOIN incurs on the IndexedDB store
+    // (a 3-way JOIN here measured ~140x slower than this at 1k txns).
+    const txns = await all<Row>(db,
+      `SELECT id, date FROM txn WHERE entity_id = ? AND date <= ?`, [entityId, end]);
+    const tB2 = performance.now();
+    const dateByTxn = new Map<string, string>(txns.map((r) => [r.id, r.date]));
+    const acctIds = accts.map((a) => a.id);
+    const placeholders = acctIds.map(() => '?').join(',');
+    const rawEntries = acctIds.length
+      ? await all<Row>(db,
+          `SELECT account_id, amount, txn_id FROM entry WHERE account_id IN (${placeholders})`,
+          acctIds)
+      : [];
+    const tC = performance.now();
+    const entries = rawEntries
+      .filter((e) => dateByTxn.has(e.txn_id))
+      .map((e) => ({ account_id: e.account_id, amount: e.amount, date: dateByTxn.get(e.txn_id)! }));
+    log.data.debug(`[BalanceSheet] accts=${accts.length} (${(tB - tA).toFixed(0)}ms) txns=${txns.length} (${(tB2 - tB).toFixed(0)}ms) rawEntries=${rawEntries.length} (${(tC - tB2).toFixed(0)}ms) → entries=${entries.length}`);
 
     const typeByAccount = new Map<string, string>(accts.map((a) => [a.id, a.account_type]));
     const balByAccount = new Map<string, number>();
@@ -620,31 +638,43 @@ class QuereusDataService implements DataService {
     const db = this.getDb();
     await run(db, 'BEGIN');
     try {
-      for (const a of data.accounts) {
-        await run(db,
-          `INSERT INTO account (id, entity_id, account_group_id, parent_id, code, name, description,
-            unit, costing_method, closed_date, partner_id, linked_account_id, is_active, source_id, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [a.id, a.entityId, a.accountGroupId, a.parentId ?? null, a.code ?? null, a.name,
-            a.description ?? null, a.unit, a.costingMethod ?? null, a.closedDate ?? null,
-            a.partnerId ?? null, a.linkedAccountId ?? null, a.isActive ? 1 : 0, a.sourceId ?? null,
-            a.createdAt, a.updatedAt]);
-      }
-      for (const t of data.transactions) {
-        await run(db,
-          'INSERT INTO txn (id, entity_id, date, memo, reference, source_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-          [t.id, t.entityId, t.date, t.memo ?? null, t.reference ?? null, t.sourceId ?? null, t.createdAt, t.updatedAt]);
-      }
-      for (const e of data.entries) {
-        await run(db,
-          'INSERT INTO entry (id, txn_id, account_id, amount, note, tag_id, reconciliation_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [e.id, e.transactionId, e.accountId, e.amount, e.note ?? null, e.tagId ?? null, e.reconciliationId ?? null]);
-      }
+      await bulkInsert(db,
+        `INSERT INTO account (id, entity_id, account_group_id, parent_id, code, name, description,
+          unit, costing_method, closed_date, partner_id, linked_account_id, is_active, source_id, created_at, updated_at)`,
+        16, data.accounts, (a) => [a.id, a.entityId, a.accountGroupId, a.parentId ?? null, a.code ?? null,
+          a.name, a.description ?? null, a.unit, a.costingMethod ?? null, a.closedDate ?? null,
+          a.partnerId ?? null, a.linkedAccountId ?? null, a.isActive ? 1 : 0, a.sourceId ?? null,
+          a.createdAt, a.updatedAt]);
+      await bulkInsert(db,
+        'INSERT INTO txn (id, entity_id, date, memo, reference, source_id, created_at, updated_at)',
+        8, data.transactions, (t) => [t.id, t.entityId, t.date, t.memo ?? null, t.reference ?? null,
+          t.sourceId ?? null, t.createdAt, t.updatedAt]);
+      await bulkInsert(db,
+        'INSERT INTO entry (id, txn_id, account_id, amount, note, tag_id, reconciliation_id)',
+        7, data.entries, (e) => [e.id, e.transactionId, e.accountId, e.amount, e.note ?? null,
+          e.tagId ?? null, e.reconciliationId ?? null]);
       await run(db, 'COMMIT');
     } catch (err) {
       try { await run(db, 'ROLLBACK'); } catch { /* ignore */ }
       throw err;
     }
+  }
+}
+
+// Insert rows in multi-row VALUES batches — one exec per batch instead of per row.
+// The IndexedDB store round-trips per statement, so batching is a large win at scale.
+async function bulkInsert<T>(
+  db: Database, insertPrefix: string, cols: number, rows: T[], toParams: (row: T) => SqlValue[],
+): Promise<void> {
+  if (rows.length === 0) return;
+  const tuple = `(${Array(cols).fill('?').join(',')})`;
+  const perBatch = Math.max(1, Math.floor(2000 / cols)); // cap params/statement ~2000
+  for (let i = 0; i < rows.length; i += perBatch) {
+    const chunk = rows.slice(i, i + perBatch);
+    const sql = `${insertPrefix} VALUES ${chunk.map(() => tuple).join(',')}`;
+    const params: SqlValue[] = [];
+    for (const r of chunk) params.push(...toParams(r));
+    await run(db, sql, params);
   }
 }
 

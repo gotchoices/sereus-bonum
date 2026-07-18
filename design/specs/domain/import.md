@@ -104,6 +104,21 @@ Source identities are stored with the records Bonum creates, so later imports cl
 
 ---
 
+## Native Books (dump / restore)
+
+Separate from the external importers (GnuCash, CSV), Bonum can **dump one entity's full books to a
+native JSON file and restore it** — a lossless round-trip of a single entity.
+
+- **File shape:** `{ format: "bonum-books", version, entity, units, accounts, transactions }` — the
+  entity metadata; the units and accounts it uses; and every transaction with its entries. Accounts
+  carry a local `ref` so entries point at them by ref; account **groups** are referenced by their
+  shared catalog id (the catalog is global).
+- **Restore** creates a **fresh** entity from the file (new ids) and recreates its accounts and
+  transactions. It is **import-only (not a merge)** and **non-interactive** — no account mapping,
+  no preview. Missing units are created; the account-group catalog is assumed present.
+- Use it to create and reload books quickly (e.g. test datasets at any scale). The merge/preview
+  flow above is for external sources, not native restore.
+
 ## References
 
 - Entry points, wizard UI & navigation: [web import screen](../web/screens/import.md)

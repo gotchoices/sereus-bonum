@@ -229,17 +229,53 @@ incomplete** and writes only new ones. Milestones:
     accounts / 17,756 transactions / 162 commodities**, auto-mapped 149/149, and **imported +137
     accounts + 17,756 transactions atomically** into a new entity. (Import was a no-op stub before —
     it now actually works.)
-  - ⚠️ **SCALE BOTTLENECK (blocks "browse real data"):** the bulk write took ~110s, and the entity's
-    **Balance Sheet won't render** for 17k txns — `getBalanceSheet` loads all ~35k entries and joins
-    them with **no indexes** (the Quereus schema has 0 indexes; mock has 6). Also `getBalanceSheet`
-    aggregates in JS. **Needs a performance pass before large real books are usable:** (1) add indexes
-    to the Quereus schema (verify Quereus accepts `create index` with the store vtable), (2) optimize
-    `getBalanceSheet` (SQL aggregation or per-account, not load-all-entries), (3) likely ledger/search
-    too, (4) consider virtualized rendering (project.md targets 10K–100K txns). This is a distinct
-    effort from the import feature.
+  - ✅ **SCALE BOTTLENECK — RESOLVED** (see "Native Books + Perf Pass" below). Root cause was **SQL
+    `JOIN`s over the IndexedDB store**, not missing indexes: a 3-way `entry⋈txn⋈account` join took
+    **44,488 ms for 2 k entries** (per-row async nested loop). Rewriting `getBalanceSheet` to two
+    single-table indexed reads joined **in JS** dropped that to ~310 ms (**~140× faster**), and batching
+    `bulkImport` into multi-row `VALUES` cut writes ~6×.
 - ⬜ **M3 — rebuild import screen:** new-or-existing target, conditional mapping, Transaction Preview &
   Merge Review (grouped dispositions, hide already-imported by default + toggle, complete-incomplete inline).
 - ⬜ **M4 — test with real data** (`tmp/Kyle.gnucash`) on quereus-local; refresh the import consolidation.
+
+## Native Books (dump / restore) + Perf Pass — ✅ Done
+
+A non-merge, non-interactive **round-trip** dump/restore for a single entity — built first (before the
+GnuCash merge screen) so we can create/reload test datasets at any scale. Spec: `domain/import.md`
+(Native Books) + `domain/export.md`.
+
+- ✅ **`import/native.ts`** — `exportBooks(entityId)` dumps `{ format:"bonum-books", version, entity,
+  units, accounts (local `ref`), transactions (entries by `ref`) }`; `importNativeBooks(file)` restores
+  into a **fresh** entity (new ids), ensuring units exist, reusing the atomic `bulkImport`.
+- ✅ **Import screen** wired for `.json`: native file → skip entity-name/mapping, non-interactive
+  restore, then refresh the entities store and navigate. (Fixed a latent bug: the entity page reads
+  `entity` from the `entities` store, so a freshly-created entity showed a perpetual "Loading…" until
+  the store was refreshed.)
+- ✅ **Export button** on the entity page — downloads `{entity}-{date}.json`. Round-trip verified:
+  restore → export → identical counts (accounts/txns/entries).
+- ✅ **Generator** `scripts/gen-books.mjs` — emits graduated `books-{100,1k,5k,10k,20k}.json` (balanced
+  txns, seed catalog groups). Test harnesses: `scripts/test-native-roundtrip.mjs`,
+  `scripts/test-export-roundtrip.mjs` (Playwright).
+
+**Perf results (quereus-local, headless Chromium):**
+
+| txns | restore (write) | balance-sheet view |
+|------|-----------------|--------------------|
+| 1 k  | ~10 s | ~0.4 s |
+| 5 k  | ~21 s | ~1.4 s |
+| 10 k | ~42 s | ~2.4 s |
+| 20 k | ~99 s | ~5 s |
+
+**Attribution:** both remaining costs are the **IndexedDB store's per-row async work** (an
+optimystic/quereus storage characteristic), not our query shape:
+- **Reads:** avoid SQL `JOIN`s on the store — they degrade to per-row async nested loops. Do joins in
+  JS over single-table indexed reads. Applied to `getBalanceSheet`; **`getLedgerEntries` /
+  `getAllTransactions` still use SQL joins + N+1 offset lookups** and should get the same treatment
+  before large real books are browsable (follow-up).
+- **Writes:** batched `bulkImport` into multi-row `VALUES` (~500–2000 params/stmt). Batching itself was
+  the win (121 s→21 s at 5 k); larger batches gave marginal gains — residual ~1.6 ms/row is the store.
+- Added the 6 secondary indexes to both Quereus schemas (`create index` works with the store vtable),
+  matching mock. FKs are **not** auto-indexed; PK is.
 
 ## Current Sprint (Active Development)
 

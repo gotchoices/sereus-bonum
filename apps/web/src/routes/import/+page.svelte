@@ -3,14 +3,16 @@
   import { log } from '$lib/logger';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
-  import { 
-    importService, 
-    type ParsedBooks, 
-    type ImportResult, 
+  import {
+    importService,
+    type ParsedBooks,
+    type ImportResult,
     type AccountMapping,
     isValidAccountPath,
     isCompleteAccountPath
   } from '$lib/import';
+  import { importNativeBooks, type BonumBooksFile } from '$lib/import/native';
+  import { initializeEntities } from '$lib/stores/entities';
   import { 
     accountGroups, 
     loadAccountGroups,
@@ -73,17 +75,20 @@
     }
   }
   
+  // A native .json file is a Bonum books dump → non-interactive restore (no entity name / mapping).
+  let isNativeFile = $derived(!!selectedFile && selectedFile.name.toLowerCase().endsWith('.json'));
+
   function handleFileSelection(file: File) {
-    const validExtensions = ['.gnucash', '.iif'];
+    const validExtensions = ['.gnucash', '.iif', '.json'];
     const fileName = file.name.toLowerCase();
     const isValid = validExtensions.some(ext => fileName.endsWith(ext));
-    
+
     if (!isValid) {
-      error = 'Invalid file type. Please select a .gnucash or .iif file.';
+      error = 'Invalid file type. Please select a .gnucash, .iif, or .json file.';
       selectedFile = null;
       return;
     }
-    
+
     error = null;
     selectedFile = file;
     log.ui.info('[Import] File selected:', file.name, file.size);
@@ -94,20 +99,26 @@
   }
   
   async function processFile() {
-    if (!entityName.trim()) {
-      error = 'Please enter an entity name.';
-      return;
-    }
-    
     if (!selectedFile) {
       error = 'Please select a file to import.';
       return;
     }
-    
+
+    // Native .json → non-interactive restore into a fresh entity (name comes from the file).
+    if (isNativeFile) {
+      await restoreNativeFile(selectedFile);
+      return;
+    }
+
+    if (!entityName.trim()) {
+      error = 'Please enter an entity name.';
+      return;
+    }
+
     error = null;
     step = 'processing';
     statusMessage = 'Parsing file...';
-    
+
     try {
       // Parse file using import service
       const rawData = await importService.parseFile(selectedFile);
@@ -160,6 +171,32 @@
     }
   }
   
+  async function restoreNativeFile(file: File) {
+    error = null;
+    step = 'importing';
+    statusMessage = 'Reading native books file...';
+
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text) as BonumBooksFile;
+      if (data?.format !== 'bonum-books') {
+        throw new Error('Not a Bonum books file (expected format "bonum-books").');
+      }
+
+      statusMessage = `Restoring "${data.entity?.name ?? 'books'}" — ${data.accounts?.length ?? 0} accounts, ${data.transactions?.length ?? 0} transactions...`;
+      const entityId = await importNativeBooks(data);
+      await initializeEntities(); // refresh the store so the new entity resolves on its page
+
+      log.ui.info('[Import] Native restore complete:', { entityId, entity: data.entity?.name });
+      showToast(`Restored "${data.entity?.name ?? 'books'}"`);
+      goto(`/entities/${entityId}?view=trial-balance`);
+    } catch (err) {
+      log.ui.error('[Import] Native restore failed:', err);
+      error = `Restore failed: ${err instanceof Error ? err.message : 'Unknown error'}`;
+      step = 'upload';
+    }
+  }
+
   function filterAccounts(
     accounts: ParsedBooks['accounts'],
     transactions: ParsedBooks['transactions']
@@ -838,7 +875,11 @@
               bind:value={entityName}
               placeholder="e.g., Home Books"
               class="input"
+              disabled={isNativeFile}
             />
+            {#if isNativeFile}
+              <p class="help-text">Native books file — the entity name comes from the file.</p>
+            {/if}
           </div>
           
           <div class="form-group">
@@ -864,15 +905,15 @@
               <label class="browse-btn">
                 <input
                   type="file"
-                  accept=".gnucash,.iif"
+                  accept=".gnucash,.iif,.json"
                   onchange={handleFileInput}
                   style="display: none;"
                 />
                 {selectedFile ? $t('import.change_file') : $t('import.browse_files')}
               </label>
             </div>
-            
-            <p class="help-text">{$t('import.supported_formats')}: .gnucash, .iif</p>
+
+            <p class="help-text">{$t('import.supported_formats')}: .gnucash, .iif, .json (native)</p>
           </div>
           
           {#if error}
@@ -882,8 +923,8 @@
         
         <div class="dialog-footer">
           <button class="btn-secondary" onclick={cancel}>{$t('common.cancel') || 'Cancel'}</button>
-          <button class="btn-primary" onclick={processFile} disabled={!entityName.trim() || !selectedFile}>
-            {$t('common.next') || 'Next'}
+          <button class="btn-primary" onclick={processFile} disabled={!selectedFile || (!isNativeFile && !entityName.trim())}>
+            {isNativeFile ? ($t('import.import') || 'Restore') : ($t('common.next') || 'Next')}
           </button>
         </div>
       </div>

@@ -254,6 +254,29 @@
     return balanceData.totalAssets - liabilitiesPlusEquity();
   });
   
+  // Dump this entity's full books to a native .json file the browser downloads.
+  let exporting = $state(false);
+  async function exportNative() {
+    if (!entityId || exporting) return;
+    exporting = true;
+    try {
+      const { exportBooks } = await import('$lib/import/native');
+      const books = await exportBooks(entityId);
+      const blob = new Blob([JSON.stringify(books)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const safeName = (entity?.name ?? 'books').replace(/[^\w.-]+/g, '-').toLowerCase();
+      a.href = url;
+      a.download = `${safeName}-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      log.ui.error('[Accounts] Native export failed:', e);
+    } finally {
+      exporting = false;
+    }
+  }
+
   function formatCurrency(amount: number, unit: string = 'USD'): string {
     const value = amount / 100;
     return new Intl.NumberFormat('en-US', {
@@ -285,12 +308,22 @@
       </div>
       
       <!-- Saved Reports dropdown (placeholder) -->
-      <button 
-        class="saved-reports-btn" 
-        disabled 
+      <button
+        class="saved-reports-btn"
+        disabled
         title="Saved reports coming soon"
       >
         ⭐ {$t('accounts.saved_reports')}
+      </button>
+
+      <!-- Native books export (round-trips via Import Books → .json) -->
+      <button
+        class="saved-reports-btn"
+        onclick={exportNative}
+        disabled={exporting || !entity}
+        title="Download a native Bonum books file (re-importable)"
+      >
+        ⬇ {exporting ? $t('common.loading') : 'Export'}
       </button>
       
       <!-- Spacer to push date picker right -->
