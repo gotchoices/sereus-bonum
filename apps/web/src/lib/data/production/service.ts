@@ -490,61 +490,110 @@ class QuereusDataService implements DataService {
   // Ledger view
   // ===========================================================================
 
+  // JS-side joins over single-table indexed reads — SQL JOINs on the store are O(n²) (see
+  // tmp/quereus-join-index-perf.md). Loads the entity's entries once and resolves offset/split
+  // siblings in memory instead of an N+1 per-row lookup.
   async getLedgerEntries(accountId: string, options?: {
     startDate?: string; endDate?: string; limit?: number; sortOrder?: 'oldest' | 'newest';
   }): Promise<LedgerEntry[]> {
     const db = this.getDb();
-    let sql = `SELECT e.id as entry_id, t.id as txn_id, t.date, t.reference, t.memo, e.amount, e.note,
-                      (SELECT count(*) FROM entry WHERE txn_id = t.id) as entry_count
-               FROM entry e JOIN txn t ON t.id = e.txn_id WHERE e.account_id = ?`;
-    const params: SqlValue[] = [accountId];
-    if (options?.startDate) { sql += ' AND t.date >= ?'; params.push(options.startDate); }
-    if (options?.endDate) { sql += ' AND t.date <= ?'; params.push(options.endDate); }
-    sql += (options?.sortOrder === 'newest')
-      ? ' ORDER BY t.date DESC, t.created_at DESC'
-      : ' ORDER BY t.date ASC, t.created_at ASC';
-    if (options?.limit) { sql += ' LIMIT ?'; params.push(options.limit); }
+    const acct = await get<Row>(db, 'SELECT entity_id FROM account WHERE id = ?', [accountId]);
+    if (!acct) return [];
+    const entityId = acct.entity_id as string;
 
-    const rows = await all<Row>(db, sql, params);
+    const acctDir = await this.buildAccountDir(entityId);
+    const txnRows = await all<Row>(db, 'SELECT id, date, reference, memo, created_at FROM txn WHERE entity_id = ?', [entityId]);
+    const txnById = new Map<string, Row>(txnRows.map((t) => [t.id, t]));
+    const byTxn = await this.entriesByTxn(txnById);
+
+    // This account's own entries, decorated with txn fields; filter by date; sort; limit.
+    let own: Array<{ e: Row; t: Row }> = [];
+    for (const arr of byTxn.values()) {
+      for (const e of arr) {
+        if (e.account_id !== accountId) continue;
+        const t = txnById.get(e.txn_id)!;
+        if (options?.startDate && t.date < options.startDate) continue;
+        if (options?.endDate && t.date > options.endDate) continue;
+        own.push({ e, t });
+      }
+    }
+    const dir = options?.sortOrder === 'newest' ? -1 : 1;
+    own.sort((a, b) => {
+      if (a.t.date !== b.t.date) return (a.t.date < b.t.date ? -1 : 1) * dir;
+      const ca = a.t.created_at ?? '', cb = b.t.created_at ?? '';
+      if (ca !== cb) return (ca < cb ? -1 : 1) * dir;
+      return 0;
+    });
+    if (options?.limit) own = own.slice(0, options.limit);
+
     const result: LedgerEntry[] = [];
     let running = 0;
-    for (const r of rows) {
-      const amount = Number(r.amount);
+    for (const { e, t } of own) {
+      const amount = Number(e.amount);
       running += amount;
-      const isSplit = Number(r.entry_count) > 2;
+      const group = byTxn.get(e.txn_id) ?? [];
+      const isSplit = group.length > 2;
       const le: LedgerEntry = {
-        entryId: r.entry_id, transactionId: r.txn_id, date: r.date,
-        reference: r.reference ?? undefined, memo: r.memo ?? undefined,
-        accountId, amount, note: r.note ?? undefined, runningBalance: running, isSplit,
+        entryId: e.id, transactionId: e.txn_id, date: t.date,
+        reference: t.reference ?? undefined, memo: t.memo ?? undefined,
+        accountId, amount, note: e.note ?? undefined, runningBalance: running, isSplit,
       };
+      const siblings = group.filter((s) => s.id !== e.id);
       if (isSplit) {
-        le.splitEntries = await this.splitsFor(r.txn_id, r.entry_id);
-      } else {
-        const off = await get<Row>(db,
-          `SELECT e.account_id, a.name, g.name as group_name, g.account_type
-           FROM entry e JOIN account a ON a.id = e.account_id JOIN account_group g ON g.id = a.account_group_id
-           WHERE e.txn_id = ? AND e.id != ? LIMIT 1`, [r.txn_id, r.entry_id]);
-        if (off) {
-          le.offsetAccountId = off.account_id;
-          le.offsetAccountName = off.name;
-          le.offsetAccountPath = pathFor(off.account_type, off.group_name, off.name);
-        }
+        le.splitEntries = siblings
+          .sort((x, y) => Number(y.amount) - Number(x.amount))
+          .map((s) => this.toSplit(s, acctDir));
+      } else if (siblings[0]) {
+        const d = acctDir.get(siblings[0].account_id);
+        le.offsetAccountId = siblings[0].account_id;
+        le.offsetAccountName = d?.name;
+        le.offsetAccountPath = d?.path;
       }
       result.push(le);
     }
     return result;
   }
 
-  private async splitsFor(txnId: string, excludeEntryId: string): Promise<SplitEntry[]> {
-    const rows = await all<Row>(this.getDb(),
-      `SELECT e.id, e.account_id, a.name, g.name as group_name, g.account_type, e.amount, e.note
-       FROM entry e JOIN account a ON a.id = e.account_id JOIN account_group g ON g.id = a.account_group_id
-       WHERE e.txn_id = ? AND e.id != ? ORDER BY e.amount DESC`, [txnId, excludeEntryId]);
-    return rows.map((r) => ({
-      entryId: r.id, accountId: r.account_id, accountName: r.name,
-      accountPath: pathFor(r.account_type, r.group_name, r.name),
-      amount: Number(r.amount), note: r.note ?? undefined,
-    }));
+  // accountId → {name, path, code, entityId} built from two single-table reads (no SQL join).
+  private async buildAccountDir(entityId?: string): Promise<Map<string, { name: string; path: string; code?: string; entityId: string }>> {
+    const db = this.getDb();
+    const accts = entityId
+      ? await all<Row>(db, 'SELECT id, name, code, account_group_id, entity_id FROM account WHERE entity_id = ?', [entityId])
+      : await all<Row>(db, 'SELECT id, name, code, account_group_id, entity_id FROM account');
+    const groups = await all<Row>(db, 'SELECT id, name, account_type FROM account_group');
+    const gById = new Map<string, Row>(groups.map((g) => [g.id, g]));
+    const dir = new Map<string, { name: string; path: string; code?: string; entityId: string }>();
+    for (const a of accts) {
+      const g = gById.get(a.account_group_id);
+      dir.set(a.id, {
+        name: a.name,
+        path: g ? pathFor(g.account_type, g.name, a.name) : a.name,
+        code: a.code ?? undefined,
+        entityId: a.entity_id,
+      });
+    }
+    return dir;
+  }
+
+  // Full single-table entry scan grouped by txn; keeps only txns present in txnById (the target scope).
+  private async entriesByTxn(txnById: Map<string, Row>): Promise<Map<string, Row[]>> {
+    const rows = await all<Row>(this.getDb(), 'SELECT id, txn_id, account_id, amount, note FROM entry');
+    const byTxn = new Map<string, Row[]>();
+    for (const e of rows) {
+      if (!txnById.has(e.txn_id)) continue;
+      let arr = byTxn.get(e.txn_id);
+      if (!arr) { arr = []; byTxn.set(e.txn_id, arr); }
+      arr.push(e);
+    }
+    return byTxn;
+  }
+
+  private toSplit(s: Row, acctDir: Map<string, { name: string; path: string }>): SplitEntry {
+    const d = acctDir.get(s.account_id);
+    return {
+      entryId: s.id, accountId: s.account_id, accountName: d?.name ?? s.account_id,
+      accountPath: d?.path ?? '', amount: Number(s.amount), note: s.note ?? undefined,
+    };
   }
 
   // ===========================================================================
@@ -555,18 +604,27 @@ class QuereusDataService implements DataService {
     id: string; name: string; path: string; code?: string;
   }>> {
     const q = query.toLowerCase();
-    const rows = await all<Row>(this.getDb(),
-      `SELECT a.id, a.name, a.code, g.name as group_name, g.account_type
-       FROM account a JOIN account_group g ON g.id = a.account_group_id
-       WHERE a.entity_id = ? AND a.is_active = 1
-       ORDER BY g.display_order, a.code, a.name`, [entityId]);
+    const db = this.getDb();
+    // Two single-table reads joined in JS (no SQL join — see tmp/quereus-join-index-perf.md).
+    const accts = await all<Row>(db,
+      'SELECT id, name, code, account_group_id FROM account WHERE entity_id = ? AND is_active = 1', [entityId]);
+    const groups = await all<Row>(db, 'SELECT id, name, account_type, display_order FROM account_group');
+    const gById = new Map<string, Row>(groups.map((g) => [g.id, g]));
+    accts.sort((a, b) => {
+      const ga = gById.get(a.account_group_id), gb = gById.get(b.account_group_id);
+      const oa = ga?.display_order ?? 0, ob = gb?.display_order ?? 0;
+      if (oa !== ob) return oa - ob;
+      return (a.code ?? '').localeCompare(b.code ?? '') || a.name.localeCompare(b.name);
+    });
     const results: Array<{ id: string; name: string; path: string; code?: string }> = [];
-    for (const r of rows) {
-      const path = pathFor(r.account_type, r.group_name, r.name);
-      const code: string | undefined = r.code ?? undefined;
-      if (r.name.toLowerCase().includes(q) || r.group_name.toLowerCase().includes(q) ||
+    for (const a of accts) {
+      const g = gById.get(a.account_group_id);
+      const groupName = g?.name ?? '';
+      const path = g ? pathFor(g.account_type, g.name, a.name) : a.name;
+      const code: string | undefined = a.code ?? undefined;
+      if (a.name.toLowerCase().includes(q) || groupName.toLowerCase().includes(q) ||
           path.toLowerCase().includes(q) || (code && code.toLowerCase().includes(q))) {
-        results.push({ id: r.id, name: r.name, path, code });
+        results.push({ id: a.id, name: a.name, path, code });
       }
     }
     results.sort((a, b) => {
@@ -582,49 +640,60 @@ class QuereusDataService implements DataService {
     return results;
   }
 
+  // Cross-entity ledger for the search browser. JS-side joins over single-table reads (the 5-way SQL
+  // JOIN + N+1 here was the worst offender at scale — see tmp/quereus-join-index-perf.md).
   async getAllTransactions(): Promise<LedgerEntry[]> {
     const db = this.getDb();
-    const rows = await all<Row>(db,
-      `SELECT e.id as entry_id, t.id as txn_id, t.date, t.reference, t.memo, e.account_id, e.amount, e.note,
-              a.name as account_name, a.entity_id, en.name as entity_name, g.name as group_name, g.account_type,
-              (SELECT count(*) FROM entry WHERE txn_id = t.id) as entry_count
-       FROM entry e
-       JOIN txn t ON t.id = e.txn_id
-       JOIN account a ON a.id = e.account_id
-       JOIN entity en ON en.id = a.entity_id
-       JOIN account_group g ON g.id = a.account_group_id
-       ORDER BY t.date DESC, t.created_at DESC, e.id ASC`);
+    const entities = await all<Row>(db, 'SELECT id, name FROM entity');
+    const entName = new Map<string, string>(entities.map((e) => [e.id, e.name]));
+    const acctDir = await this.buildAccountDir();
+    const txnRows = await all<Row>(db, 'SELECT id, date, reference, memo, created_at FROM txn');
+    const txnById = new Map<string, Row>(txnRows.map((t) => [t.id, t]));
+    const byTxn = await this.entriesByTxn(txnById);
+
+    // Flatten to entries, ordered date DESC, created_at DESC, entry id ASC (matches prior behavior).
+    const ordered: Row[] = [];
+    for (const arr of byTxn.values()) ordered.push(...arr);
+    ordered.sort((a, b) => {
+      const ta = txnById.get(a.txn_id)!, tb = txnById.get(b.txn_id)!;
+      if (ta.date !== tb.date) return ta.date < tb.date ? 1 : -1;
+      const ca = ta.created_at ?? '', cb = tb.created_at ?? '';
+      if (ca !== cb) return ca < cb ? 1 : -1;
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    });
+
     const result: LedgerEntry[] = [];
     const processedTxns = new Set<string>();
-    for (const r of rows) {
-      const isSplit = Number(r.entry_count) > 2;
+    for (const e of ordered) {
+      const t = txnById.get(e.txn_id)!;
+      const group = byTxn.get(e.txn_id) ?? [];
+      const isSplit = group.length > 2;
+      const d = acctDir.get(e.account_id);
       const le = {
-        entryId: r.entry_id, transactionId: r.txn_id, date: r.date,
-        reference: r.reference ?? undefined, memo: r.memo ?? undefined,
-        accountId: r.account_id, amount: Number(r.amount), note: r.note ?? undefined,
+        entryId: e.id, transactionId: e.txn_id, date: t.date,
+        reference: t.reference ?? undefined, memo: t.memo ?? undefined,
+        accountId: e.account_id, amount: Number(e.amount), note: e.note ?? undefined,
         runningBalance: 0, isSplit,
       } as LedgerEntry & { entityId?: string; entityName?: string; accountName?: string; accountPath?: string };
 
-      if (!processedTxns.has(r.txn_id)) {
-        processedTxns.add(r.txn_id);
+      if (!processedTxns.has(e.txn_id)) {
+        processedTxns.add(e.txn_id);
+        const siblings = group.filter((s) => s.id !== e.id);
         if (isSplit) {
-          le.splitEntries = await this.splitsFor(r.txn_id, r.entry_id);
-        } else {
-          const off = await get<Row>(db,
-            `SELECT e.account_id, a.name, g.name as group_name, g.account_type
-             FROM entry e JOIN account a ON a.id = e.account_id JOIN account_group g ON g.id = a.account_group_id
-             WHERE e.txn_id = ? AND e.id != ? LIMIT 1`, [r.txn_id, r.entry_id]);
-          if (off) {
-            le.offsetAccountId = off.account_id;
-            le.offsetAccountName = off.name;
-            le.offsetAccountPath = pathFor(off.account_type, off.group_name, off.name);
-          }
+          le.splitEntries = siblings
+            .sort((x, y) => Number(y.amount) - Number(x.amount))
+            .map((s) => this.toSplit(s, acctDir));
+        } else if (siblings[0]) {
+          const od = acctDir.get(siblings[0].account_id);
+          le.offsetAccountId = siblings[0].account_id;
+          le.offsetAccountName = od?.name;
+          le.offsetAccountPath = od?.path;
         }
       }
-      le.entityId = r.entity_id;
-      le.entityName = r.entity_name;
-      le.accountName = r.account_name;
-      le.accountPath = pathFor(r.account_type, r.group_name, r.account_name);
+      le.entityId = d?.entityId;
+      le.entityName = d ? entName.get(d.entityId) : undefined;
+      le.accountName = d?.name;
+      le.accountPath = d?.path;
       result.push(le);
     }
     return result;

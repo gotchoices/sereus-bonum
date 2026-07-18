@@ -268,14 +268,31 @@ GnuCash merge screen) so we can create/reload test datasets at any scale. Spec: 
 
 **Attribution:** both remaining costs are the **IndexedDB store's per-row async work** (an
 optimystic/quereus storage characteristic), not our query shape:
-- **Reads:** avoid SQL `JOIN`s on the store — they degrade to per-row async nested loops. Do joins in
-  JS over single-table indexed reads. Applied to `getBalanceSheet`; **`getLedgerEntries` /
-  `getAllTransactions` still use SQL joins + N+1 offset lookups** and should get the same treatment
-  before large real books are browsable (follow-up).
+- **Reads:** avoid SQL `JOIN`s on the store — they degrade to per-row async nested loops (confirmed
+  super-linear; see `tmp/quereus-join-index-perf.md`, filed for the Quereus maintainer). Do joins in JS
+  over single-table indexed reads. Applied to **`getBalanceSheet`, `getLedgerEntries`,
+  `getAllTransactions`, and `searchAccounts`** (all rewritten to load single tables and join/group in a
+  shared `buildAccountDir` + `entriesByTxn` helper; the ledger's N+1 offset/split lookups are gone).
 - **Writes:** batched `bulkImport` into multi-row `VALUES` (~500–2000 params/stmt). Batching itself was
   the win (121 s→21 s at 5 k); larger batches gave marginal gains — residual ~1.6 ms/row is the store.
 - Added the 6 secondary indexes to both Quereus schemas (`create index` works with the store vtable),
   matching mock. FKs are **not** auto-indexed; PK is.
+
+**Ledger + search perf (JS-join rewrite, quereus-local):**
+
+| dataset | ledger (busiest account) | search "show all" (cross-entity) |
+|---------|--------------------------|----------------------------------|
+| 10 k txns (20 k entries) | ~2.5 s (Checking, 5,352 entries) | ~8 s (20 k entries) |
+| 20 k txns (40 k entries) | ~5.2 s (Checking, 10,723 entries) | ~22 s (40 k entries) |
+
+Before the rewrite the ledger for a busy account and cross-entity search **hung** (5-way join + N+1).
+Correctness verified: offset accounts, `[Split]` detection, and running balance all intact.
+
+**Remaining scale item (follow-up):** the search browser's "show all" loads every entry (feeds
+export-all), so it's inherently linear — ~22 s at 40 k. Wants a `LIMIT`/"load more" story with export
+kept separate; deferred because it's a UX+export-semantics decision, not a query-shape fix. The ledger
+loads all of one account's entries (needed for the running balance) but virtualizes rendering
+(`content-visibility`), so it stays usable (~2.5 s at 5 k entries).
 
 ## Current Sprint (Active Development)
 
