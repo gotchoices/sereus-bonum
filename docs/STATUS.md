@@ -245,6 +245,13 @@ incomplete** and writes only new ones. Milestones:
   - **Deferred (tracked in the consolidation):** editable account mapping (autocomplete/tree/settle/
     rescan), inline completion of Incomplete txns (must exclude for now), Import-Transactions mode
     (CSV/QIF/OFX).
+  - **Fixed:** Step-1 target toggle *looked* backwards — the active segmented button was invisible
+    because the new screen used undefined CSS vars (`--primary-color`, `--surface-*`). Reconciled to the
+    app's real vars (`--accent-color`, `--bg-*`, `--danger/success/warning`). **Theming nit:** the
+    **ledger** screen still uses the undefined `--surface-*` vars (renders via fallbacks) — reconcile.
+  - **Consolidations refreshed:** regenerated `generated/web/screens/import.md`; appended dated Update
+    notes to `entity-accounts.md` (Export + getBalanceSheet perf), `ledger.md`, `search.md`. Added the
+    native Export trigger to `accounts-view.md` spec.
 - ✅ **M4 — real data verified** (`Kyle.gnucash`, quereus-local) as part of M3.
 - ✅ **Stale schema (source_id) + GnuCash mapping bugs fixed** — see "GnuCash import fixes" below.
 

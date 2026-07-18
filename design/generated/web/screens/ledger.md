@@ -603,3 +603,16 @@ ledger/[accountId]/+page.svelte
 - Lazy load transactions (pagination or infinite scroll)
 - Debounce autocomplete queries
 - Memoize balance calculations
+
+---
+
+## Updates — 2026-07 (perf pass)
+
+- **`getLedgerEntries` rewritten for scale (data-layer, screen behavior unchanged).** The production
+  service loads the entity's transactions + entries as single-table indexed reads and resolves
+  offset/split siblings in JS (via shared `buildAccountDir`/`entriesByTxn`), replacing a per-row N+1
+  SQL join that hung at scale. A busy account's ledger now renders in ~2.5 s at 5k entries. Offset
+  accounts, `[Split]` detection, and running balance are unchanged. See docs/STATUS.md.
+- **Known theming nit:** this screen references `--surface-primary/secondary/hover` CSS vars that aren't
+  defined in `app.css` (the app uses `--bg-card/secondary/hover`); it renders via fallbacks but should be
+  reconciled (same class of bug fixed in the import screen).

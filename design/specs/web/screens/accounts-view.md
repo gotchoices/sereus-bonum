@@ -118,7 +118,9 @@ Date range required. Income/Expense accounts only show transactions within this 
 
 **Navigate to Ledger:** Click any account name
 
-**Export:** Export button (future) - exports to CSV/Excel with current view
+**Export:** Export button downloads the entity's full books as a **native Bonum `.json` dump**
+(re-importable — see [domain/export.md](../../domain/export.md) and the native books restore in
+[domain/import.md](../../domain/import.md)). CSV/Excel export of the current view is future.
 
 **Add Column:** (future) - Adds another date range column for period comparison
 

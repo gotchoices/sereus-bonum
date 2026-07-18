@@ -136,3 +136,12 @@ search: {
 }
 ```
 
+
+---
+
+## Updates — 2026-07 (perf pass)
+
+- **`getAllTransactions` rewritten for scale (data-layer, screen behavior unchanged).** Replaced a
+  cross-entity 5-way SQL `JOIN` + N+1 offset lookups with single-table reads joined in JS. "Show all"
+  now loads ~8 s at 20k / ~22 s at 40k entries (was effectively hung). Still loads everything (feeds
+  export-all); a `LIMIT`/pagination story is the remaining follow-up. See docs/STATUS.md.

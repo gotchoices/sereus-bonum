@@ -257,3 +257,16 @@ interface BalanceSheetData {
 - [ ] Retained Earnings appears correctly in each mode
 - [ ] Equity total includes Retained Earnings
 - [ ] Date changes only reload on blur (performance optimization)
+
+---
+
+## Updates — 2026-07 (perf pass + native export)
+
+- **Native export trigger added.** Header "Export" button (`exportNative` in `+page.svelte`) dumps the
+  entity's full books to a re-importable native `.json` (`$lib/import/native.ts` `exportBooks`). See
+  `accounts-view.md` User Actions and [domain/export.md](../../../specs/domain/export.md). CSV/Excel of
+  the current view remains future.
+- **`getBalanceSheet` rewritten for scale (data-layer, screen behavior unchanged).** The production
+  service now loads single-table indexed reads and joins in JS instead of a 3-way SQL `JOIN`
+  (~140× faster on the IndexedDB store; see `tmp/quereus-join-index-perf.md` and docs/STATUS.md
+  "Native Books + Perf Pass"). Renders ~5 s at 20k txns. Balance-sheet math/output is unchanged.
