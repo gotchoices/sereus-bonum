@@ -52,7 +52,9 @@ export interface ImportResult {
 // --- Merge model (see design/specs/domain/import.md) ---
 
 /** How a source account resolves to a Bonum account. */
-export type AccountDisposition = 'existing' | 'create' | 'unresolved';
+// 'skip' = a source node that maps to a catalog group (or is an unused container), so no Bonum
+// account is created for it; its descendants attach to the group or to intermediate accounts.
+export type AccountDisposition = 'existing' | 'create' | 'unresolved' | 'skip';
 
 export interface ResolvedAccount {
   sourceGuid: string;
@@ -63,6 +65,8 @@ export interface ResolvedAccount {
   targetGroupId?: string;           // when 'create' — the Bonum account group to create under
   targetGroupPath?: string;         // human-readable group path
   targetAccountName?: string;       // account name to create
+  parentSourceGuid?: string;        // when 'create' — source guid of the Bonum PARENT account
+                                    // (an intermediate node below the group boundary); undefined = top of subtree
   usedInTransactions: boolean;      // referenced by at least one transaction entry
 }
 

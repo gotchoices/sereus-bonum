@@ -102,7 +102,14 @@ export class ImportService {
     return { entityId: targetEntityId, resolved, transactions, counts };
   }
 
-  /** Resolve each source account to an existing Bonum account or a to-create target group. */
+  /**
+   * Resolve each source account. General source levels whose names match a Bonum catalog group
+   * (e.g. "Fixed Assets", "Current Assets") map to that shared group and create NO account; specific
+   * levels below the nearest such group become entity accounts nested via parentId (e.g.
+   * `Fixed Assets:Jeppson:AOF Loan` → group "Fixed Assets", account "Jeppson" with child "AOF Loan").
+   * See design/specs/domain/import.md (Account Mapping) — this preserves the source hierarchy without
+   * polluting the globally-shared group catalog with per-entity names.
+   */
   private resolveAccounts(
     parsed: ParsedBooks,
     groups: AccountGroup[],
@@ -115,34 +122,57 @@ export class ImportService {
     const topGroupByType = new Map<AccountType, AccountGroup>();
     for (const g of groups) if (!g.parentId) topGroupByType.set(g.accountType, g);
 
+    const parentOf = (a: ParsedAccount): ParsedAccount | undefined =>
+      a.parentGuid ? accByGuid.get(a.parentGuid) : undefined;
+    // A source node whose name matches a catalog group → represented by that group, not an account.
+    const isGroupNode = (a: ParsedAccount): boolean => groupByName.has(a.name.toLowerCase());
+
     const groupPath = (g: AccountGroup): string => {
       const parts: string[] = [];
       let cur: AccountGroup | undefined = g;
       while (cur) { parts.unshift(cur.name); cur = cur.parentId ? groupById.get(cur.parentId) : undefined; }
       return parts.join(' : ');
     };
-
-    // Which source accounts are actually referenced by transaction entries.
-    const usedGuids = new Set<string>();
-    for (const t of parsed.transactions) for (const e of t.entries) usedGuids.add(e.accountGuid);
-
     const sourcePathOf = (a: ParsedAccount): string => {
       const parts: string[] = [];
       let cur: ParsedAccount | undefined = a;
-      while (cur) { parts.unshift(cur.name); cur = cur.parentGuid ? accByGuid.get(cur.parentGuid) : undefined; }
+      while (cur) { parts.unshift(cur.name); cur = parentOf(cur); }
       return parts.join(':');
     };
 
-    // Nearest self-or-ancestor whose name matches a group; else type fallback.
-    const groupForAccount = (a: ParsedAccount): AccountGroup | undefined => {
-      let cur: ParsedAccount | undefined = a;
+    // Which source accounts are referenced by transaction entries, and which are ancestors of one.
+    const usedGuids = new Set<string>();
+    for (const t of parsed.transactions) for (const e of t.entries) usedGuids.add(e.accountGuid);
+    const ancestorOfUsed = new Set<string>();
+    for (const guid of usedGuids) {
+      let cur = accByGuid.get(guid) && parentOf(accByGuid.get(guid)!);
+      while (cur) { ancestorOfUsed.add(cur.guid); cur = parentOf(cur); }
+    }
+
+    // A source node becomes a Bonum account iff it's used, or it's a non-group intermediate that a
+    // used account descends from (so the parent chain is preserved). Group nodes never do.
+    const becomesAccount = (a: ParsedAccount): boolean =>
+      usedGuids.has(a.guid) || (ancestorOfUsed.has(a.guid) && !isGroupNode(a));
+
+    // Group + boundary for an account node: nearest STRICT ancestor that is a group node.
+    const boundaryFor = (a: ParsedAccount): { group?: AccountGroup; boundaryGuid?: string } => {
+      let cur = parentOf(a);
       while (cur) {
-        const g = groupByName.get(cur.name.toLowerCase());
-        if (g) return g;
-        cur = cur.parentGuid ? accByGuid.get(cur.parentGuid) : undefined;
+        if (isGroupNode(cur)) return { group: groupByName.get(cur.name.toLowerCase()), boundaryGuid: cur.guid };
+        cur = parentOf(cur);
       }
       const type = mapGnuCashType(a.type);
-      return type ? topGroupByType.get(type) : undefined;
+      return { group: type ? topGroupByType.get(type) : undefined };
+    };
+
+    // Nearest strict ancestor (above a, below the group boundary) that is itself an account node.
+    const parentAccountGuid = (a: ParsedAccount, boundaryGuid?: string): string | undefined => {
+      let cur = parentOf(a);
+      while (cur && cur.guid !== boundaryGuid) {
+        if (becomesAccount(cur)) return cur.guid;
+        cur = parentOf(cur);
+      }
+      return undefined;
     };
 
     return parsed.accounts.map((a): ResolvedAccount => {
@@ -152,13 +182,19 @@ export class ImportService {
         sourcePath: sourcePathOf(a),
         usedInTransactions: usedGuids.has(a.guid),
       };
-      // 1) already imported (stored source id), or 2) same-name existing account
+      // Already imported (stored source id) or same-name existing account.
       const existingId = acctBySourceId.get(a.guid) ?? acctByName.get(a.name.toLowerCase());
       if (existingId) return { ...base, disposition: 'existing', existingAccountId: existingId };
-      // 3) resolve a target group to create under
-      const g = groupForAccount(a);
-      if (g) return { ...base, disposition: 'create', targetGroupId: g.id, targetGroupPath: groupPath(g), targetAccountName: a.name };
-      return { ...base, disposition: 'unresolved' };
+      // Group nodes / unused containers create no account.
+      if (!becomesAccount(a)) return { ...base, disposition: 'skip' };
+      // Create an entity account under the resolved group, nested under any intermediate parent.
+      const { group, boundaryGuid } = boundaryFor(a);
+      if (!group) return { ...base, disposition: 'unresolved' };
+      return {
+        ...base, disposition: 'create',
+        targetGroupId: group.id, targetGroupPath: groupPath(group), targetAccountName: a.name,
+        parentSourceGuid: parentAccountGuid(a, boundaryGuid),
+      };
     });
   }
 
@@ -212,25 +248,27 @@ export class ImportService {
     const ts = new Date().toISOString();
     const guidToId = new Map<string, string>();
 
-    // Build the accounts to create (used-in-transactions, not already existing).
-    const accounts: Account[] = [];
+    // Resolve accounts: reuse matched existing ones; pre-assign ids to all to-create accounts so
+    // parentId can point at intermediate accounts created in the same batch.
+    const creates = plan.resolved.filter((r) => r.disposition === 'create' && r.targetGroupId);
     for (const r of plan.resolved) {
       if (r.disposition === 'existing' && r.existingAccountId) {
         guidToId.set(r.sourceGuid, r.existingAccountId);
         result.accountsMatched++;
-      } else if (r.disposition === 'create' && r.usedInTransactions && r.targetGroupId) {
-        const id = crypto.randomUUID();
-        accounts.push({
-          id, entityId: plan.entityId, accountGroupId: r.targetGroupId,
-          name: r.targetAccountName ?? r.sourceName, unit, isActive: true,
-          sourceId: r.sourceGuid, createdAt: ts, updatedAt: ts,
-        });
-        guidToId.set(r.sourceGuid, id);
-        result.accountsCreated++;
-      } else {
+      } else if (r.disposition === 'skip' || r.disposition === 'unresolved') {
         result.accountsSkipped++;
       }
     }
+    for (const r of creates) guidToId.set(r.sourceGuid, crypto.randomUUID());
+    const created: Account[] = creates.map((r) => ({
+      id: guidToId.get(r.sourceGuid)!, entityId: plan.entityId, accountGroupId: r.targetGroupId!,
+      parentId: r.parentSourceGuid ? guidToId.get(r.parentSourceGuid) : undefined,
+      name: r.targetAccountName ?? r.sourceName, unit, isActive: true,
+      sourceId: r.sourceGuid, createdAt: ts, updatedAt: ts,
+    }));
+    result.accountsCreated = created.length;
+    // Order parents before children so the account.parent_id FK is satisfied on insert.
+    const accounts = topoSortByParent(created);
 
     // Build the transactions + entries to write.
     const transactions: Transaction[] = [];
@@ -277,6 +315,21 @@ export class ImportService {
     const toWrite = plan.transactions.filter((t) => t.disposition === 'new');
     return this.executeMerge(plan, toWrite);
   }
+}
+
+/** Order accounts so each parent precedes its children (satisfies the account.parent_id FK on insert). */
+function topoSortByParent(accounts: Account[]): Account[] {
+  const byId = new Map(accounts.map((a) => [a.id, a]));
+  const out: Account[] = [];
+  const seen = new Set<string>();
+  const visit = (a: Account) => {
+    if (seen.has(a.id)) return;
+    seen.add(a.id);
+    if (a.parentId && byId.has(a.parentId)) visit(byId.get(a.parentId)!);
+    out.push(a);
+  };
+  for (const a of accounts) visit(a);
+  return out;
 }
 
 /** GnuCash account type → Bonum account type (see domain/import.md). */

@@ -8,6 +8,10 @@ import { seedDemoData, seedDebugTransactions } from './seed';
 import { log } from '$lib/logger';
 
 const STORAGE_KEY = 'bonum-db';
+// Bump whenever schema.sql changes. A restored DB stamped with a different version is
+// discarded and rebuilt from the authoritative schema (no in-place migration) — export
+// first (native books dump) if you need to keep the data.
+const SCHEMA_VERSION = 2;
 let db: Database | null = null;
 let initPromise: Promise<Database> | null = null;
 
@@ -67,7 +71,16 @@ async function initializeDb(): Promise<Database> {
         log.sqlite.debug('Restoring database from localStorage');
         const data = new Uint8Array(JSON.parse(saved));
         database = new SQL.Database(data);
-        log.sqlite.info('Restored database from localStorage');
+        // Discard (and rebuild) a DB whose schema version differs from the current authoritative one.
+        const ver = readUserVersion(database);
+        if (ver !== SCHEMA_VERSION) {
+          log.sqlite.warn(`Persisted DB schema v${ver} != current v${SCHEMA_VERSION}; rebuilding from authoritative schema (existing data discarded — export first to keep it).`);
+          database.close();
+          database = new SQL.Database();
+          needsSeed = true;
+        } else {
+          log.sqlite.info('Restored database from localStorage');
+        }
       } catch (e) {
         log.sqlite.warn('Failed to restore, creating fresh database', e);
         database = new SQL.Database();
@@ -79,10 +92,11 @@ async function initializeDb(): Promise<Database> {
       needsSeed = true;
     }
   }
-  
+
   // Always run schema (IF NOT EXISTS is safe)
   log.sqlite.debug('Running schema...');
   database.run(SCHEMA_SQL);
+  database.run(`PRAGMA user_version = ${SCHEMA_VERSION}`);
   log.sqlite.debug('Schema applied');
   
   // Seed demo data if fresh database
@@ -100,6 +114,11 @@ async function initializeDb(): Promise<Database> {
   }
   
   return database;
+}
+
+function readUserVersion(database: Database): number {
+  const res = database.exec('PRAGMA user_version');
+  return res.length && res[0].values.length ? Number(res[0].values[0][0]) : 0;
 }
 
 /**

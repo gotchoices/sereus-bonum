@@ -43,11 +43,21 @@ async function initLocal(): Promise<Database> {
 
   // Tables bind to the registered store module.
   await database.exec("pragma default_vtab_module = 'store'");
-  if (!(await schemaExists(database))) {
+
+  const exists = await schemaExists(database);
+  const version = exists ? await readSchemaVersion(database) : 0;
+  if (exists && version !== SCHEMA_VERSION) {
+    // Rebuild from the authoritative schema rather than migrate in place — the live schema is
+    // always exactly the DDL. Discards data (export first to keep it); backends aren't kept in sync.
+    log.data.warn(`[Quereus] Persisted schema v${version} != current v${SCHEMA_VERSION}; rebuilding (existing data discarded).`);
+    await dropAllTables(database);
+  }
+  if (!exists || version !== SCHEMA_VERSION) {
     log.data.info('[Quereus] Applying schema...');
     for (const stmt of splitStatements(SCHEMA_QSQL)) {
       await database.exec(stmt);
     }
+    await stampSchemaVersion(database);
     const { seedQuereus } = await import('./seed');
     await seedQuereus(database);
     log.data.info('[Quereus] Seeded base units + account groups');
@@ -88,6 +98,33 @@ function splitStatements(sql: string): string[] {
   return sql
     .split('\n').filter((l) => !l.trim().startsWith('--')).join('\n')
     .split(';').map((s) => s.trim()).filter((s) => s.length > 0);
+}
+
+// Bump when schema.qsql changes. A persisted store stamped with a different version is dropped and
+// rebuilt from the authoritative DDL (no in-place migration). Kept as its own infra table.
+const SCHEMA_VERSION = 2;
+
+async function readSchemaVersion(database: Database): Promise<number> {
+  try {
+    const row = await get<{ version: number }>(database, 'SELECT version FROM schema_meta LIMIT 1');
+    return row ? Number(row.version) : 0;
+  } catch {
+    return 0; // schema_meta absent → treat as pre-versioning
+  }
+}
+
+async function stampSchemaVersion(database: Database): Promise<void> {
+  await database.exec('create table if not exists schema_meta (version integer)');
+  await database.exec('DELETE FROM schema_meta');
+  await database.exec('INSERT INTO schema_meta (version) VALUES (?)', [SCHEMA_VERSION]);
+}
+
+async function dropAllTables(database: Database): Promise<void> {
+  const rows = await all<{ name: string }>(database, "SELECT name FROM schema() WHERE type = 'table'");
+  for (const r of rows) {
+    try { await database.exec(`DROP TABLE ${r.name}`); }
+    catch (e) { log.data.warn(`[Quereus] drop ${r.name} failed`, e); }
+  }
 }
 
 async function schemaExists(database: Database): Promise<boolean> {

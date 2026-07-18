@@ -706,10 +706,11 @@
       }
       
       log.ui.info('[Import] Import complete:', importResult);
-      
+      await initializeEntities(); // refresh the store so the new entity resolves on its page
+
       // Show toast and navigate to entity
       showToast(`Entity "${entityName}" created`);
-      
+
       // Navigate to entity page (Trial Balance mode)
       const entityId = importResult.entityId;
       if (entityId) {

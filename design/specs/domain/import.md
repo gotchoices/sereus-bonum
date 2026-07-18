@@ -43,6 +43,22 @@ new transactions are written.
 
 ## Account Mapping
 
+### Books: Hierarchy Mapping
+
+Source programs (GnuCash) keep one deep account tree; Bonum splits nesting into a globally-shared
+**group catalog** and per-entity **account parent-child** links. An import maps the two apart:
+
+- **General source levels** whose names match a Bonum catalog group (e.g. `Fixed Assets`,
+  `Current Assets`, `Income`) map to that **shared group** and create no account.
+- **Specific source levels** below the nearest such group become **entity accounts**, preserving the
+  source nesting via account `parentId`. Intermediate nodes are created even if they hold no
+  transactions of their own.
+
+Example: `Assets:Fixed Assets:Jeppson:AOF Loan` → group **Fixed Assets**, account **Jeppson** with child
+account **AOF Loan**. This keeps per-entity names (`Jeppson`) out of the shared catalog. The group for
+an account is the nearest self-or-ancestor whose name matches the catalog; if none matches, the
+top-level type group (below) is used.
+
 ### Books: Type Mapping
 
 Source account types mapped to [Bonum groups](./account-groups.md):
