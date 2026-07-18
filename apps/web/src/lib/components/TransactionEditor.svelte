@@ -85,8 +85,8 @@
       160px     /* Credit */
       160px;    /* Balance */
     gap: 0;
-    border: 2px solid var(--primary-color, #0066cc);
-    background: var(--surface-hover, #f9f9f9);
+    border: 2px solid var(--accent-color, #0066cc);
+    background: var(--bg-hover, #f9f9f9);
     margin: 0.25rem 0;
   }
   
@@ -98,12 +98,12 @@
   /* All editor cells */
   .editor-row > div {
     padding: 0.5rem 1rem;
-    background: var(--surface-hover, #f9f9f9);
+    background: var(--bg-hover, #f9f9f9);
   }
   
   /* Current account row gets different background */
   .edit-current-account > div {
-    background: var(--surface-secondary);
+    background: var(--bg-secondary);
   }
   
   /* Actions row spans full width */
@@ -121,7 +121,7 @@
   }
   
   .split-toggle-btn {
-    background: var(--surface-secondary);
+    background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 4px;
     padding: 0.375rem 0.5rem;
@@ -134,8 +134,8 @@
   }
   
   .split-toggle-btn:hover:not(:disabled) {
-    background: var(--surface-hover);
-    border-color: var(--primary-color);
+    background: var(--bg-hover);
+    border-color: var(--accent-color);
   }
   
   .split-toggle-btn:disabled {
@@ -156,7 +156,7 @@
     padding: 0.375rem 0.5rem;
     border: 1px solid var(--border-light);
     border-radius: 4px;
-    background: var(--surface-primary);
+    background: var(--bg-card);
     color: var(--text-primary);
     font-size: 0.875rem;
     box-sizing: border-box;
@@ -164,7 +164,7 @@
   
   :global(.edit-input:focus) {
     outline: none;
-    border-color: var(--primary-color);
+    border-color: var(--accent-color);
   }
   
   :global(.edit-input.edit-amount) {
@@ -207,7 +207,7 @@
   }
   
   .current-account-link:hover {
-    color: var(--primary-color);
+    color: var(--accent-color);
     text-decoration: underline;
   }
   
@@ -215,7 +215,7 @@
   .btn-remove-split {
     background: transparent;
     border: none;
-    color: var(--danger-color);
+    color: var(--danger);
     font-size: 1.5rem;
     cursor: pointer;
     padding: 0;
@@ -223,7 +223,7 @@
   }
   
   .btn-remove-split:hover {
-    color: var(--danger-color-hover);
+    color: var(--danger-hover);
   }
   
   /* Actions footer */
@@ -232,7 +232,7 @@
     justify-content: space-between;
     align-items: center;
     padding: 0.75rem 1rem;
-    background: var(--surface-secondary);
+    background: var(--bg-secondary);
     border-top: 1px solid var(--border-color);
     gap: 2rem;
     min-height: 50px;
@@ -260,12 +260,12 @@
   }
   
   .balanced {
-    color: var(--success-color);
+    color: var(--success);
     font-weight: 600;
   }
   
   .imbalanced {
-    color: var(--danger-color);
+    color: var(--danger);
     font-weight: 600;
   }
   
@@ -286,31 +286,31 @@
   }
   
   .btn-primary {
-    background: var(--primary-color, #0066cc);
+    background: var(--accent-color, #0066cc);
     color: white;
   }
   
   .btn-primary:hover {
-    background: var(--primary-color-hover, #0052a3);
+    background: var(--accent-hover, #0052a3);
   }
   
   .btn-secondary {
-    background: var(--surface-secondary, #f5f5f5);
+    background: var(--bg-secondary, #f5f5f5);
     color: var(--text-primary, #000);
     border: 1px solid var(--border-color, #ccc);
   }
   
   .btn-secondary:hover {
-    background: var(--surface-hover, #e8e8e8);
+    background: var(--bg-hover, #e8e8e8);
   }
   
   .btn-danger {
-    background: var(--danger-color, #dc3545);
+    background: var(--danger, #dc3545);
     color: white;
   }
   
   .btn-danger:hover {
-    background: var(--danger-color-hover, #bd2130);
+    background: var(--danger-hover, #bd2130);
   }
 </style>
 

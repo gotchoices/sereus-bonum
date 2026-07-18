@@ -230,7 +230,7 @@
   
   .autocomplete-input:focus {
     outline: none;
-    border-color: var(--primary-color, #007bff);
+    border-color: var(--accent-color, #007bff);
   }
   
   .suggestions-dropdown {

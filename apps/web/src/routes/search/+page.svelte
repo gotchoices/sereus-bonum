@@ -125,7 +125,7 @@
 
 <style>
   .search-page {
-    padding: var(--spacing-lg);
+    padding: var(--space-lg);
     max-width: 1400px;
     margin: 0 auto;
   }
@@ -134,7 +134,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: var(--space-lg);
   }
   
   .page-header h1 {
@@ -145,23 +145,23 @@
   
   .header-actions {
     display: flex;
-    gap: var(--spacing-sm);
+    gap: var(--space-sm);
     align-items: center;
   }
   
   .btn-primary {
-    padding: var(--spacing-sm) var(--spacing-md);
-    background: var(--primary-color);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--accent-color);
     color: white;
     border: none;
-    border-radius: var(--border-radius);
+    border-radius: var(--radius-md);
     font-weight: 500;
     cursor: pointer;
     transition: background 0.2s;
   }
   
   .btn-primary:hover:not(:disabled) {
-    background: var(--primary-hover-color);
+    background: var(--accent-hover);
   }
   
   .btn-primary:disabled {
@@ -170,18 +170,18 @@
   }
   
   .btn-secondary {
-    padding: var(--spacing-sm) var(--spacing-md);
-    background: var(--button-bg);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--accent-color);
     color: var(--text-primary);
     border: 1px solid var(--border-color);
-    border-radius: var(--border-radius);
+    border-radius: var(--radius-md);
     font-weight: 500;
     cursor: pointer;
     transition: background 0.2s;
   }
   
   .btn-secondary:hover {
-    background: var(--button-hover-bg);
+    background: var(--accent-hover);
   }
   
   .export-dropdown {
@@ -191,7 +191,7 @@
   .export-btn {
     display: flex;
     align-items: center;
-    gap: var(--spacing-xs);
+    gap: var(--space-xs);
   }
   
   .export-menu {
@@ -200,7 +200,7 @@
     right: 0;
     background: var(--bg-primary);
     border: 1px solid var(--border-color);
-    border-radius: var(--border-radius);
+    border-radius: var(--radius-md);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     z-index: 100;
     min-width: 180px;
@@ -209,9 +209,9 @@
   .export-menu button {
     display: flex;
     align-items: center;
-    gap: var(--spacing-xs);
+    gap: var(--space-xs);
     width: 100%;
-    padding: var(--spacing-sm) var(--spacing-md);
+    padding: var(--space-sm) var(--space-md);
     background: none;
     border: none;
     text-align: left;
@@ -221,24 +221,24 @@
   }
   
   .export-menu button:hover {
-    background: var(--hover-bg);
+    background: var(--bg-hover);
   }
   
   .export-menu button:first-child {
-    border-radius: var(--border-radius) var(--border-radius) 0 0;
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
   }
   
   .export-menu button:last-child {
-    border-radius: 0 0 var(--border-radius) var(--border-radius);
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
   }
   
   .error-message {
-    padding: var(--spacing-md);
-    background: var(--error-bg);
-    border: 1px solid var(--error-color);
-    border-radius: var(--border-radius);
-    color: var(--error-color);
-    margin-bottom: var(--spacing-md);
+    padding: var(--space-md);
+    background: var(--danger-bg);
+    border: 1px solid var(--danger);
+    border-radius: var(--radius-md);
+    color: var(--danger);
+    margin-bottom: var(--space-md);
   }
   
   .error-message p {

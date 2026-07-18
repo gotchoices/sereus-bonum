@@ -2,270 +2,133 @@
 dependsOn:
   - design/stories/web/01-firstlook.md
   - design/specs/web/screens/catalog.md
-  - design/specs/web/global/account-groups.md
+  - design/specs/domain/account-groups.md
 depHashes:
-  design/specs/web/screens/catalog.md: 019afc464ddad3cd33ae166cac708c6bcfa61209fe6ae6f6f8236e3d3579ecfc
-  design/specs/web/global/account-groups.md: 2cb5757a1e8c2bbf732941a7d5c83532b503bf3eadc2557026fa4340d45266d4
-  design/stories/web/01-firstlook.md: 4a2e1ab0116f02c46bffa08d709f535054645e687c054ebbc14d1260705cefcd
-implementationHash:
-  apps/web/src/routes/catalog/+page.svelte: 9b4e5a26b525ccd325b7c909f1e950ad7303ec71549f7698e8b53bfc9541dfc1
+  design/stories/web/01-firstlook.md: a383e823aa5e362529d07d75688744556ef21848e59b20fa76986ba214169f06
+  design/specs/web/screens/catalog.md: d4058d119342f8768e04a34840e11f2fcf92df419054ad2a3c7d54d56d56b565
+  design/specs/domain/account-groups.md: 8026245538f1513fcca128a634a6addff329d7ce35e02c4388a0f3726a84c0af
 provides:
   - screen:Catalog
 needs:
   - store:accountGroups
-generated: 2024-12-16
-lastUpdated: 2024-12-16
+  - data:seed
+generated: 2026-07-18
+lastUpdated: 2026-07-18
 component: apps/web/src/routes/catalog/+page.svelte
 ---
 
 # Consolidation: Account Groups Catalog
 
-**Route:** `/catalog`  
-**Component:** `apps/web/src/routes/catalog/+page.svelte`  
-**Generated:** 2024-12-16  
+**Route:** `/catalog`
+**Component:** `apps/web/src/routes/catalog/+page.svelte`
+**Generated:** 2026-07-18
 
 ---
 
 ## Purpose
 
-Manage the shared classification structure for organizing accounts across all entities. This is the taxonomy itself, not the Accounts View which shows entity accounts with balances.
+Manage the shared classification taxonomy (account groups) used to organize accounts across all
+entities. This is the template structure itself — not the Accounts View, which shows entity accounts
+with balances. Five type panes (Asset, Liability, Equity, Income, Expense), each rendering its
+top-level groups and unlimited nested children. See
+[domain/account-groups.md](../../../specs/domain/account-groups.md).
+
+## Architecture
+
+- **Screen** (`+page.svelte`): loads groups via `loadAccountGroups`, renders a per-type
+  `.type-section` card. Recursive `groupRow` snippet renders the tree with depth-based indentation.
+- **Store** (`$lib/stores/accounts`): `accountGroups`, derived `topLevelGroupsByType` /
+  `childGroupsByParent`, and CRUD (`createAccountGroup`, `updateAccountGroup`, `deleteAccountGroup`).
+- **Seed** (`$lib/data/mock/seed.ts`): `ACCOUNT_GROUPS` provides the fresh-install taxonomy.
 
 ---
 
 ## Source Requirements Verification
 
-### Story 01-firstlook.md (Alt Path C)
+### stories/web/01-firstlook.md (Alt Path C)
 
 | # | Requirement | Status | Implementation |
 |---|-------------|--------|----------------|
 | 6.1 | Account Catalog option | ✅ | Route `/catalog` |
-| 6.2 | See 5 basic account types | ✅ | Lines 191-275 (type sections) |
-| 6.3 | Groups hierarchically arranged | ✅ | Recursive `groupRow` snippet |
-| 6.4 | Context menu: Edit, Add child, Delete | ✅ | Lines 280-299 |
-| 6.5 | Rearrange child order | ⏳ | Not in MVP (spec line 124) |
-| 6.6 | Add new child | ✅ | `openAddChildModal()` |
+| 6.2 | Sections for 5 account types | ✅ | `accountTypes` / `typeInfo`; `.type-section` per type |
+| 6.3 | Groups hierarchically arranged | ✅ | Recursive `groupRow` snippet via `childGroupsByParent` |
+| 6.4 | Context menu: Edit, Add child, Delete | ✅ | `contextMenu` block |
+| 6.5 | Rearrange order of child groups | ⛔ Deferred | No drag/reorder; groups render by store order |
+| 6.6 | Add new child (and move to last) | ⚠️ | Add child works (`openAddChildModal`); reposition not implemented |
 
 ### specs/web/screens/catalog.md
 
-#### Display Layout (Lines 16-50)
-
+#### Display Layout
 | Requirement | Status | Implementation |
 |-------------|--------|----------------|
-| Five separate panes/cards | ✅ | `.type-section` cards per type |
-| Icon only with tooltip | ✅ | `title="{info.label}"` on icon span |
-| Icons: 💰📋📊📈📉 | ✅ | `typeInfo` constant |
-| Top-level groups always visible | ✅ | Assets, Liabilities, etc. as top-level |
-| Expand/collapse icon (▶/▼) | ✅ | Line 217 |
-| Child groups indented | ✅ | Dynamic `padding-left` in snippet |
-| Leaf groups no arrow | ✅ | Line 230 (leaf class) |
-| Count shows groups per type | ✅ | `countGroups()` function |
-| Initial state: top-level expanded | ✅ | Effect on mount, localStorage fallback |
+| Five separate panes/cards | ✅ | `.type-section` per `accountType` |
+| Type shown by icon only, tooltip reveals name | ✅ | `.type-icon` `title={info.label}` |
+| Icons 💰📋📊📈📉 | ✅ | `typeInfo` |
+| Top-level groups always visible | ✅ | `topLevelGroupsByType` rendered per section |
+| Parent expand/collapse icon (▶/▼) | ✅ | `expand-icon` span, `isExpanded` |
+| Child groups indented | ✅ | `padding-left` from `depth` in `groupRow` |
+| Leaf groups show no arrow | ✅ | `leaf` branch (no expand icon) |
+| Count of groups per type | ✅ | `countGroups()` (counts all, incl. nested) |
+| Expand All | ✅ | `expandAll()` (all parents) |
+| Collapse All except top-level | ✅ | `collapseAll()` keeps `!parentId` groups |
+| Initial state = Collapse All (top-level expanded) | ✅ | `$effect` calls `collapseAll` on first visit |
+| User expansion state persists | ✅ | `localStorage` key `bonum-catalog-expand` |
 
-#### User Actions (Lines 53-107)
-
+#### Add New Group
 | Requirement | Status | Implementation |
 |-------------|--------|----------------|
-| Add New Group button | ✅ | Header action button |
-| Modal: Name required | ✅ | Form field with placeholder |
-| Modal: Parent dropdown (before Type) | ✅ | Shows all groups with type label |
-| Modal: Type dropdown | ✅ | Optional, defaults to parent type |
-| Modal: Type disabled if parent selected | ✅ | `disabled={formParentId !== null}` |
-| Modal: Type updates when parent changes | ✅ | `handleParentChange()` function |
-| Modal: Description optional | ✅ | Optional text field |
-| Edit Group via context menu | ✅ | "Edit" menu item |
-| Edit: Cannot change Type | ✅ | Type shown as disabled input |
-| Add Child Group | ✅ | "Add Child" menu item (all groups) |
-| Add Child: Type/Parent locked | ✅ | Both shown as disabled inputs |
-| Delete Group | ✅ | "Delete" menu item |
-| Delete confirmation | ✅ | `confirm()` dialog |
-| Expand/Collapse toggle | ✅ | `toggleGroup()` function |
-| Icon changes on toggle | ✅ | ▶ ↔ ▼ |
-| **State persists in localStorage** | ✅ | Key: `bonum-catalog-expand` |
-| **Initial state: top-level expanded** | ✅ | Effect checks localStorage first |
+| Name required | ✅ | `handleSave` guard; Save `disabled` until non-empty |
+| Type optional, defaults to parent type | ✅ | `formType`; set by `handleParentChange` |
+| Type disabled when parent selected | ✅ | `disabled={formParentId !== null}` |
+| Type updates when parent changes | ✅ | `handleParentChange` |
+| Parent dropdown lists only groups of selected type | ⚠️ | Dropdown iterates all `accountGroups` (labels type); `getParentOptions` filter exists but is unused |
+| Parent dropdown updates when Type changes | ⚠️ | Parent list is static (all groups); not re-filtered on type change |
+| Description optional | ✅ | `formDescription` |
+| Save creates + refreshes; Cancel closes | ✅ | `createAccountGroup`; `closeModal` |
 
-#### Empty States (Lines 101-109)
-
+#### Edit Group
 | Requirement | Status | Implementation |
 |-------------|--------|----------------|
-| "No groups" empty state | ✅ | Lines 234-236 |
-| Fresh install seeds groups | ✅ | `seed.ts` ACCOUNT_GROUPS |
+| Right-click → Edit, pre-filled | ✅ | `openEditModal` |
+| Cannot change Type | ✅ | Type rendered as disabled input; `handleSave` updates name/description only |
+| Change Name & Description | ✅ | `updateAccountGroup` |
+| Block parent change to incompatible type when children exist | ⛔ Deferred | Edit modal exposes no parent field; not enforced |
 
-#### Context Menu (Lines 113-119)
-
+#### Add Child Group
 | Requirement | Status | Implementation |
 |-------------|--------|----------------|
-| Edit option | ✅ | Line 287 |
-| Add Child option | ✅ | **FIXED: Available for all groups** |
-| Delete option | ✅ | Lines 293-297 |
+| Right-click → Add Child | ✅ | `openAddChildModal` (offered on all groups, superset of "parent only") |
+| Type & Parent locked (inherited) | ✅ | Both rendered as disabled inputs |
+
+#### Delete Group
+| Requirement | Status | Implementation |
+|-------------|--------|----------------|
+| Right-click → Delete with confirmation | ✅ | `handleDeleteGroup` → `confirm()` |
+| Confirmation shows group name + entity-usage warning | ⚠️ | Generic `catalog.delete_confirm` string; no name/usage count |
+| Block delete when entities use the group (or a child) | ⛔ Deferred | Deletes unconditionally |
+
+#### Empty States
+| Requirement | Status | Implementation |
+|-------------|--------|----------------|
+| "No groups of a type" message | ✅ | `empty-type` (`catalog.no_groups_type`) |
+| Fresh install seeds standard groups | ✅ | `seed.ts` `ACCOUNT_GROUPS` |
+
+#### Context Menu
+| Requirement | Status | Implementation |
+|-------------|--------|----------------|
+| Edit / Add Child / Delete | ✅ | `contextMenu` menu items |
 
 ---
 
-## Changes Made (2024-12-16)
+## Deferred / Notes
 
-### 1. Added localStorage Persistence for Expand/Collapse State (Spec Line 97)
-
-**Before:** Expanded state reset on page refresh  
-**After:** 
-- Saves to `localStorage` key `bonum-catalog-expand`
-- Restores on page load
-- Updates on every toggle/expandAll/collapseAll
-
-**Implementation:**
-```typescript
-const EXPAND_STORAGE_KEY = 'bonum-catalog-expand';
-
-function saveExpandedState() {
-  localStorage.setItem(EXPAND_STORAGE_KEY, JSON.stringify([...expandedGroups]));
-}
-```
-
-### 2. Fixed "Add Child" Context Menu (Spec Line 118)
-
-**Before:** Only available for top-level groups  
-**After:** Available for all groups (multi-level nesting supported)
-
-### 3. Added Multi-Level Nesting Support (Spec Line 36)
-
-**Before:** Only 2 levels (parent → child)  
-**After:** Recursive rendering via Svelte snippet supports unlimited nesting
-
-**Implementation:**
-```svelte
-{#snippet groupRow(group: AccountGroup, depth: number)}
-  <!-- Recursive rendering with depth-based indentation -->
-  {#each children as child}
-    {@render groupRow(child, depth + 1)}
-  {/each}
-{/snippet}
-```
-
-### 4. Fixed Group Count (Spec Line 41)
-
-**Before:** Counted only top-level groups per type  
-**After:** Counts ALL groups per type (including nested children)
-
-### 5. Updated Seed Data to Match New Spec
-
-Updated `apps/web/src/lib/data/mock/seed.ts` to match `specs/web/global/account-groups.md`:
-
-**Assets (16 groups):**
-- Current Assets: Cash, Bank, Private Credit, Reimbursements, Receivables
-- Fixed Assets: Real Property, Equipment, Vehicles
-- Product: Inventory, Jobs in Process, Work in Process
-- Other Assets
-
-**Liabilities (9 groups):**
-- Current Liabilities: Credit Cards, Accounts Payable, Payroll Payable
-- Deposits
-- Long-term Debt: Loans, Mortgages
-- Other Liabilities
-
-**Equity (3 groups):**
-- Adjustments
-- Member Capital
-- Net Income Allocations
-
-**Income (4 groups):**
-- Sales
-- Employment
-- Reimbursements
-- Adjustments
-
-**Expenses (4 groups):**
-- Fixed
-- Variable
-- Interest
-- Tax
-
----
-
-## Visual Structure
-
-```
-┌─────────────────────────────────────────────────────────┐
-│ Account Groups Catalog    [Expand All] [Collapse] [+ Add] │
-├─────────────────────────────────────────────────────────┤
-│ 💰 Assets                                    (16 groups) │
-│   ▼ Current Assets                                    5 │
-│       Cash                                              │
-│       Bank                                              │
-│       Private Credit                                    │
-│       Reimbursements                                    │
-│       Receivables                                       │
-│   ▶ Fixed Assets                                      3 │
-│   ▶ Product                                           3 │
-│   Other Assets                                          │
-├─────────────────────────────────────────────────────────┤
-│ 📋 Liabilities                               (9 groups) │
-│   ...                                                   │
-└─────────────────────────────────────────────────────────┘
-```
-
----
-
-## User Interactions
-
-| Action | Trigger | Result |
-|--------|---------|--------|
-| Expand/Collapse | Click parent row | Toggle children, save to localStorage |
-| Add Group | Click [+ Add Group] | Open modal with all fields |
-| Edit Group | Right-click → Edit | Open modal, Type/Parent locked |
-| Add Child | Right-click → Add Child | Open modal, Type/Parent inherited |
-| Delete Group | Right-click → Delete | Confirm, then delete |
-| Expand All | Click [Expand All] | Expand all parent groups |
-| Collapse All | Click [Collapse All] | Collapse all groups |
-
----
-
-## Future Enhancements (Not in MVP)
-
-- **Drag to Reorder:** Reorder within same parent/type (spec line 124)
-- **Delete restrictions:** Show entity usage count (spec lines 86-88)
-- **Import/Export:** JSON export, standard templates
-- **Search/Filter:** Search by name, filter by type
-
----
-
-## Dependencies
-
-### Stores
-- `accountGroups` - All account groups
-- `accountGroupsLoading` - Loading state
-- `topLevelGroupsByType` - Derived: top-level groups by account type
-- `childGroupsByParent` - Derived: child groups by parent ID
-
-### Functions
-- `loadAccountGroups()` - Fetch from database
-- `createAccountGroup()` - Create new group
-- `updateAccountGroup()` - Update existing group
-- `deleteAccountGroup()` - Delete group
-
-### Types
-- `AccountGroup` - Group data structure
-- `AccountType` - Enum: ASSET, LIABILITY, EQUITY, INCOME, EXPENSE
-
----
-
-## Testing Checklist
-
-- [ ] Load catalog → verify all 5 type sections shown
-- [ ] Verify group counts match total groups per type
-- [ ] Expand parent group → verify children shown with correct indentation
-- [ ] Collapse parent group → verify children hidden
-- [ ] Expand All → verify all parents expanded
-- [ ] Collapse All → verify all parents collapsed
-- [ ] Refresh page → verify expand state preserved
-- [ ] Right-click group → verify context menu appears
-- [ ] Context menu → Edit → verify modal opens with data
-- [ ] Context menu → Add Child → verify modal opens with type locked
-- [ ] Context menu → Delete → verify confirmation dialog
-- [ ] Add Group modal → save → verify new group appears
-- [ ] Verify multi-level nesting (grandchildren) displays correctly
-
----
-
-## Files Modified
-
-- `apps/web/src/routes/catalog/+page.svelte` - Main catalog component
-- `apps/web/src/lib/data/mock/seed.ts` - Updated seed groups to match spec
-
+- **Reorder child groups** (story 6.5–6.6, spec Future). No drag-to-reorder; render order follows the
+  store. This blocks "move Special Inventory to last".
+- **Delete safety** (spec Delete restrictions). Deletion is unconditional and the confirm dialog is a
+  generic string — no group name, no "N entities have accounts in this group" count, no reassignment
+  gate.
+- **Parent-dropdown type filtering** (spec Add). The Add modal's parent `<select>` lists every group
+  rather than only those of the selected type, and does not re-filter when Type changes. `getParentOptions`
+  implements the intended filter but is not wired to the template. Selecting a parent still forces the
+  correct type via `handleParentChange`, so created hierarchies remain type-consistent.
+- **Import/Export and Search/Filter** (spec Future) — not started.

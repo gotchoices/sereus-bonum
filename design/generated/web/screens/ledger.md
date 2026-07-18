@@ -1,618 +1,157 @@
+---
+dependsOn:
+  - design/specs/web/screens/ledger.md
+  - design/stories/web/03-entries.md
+  - design/stories/web/02-gnucash.md
+  - design/specs/web/components/transaction-edit.md
+  - design/specs/web/components/account-autocomplete.md
+depHashes:
+  design/specs/web/screens/ledger.md: 5b512945de7bc19a22ddb23d4784d14b07a23147d1ed49db804140c605fd3889
+  design/stories/web/03-entries.md: bfaff41f79d2542c5d1ec3d5c4fad72ef79d6f1d3e6660174527ba9cb9368830
+  design/stories/web/02-gnucash.md: aface7ea6ecc5c8030d0e7165cc5cba488f5bd1d74da3eb706d56d5dc1599ba2
+  design/specs/web/components/transaction-edit.md: 2ae5d29a44168cc9d75a80157e78ec8b0371dc331f378594e41b2a5ab53467df
+  design/specs/web/components/account-autocomplete.md: cb46a848d70142a9a5d8def94782e17590369a33a3caa39a57844aef5634b6d8
+provides:
+  - screen:Ledger
+needs:
+  - service:DataService
+  - store:settings
+  - store:viewState
+  - component:TransactionEditor
+  - component:AccountAutocomplete
+generated: 2026-07-18
+lastUpdated: 2026-07-18
+component: apps/web/src/routes/ledger/[accountId]/+page.svelte
+---
+
 # Consolidation: Account Ledger Screen
 
-**Route:** `/ledger/[accountId]`  
-**Component:** `apps/web/src/routes/ledger/[accountId]/+page.svelte`  
-**Generated:** 2024-12-13  
-**Sources:**
-- Story 03 (Transaction Entry)
-- Story 02 (GnuCash Import, step 9.7)
-- `design/specs/web/screens/ledger.md`
-- `design/specs/web/components/transaction-edit.md`
-- `design/specs/web/components/account-autocomplete.md`
+**Route:** `/ledger/[accountId]`
+**Component:** `apps/web/src/routes/ledger/[accountId]/+page.svelte`
+**Generated:** 2026-07-18
 
 ---
 
 ## Purpose
 
-Primary transaction entry and viewing interface for a single account. Displays account ledger with running balance, supports rapid keyboard-centric data entry, transaction editing, and expansion/collapse of transaction details.
+Primary transaction entry and viewing surface for a single account. Fixed header (entity/account
+context + balance), a fixed column-header row, and a scrolling CSS-Grid ledger of collapsible
+transactions with a running balance. New/edit entry is inline via the shared `TransactionEditor`,
+keyboard-centric for rapid entry. See [screens/ledger.md](../../../specs/web/screens/ledger.md) and the
+[transaction-edit](../../../specs/web/components/transaction-edit.md) /
+[account-autocomplete](../../../specs/web/components/account-autocomplete.md) component specs.
+
+## Architecture
+
+- **Screen** (`+page.svelte`): loads data (`loadData`), groups flat entries into transactions
+  (`transactions` derived), owns edit state (`editingData`), and holds all save/cancel/delete/split
+  callbacks that it hands to the editor.
+- **Editor** (`$lib/components/TransactionEditor.svelte`): mode-agnostic inline editor, simple vs.
+  split by `editingData.splits.length`; nested 8-column grid aligned to the ledger, blue border.
+- **Data** (`DataService.getLedgerEntries` and CRUD): entries carry `runningBalance`, `offsetAccount*`,
+  and `splitEntries` computed in the data layer.
+- **Persistence**: per-account UI state via `loadViewState`/`saveViewState` (key `ledger:{accountId}`);
+  sort order via the global `settings` store.
 
 ---
 
-## Page Structure
+## Source Requirements Verification
 
-### Layout Components
+### specs/web/screens/ledger.md
 
-1. **Fixed Header** (does not scroll)
-   - Back link to Accounts View
-   - Entity and account context
-   - Account balance
-   - Column headers (single row, not repeated)
+#### Header
+| Requirement | Status | Implementation |
+|---|---|---|
+| Fixed header + fixed column-header row (do not scroll) | ✅ | `.ledger-header` (sticky) and `.column-headers` sit outside `.ledger-container` (the scroll area) |
+| Back link → `/entities/{entityId}` | ✅ | `.back-link` anchor |
+| Entity name + full account path + code | ✅ | `.account-context`; `getAccountPath` walks `accountGroups` parents |
+| Unit symbol + account balance | ✅ | `.balance-display` from last entry's `runningBalance` |
+| Balance updates in real time | ⚠️ | Recomputed on `loadData` after save/delete, not live during an in-progress edit |
+| Column headers not replicated per row | ✅ | Single `.column-headers` grid row |
 
-2. **Scrollable Transaction List**
-   - Existing transactions (collapsed or expanded)
-   - Locked transaction separator (if applicable)
-   - New entry row (always at bottom)
+#### Transaction display
+| Requirement | Status | Implementation |
+|---|---|---|
+| Grid layout (not tables), variable-height rows, aligned columns | ✅ | `.ledger-grid` CSS Grid; rows use `display: contents` |
+| Large-list performance | ⚠️ | `content-visibility: auto` native virtualization only; no JS virtual scroller (TanStack) yet |
+| Collapsed (1 line) vs. expanded (entry lines) | ✅ | `txn.isExpanded` branch; header line + per-entry/split lines |
+| `[Split]` indicator for split txns | ✅ | `.split-indicator` when `entries[0].isSplit` |
+| Per-txn expand/collapse + header toggles all | ✅ | `toggleExpand`; `toggleExpandAll` (clears per-txn overrides) |
+| Offset account shows name, full path on hover | ✅ | Anchor `title` = `offsetAccountPath`/`accountPath` |
+| Account names are hyperlinks → `/ledger/{id}`; Ctrl/Cmd+Click new window | ✅ | Plain anchors (browser handles modified click) |
+| Sort order (oldest/newest) drives list + blank-row position; global, persists | ✅ | `$settings.transactionSortOrder`; blank row rendered top or bottom accordingly |
+| Expand-all state persisted per account; single expansions NOT persisted | ⚠️ | `expandAll` persisted, but `expandedTransactions` (individual) is also saved — contradicts spec |
 
-3. **State Management**
-   - Per-account view state in localStorage
-   - Expand/collapse state
-   - Expand-all toggle state
-   - Closed date (for locked transactions)
+#### New transaction entry
+| Requirement | Status | Implementation |
+|---|---|---|
+| Always-present blank row, real inputs, Date defaults today, subtle until focus | ✅ | `.blank-entry-row` + `.blank-input`; date value = today |
+| Tab/click into blank row activates editor | ✅ | `onfocus={activateNewEntry}` |
+| Save creates txn, reloads, new blank row, scrolls to saved, focus new Date | ✅ | `saveEdit` → `createTransaction` → `loadData` → `scrollToTransaction` + focus `.blank-entry-row` date |
+| Cancel clears row, row remains | ✅ | `cancelEdit` resets edit state |
 
----
+#### Editing existing transactions
+| Requirement | Status | Implementation |
+|---|---|---|
+| Click unlocked txn → inline edit, blue border | ✅ | `enterEditMode`; `.editor-container` accent border |
+| Splits always shown multi-line in edit | ✅ | `editingData.splits` populated from `splitEntries` |
+| Convert simple → split (+ Split) | ✅ | `addSplitEntry` / split-toggle button |
+| Auto-balance new split amount | ✅ | `addSplitEntry` seeds amount from `getEditBalance` |
+| Debit/Credit mutual exclusion | ✅ | `handleCurrent*Blur` / `handleSplit*Blur` clear the other |
+| Auto-select text on focus | ✅ | `handleFocus` |
+| Totals + balance indicator (green ✓ / red ⚠) | ✅ | `getEditTotals`; editor `.balanced`/`.imbalanced` |
+| Save persists edited amounts/accounts | ⛔ | `updateTransaction` writes date/reference/memo only — edited entry amounts & accounts are NOT saved (new entries do write full entries) |
+| Delete with confirmation | ✅ | `deleteTransaction` (`confirm`) |
+| Save validates balance | ✅ | `saveEdit` rejects `|balance| > 1` |
+| Esc = Cancel | ⛔ | No keydown handler anywhere |
 
-## Grid Layout Implementation
+#### Locked transactions
+| Requirement | Status | Implementation |
+|---|---|---|
+| Txns before closed date are read-only, dimmed | ✅ | `isLocked = date < closedDate`; `.locked` opacity |
+| 🔒 separator between locked/editable | ✅ | `.locked-separator` at `firstUnlockedIndex` |
+| Locked still expandable + links navigable | ✅ | Expand button and anchors unaffected |
+| Click locked → "period closed" tooltip | ⚠️ | Edit is blocked, but no tooltip/message is shown |
+| UI to set/close the period (closed date) | ⛔ | `closedDate` is read from view state; no in-screen control to set it |
 
-### Technical Approach
+#### Viewport management
+| Requirement | Status | Implementation |
+|---|---|---|
+| First visit → blank row; return → last position; fallback blank | ✅ | `restoreScrollPosition` (uses `lastVisibleTransactionId`, else `.blank-entry-row`) |
+| After save, ensure saved txn visible (minimal scroll) | ✅ | `scrollToTransaction` (`block: 'nearest'`) |
+| Track topmost visible txn, debounced, persist | ✅ | `handleScroll` (300 ms debounce) → `lastVisibleTransactionId` in view state |
 
-The ledger uses CSS Grid (not HTML `<table>`) for the transaction list to enable:
-- Virtual scrolling for large datasets (10K+ transactions)
-- Variable-height rows (collapsed ~40px, expanded ~varies, edit mode ~varies)
-- Absolute positioning compatibility
-- Smooth inline editing without layout reflow
+#### Referenced component specs
+| Requirement | Status | Implementation |
+|---|---|---|
+| Offset fields use account autocomplete | ✅ | `AccountAutocomplete` in simple + split rows |
+| Editor keyboard nav: Tab-flow save, Enter save, Ctrl+Enter split toggle | ⛔ | No keyboard handlers; editor is mouse/Tab-focus + button driven |
 
-### Grid Structure
-
-```html
-<div class="ledger-grid" role="grid" aria-label="Account ledger">
-  <!-- Each transaction/row -->
-  <div class="ledger-row" role="row" aria-rowindex="{n}">
-    <div class="col-expand" role="gridcell" aria-colindex="1">...</div>
-    <div class="col-date" role="gridcell" aria-colindex="2">...</div>
-    <div class="col-ref" role="gridcell" aria-colindex="3">...</div>
-    <div class="col-memo" role="gridcell" aria-colindex="4">...</div>
-    <div class="col-offset" role="gridcell" aria-colindex="5">...</div>
-    <div class="col-debit" role="gridcell" aria-colindex="6">...</div>
-    <div class="col-credit" role="gridcell" aria-colindex="7">...</div>
-    <div class="col-balance" role="gridcell" aria-colindex="8">...</div>
-  </div>
-</div>
-```
-
-### CSS Grid Properties
-
-```css
-.ledger-grid {
-  display: grid;
-  grid-template-columns: 
-    40px      /* Expand/collapse button */
-    135px     /* Date */
-    100px     /* Reference */
-    1fr       /* Memo (flexible) */
-    200px     /* Offset account */
-    160px     /* Debit */
-    160px     /* Credit */
-    160px;    /* Running balance */
-  gap: 0;
-  align-items: start;
-}
-
-.ledger-row {
-  display: contents; /* Children become grid items */
-}
-```
-
-### ARIA Roles for Accessibility
-
-- **Grid container:** `role="grid"` with `aria-label`
-- **Rows:** `role="row"` with `aria-rowindex` (1-based)
-- **Cells:** `role="gridcell"` with `aria-colindex` (1-based)
-- **Edit mode:** `aria-expanded="true"` on row being edited
-- **Locked transactions:** `aria-disabled="true"` on locked rows
-
-### Performance Optimization
-
-After grid refactor, apply CSS `content-visibility`:
-
-```css
-.ledger-row {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 40px; /* Height hint */
-}
-```
-
-This enables browser-native virtualization without JavaScript library overhead.
-
-If `content-visibility` is insufficient for 10K+ transactions, integrate TanStack Virtual:
-- Package: `@tanstack/svelte-virtual` (already installed)
-- Only render visible rows + 5 overscan buffer
-- Absolute positioning now compatible with grid layout
-
-### Transaction Editor - Clean Grid Architecture
-
-The `TransactionEditor` component (`design/specs/web/components/transaction-edit.md`) uses a **nested grid** design:
-
-**Structure:**
-```
-<div class="editor-container">      ← grid-column: 1 / -1, creates 8-column nested grid, blue border
-  <div class="editor-row">          ← display: contents (children align to parent grid)
-    <div>...</div>                  ← Individual grid cells with padding
-  </div>
-  <div class="editor-actions">      ← Spans full width, contains button flexbox
-    ...
-  </div>
-</div>
-```
-
-**Key Features:**
-- **Wrapper Grid**: `.editor-container` spans all parent columns, creates nested 8-column grid (40px, 135px, 100px, 1fr, 200px, 160px, 160px, 160px)
-- **Visual Grouping**: Blue 2px border and background applied to container (not individual rows)
-- **Row Structure**: `.editor-row` uses `display: contents` so children align with grid
-- **No Conflicts**: Designed grid-first, not adapted from tables
-- **Maintains**: All functionality (simple/split modes, validation, keyboard nav, auto-balance)
-- **ARIA**: Full accessibility (`role="row"`, `role="gridcell"`)
-
-This architecture ensures clean alignment with the parent ledger grid while maintaining visual distinction for edit mode.
+### stories/web/03-entries.md · 02-gnucash.md (step 9.7)
+| Requirement | Status | Notes |
+|---|---|---|
+| Keyboard-centric rapid entry ledger | ⚠️ | Blank-row Tab activation works; editor lacks Enter/Esc/Ctrl+Enter shortcuts |
+| Simple + split transactions | ✅ | Both modes in editor |
+| Running balance column | ✅ | From data-layer `runningBalance` |
+| Viewable after GnuCash import | ✅ | Renders imported entries; see Updates note (scale) |
 
 ---
 
-## Header Section
-
-### Back Link
-```
-← Back to Accounts View
-```
-- Returns to `/entities/{entityId}`
-- Standard navigation link
-
-### Context Line
-**Left side:**
-```
-Home Finance > Assets : Current Assets : Checking 1010
-```
-Format:
-- Entity name (lighter, smaller)
-- Full account path with separators
-- Account code (if present)
-
-**Right side:**
-```
-USD $12,345.67
-```
-- Unit symbol
-- Current account balance (updates on transaction changes)
-
-### Column Headers (Single Row)
-```
->  | Date       | Ref  | Memo           | Account      | Debit    | Credit   | Balance
-```
-
-**Columns:**
-- `>`: Expand/collapse icon (clicking header icon toggles all)
-- Date: Transaction date
-- Ref: Reference/check number
-- Memo: Transaction description
-- Account: Offset account name (or `[Split]` indicator)
-- Debit: Debit amount (if applicable)
-- Credit: Credit amount (if applicable)
-- Balance: Running balance after transaction
-
-**Note:** These headers are never repeated within transactions or editors - all rows align with these columns.
-
----
-
-## Transaction Display
-
-### Collapsed View (Default)
-
-Single line per transaction:
-```
->  | 2024-12-10 | 1234 | Grocery Store  | Groceries    | $125.50  |          | $5,234.00
->  | 2024-12-11 | 1235 | Salary         | Salary Inc   |          | $2,500.00| $7,734.00
->  | 2024-12-12 | 1236 | Bill payment   | [Split]      | $450.00  |          | $7,284.00
-```
-
-**Visual elements:**
-- `>` icon: Click to expand
-- Account column shows:
-  - Offset account name (for simple transactions)
-  - `[Split]` indicator (for split transactions with 3+ entries)
-- Balance column shows running balance
-- Hover on account name shows full path in tooltip
-
-### Expanded View
-
-Transaction header + entry lines:
-```
-v  | 2024-12-12 | 1236 | Bill payment   |                      |          |          | $7,284.00
-   |            |      |                | Checking Account     |          | $450.00  |
-   |            |      |                | Electric             | $150.00  |          |
-   |            |      |                | Internet             | $100.00  |          |
-   |            |      |                | Phone                | $200.00  |          |
-```
-
-**Structure:**
-- Transaction header line: Date/Ref/Memo filled, Balance shows, Account/Debit/Credit empty
-- Entry lines: Date/Ref/Memo empty (visual indentation), Account/Debit/Credit filled
-- First entry: Current account (the one being viewed)
-- Subsequent entries: Offset accounts or splits
-- Entry lines have no balance value
-
-**Controls:**
-- Click `v` to collapse
-- Clicking header `>` icon: Expands/collapses all transactions
-
-### State Persistence
-
-Saved per account in localStorage:
-- `expandAll`: Boolean (all expanded vs. all collapsed)
-- Individual transaction expansion not persisted (respects expandAll state on reload)
-- `closedDate`: Date for locked transaction separator
-
----
-
-## Locked Transactions
-
-Transactions before the closed date cannot be edited.
-
-### Visual Separator
-
-```
->  | 2024-01-10 | 1001 | Old transaction    | Expenses  | $50.00   |          | $1,000.00
->  | 2024-01-15 | 1002 | Another old one    | Utilities | $100.00  |          | $900.00
-═══════════════════════════════════════🔒═══════════════════════════════════════
->  | 2024-02-01 | 1003 | Editable entry     | Groceries | $75.00   |          | $825.00
-```
-
-**Visual treatment:**
-- Separator line with 🔒 icon
-- Transactions above: Subtle tint (dimmed)
-- Transactions below: Normal appearance
-
-**Behavior:**
-- Click locked transaction: No response (or tooltip: "Cannot edit - period closed")
-- Can still expand to view details
-- Can still click account links to navigate
-
----
-
-## New Transaction Entry
-
-### Blank Entry Row
-
-**Position:** Changes based on transaction sort order:
-- **Oldest first** (default): Appears at **bottom** of ledger
-- **Newest first**: Appears at **top** of ledger (after header)
-
-This ensures the blank entry is always at the natural insertion point.
-
-**Design:**
-```
-   | [Date   ] | [Ref] | [Memo         ] | [Account   ] [|] | [Debit  ] | [Credit ] |
-```
-- Contains real input fields (not placeholders)
-- Fields styled subtly (muted, italic) until focused
-- Fully keyboard-accessible via Tab navigation
-
-**Behavior:**
-- **Keyboard:** Tab to Date field → automatically activates transaction editor
-- **Mouse:** Click any field → activates transaction editor
-- Editor expands inline (same table row)
-- Uses transaction-edit component
-- On save: Creates transaction, refreshes ledger, new blank row appears, focus moves to Date of new blank row
-- On cancel: Clears fields, blank row remains
-
----
-
-## Editing Existing Transactions
-
-### Entry to Edit Mode
-
-- Click any unlocked transaction (collapsed or expanded)
-- Transaction expands inline into edit container
-- Blue border (2px solid primary-color) indicates edit mode
-
-### Edit Container Layout
-
-The editor aligns with the ledger table columns. Fields are positioned to match the column headers above.
-
-**Simple Transaction Edit:**
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│   | [Date▼] | [Ref_] | [Memo___________] | [Account_____▼] [|] | [Debit__] | [Credit_] |
-│   | [Save] [+ Split] [Cancel] [Delete]                                        |
-└──────────────────────────────────────────────────────────────────────────────┘
-```
-
-**Actions Footer (Simple):**
-- Left: [Save] [+ Split] [Cancel] [Delete] buttons
-- Right: No totals (simple transactions auto-balance, no validation needed)
-
-**Split Transaction Edit:**
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│   | [Date▼] | [Ref_] | [Memo___________] | [Checking_____▼] | [Debit__] | [Credit_] |
-│   |         |        | Note: [Electric_] | [Utilities____▼] | [150.00 ] | [       ] | [×]
-│   |         |        | Note: [Internet_] | [Business_____▼] | [100.00 ] | [       ] | [×]
-│   |         |        | Note: [Phone____] | [Telecom______▼] | [200.00 ] | [       ] | [×]
-│   ───────────────────────────────────────────────────────────────────────────
-│   | [Save] [+ Split] [Cancel] [Delete]       Debits: $450.00  Credits: $450.00  Balance: $0.00 ✓ |
-└──────────────────────────────────────────────────────────────────────────────┘
-```
-
-**Actions Footer (Split):**
-- Left: [Save] [+ Split] [Cancel] [Delete] buttons
-- Right: Debits total, Credits total, Balance with indicator
-  - Green ✓ when $0.00
-  - Red ⚠ and amount when imbalanced
-
-**Main Transaction Line:**
-- Date, Ref, Memo: Editable
-- Current Account: Pre-filled, disabled/grayed (viewing ledger for this account)
-- Debit/Credit: Amount for current account entry
-
-**Split Entry Lines:**
-- Note: Optional description for this split
-- Account: Autocomplete for offset account
-- Debit/Credit: Amount fields (only one can have value)
-- Remove `[×]`: Removes split line (minimum 1 split required)
-
-### Edit Behavior
-
-**Visual:**
-- Blue border around edit container
-- All fields align with column headers
-- Looks like ledger view, but fields are editable inputs
-- Context preserved (see surrounding transactions)
-
-**Functionality:**
-- Simple transactions: Main line + one offset
-- Split transactions: Always show all entries in edit mode (even if collapsed in view mode)
-- Can convert simple → split via `[+ Split]` button
-- Auto-balance calculation for splits
-- Debit/Credit mutual exclusion (blur clears other field)
-- Auto-select text on focus for quick editing
-
-**Actions:**
-- **Save:** Validates, updates transaction, exits edit mode, refreshes ledger
-- **Cancel:** Discards changes, exits edit mode, restores view
-- **+ Split:** Adds new split entry line
-- **Delete:** Shows confirmation, deletes transaction, refreshes ledger
-- **Esc key:** Same as Cancel
-
-**Exit:**
-- Returns to view mode
-- Restores previous display state (collapsed/expanded as it was before editing)
-
----
-
-## Transaction Editor Component
-
-Behavior defined in `design/specs/web/components/transaction-edit.md`:
-- Two modes: Simple (one offset) and Split (multiple offsets)
-- Keyboard navigation optimized for rapid entry
-- Tab flow through fields
-- Auto-balance calculation
-- Validation rules
-- Debit/Credit mutual exclusion
-- Ctrl+Enter toggles split mode
-
-The editor component is mode-agnostic (doesn't know if it's new entry or edit). The ledger screen provides transaction data and handles save/cancel/delete callbacks.
-
----
-
-## Account Autocomplete
-
-All account input fields use the autocomplete component defined in `design/specs/web/components/account-autocomplete.md`:
-
-**Features:**
-- Type to search, filters by relevance
-- Colon `:` for progressive path completion
-- Tab/Enter to select (Tab also advances focus)
-- Arrow keys navigate dropdown
-- Escape closes dropdown
-- Max 10 results displayed
-- Shows full path in dropdown for disambiguation
-- Validation: Must have selectedId, not just text
-
----
-
-## Account Hyperlinks
-
-All account names displayed are clickable:
-
-**Locations:**
-- Offset account in transaction rows (collapsed view)
-- Account names in expanded entry lines
-- Split entry account names (when expanded)
-
-**Behavior:**
-- Click: Navigate to `/ledger/{accountId}` (standard navigation)
-- Hover: Tooltip shows full account path
-- Ctrl/Cmd+Click: Opens in new window (browser default)
-
-**Display:**
-- Shows account name only (not full path)
-- Uses HTML `title` attribute for hover tooltip with full path
-- Example: `<a href="/ledger/123" title="Expenses : Operating : Utilities : Electric">Electric</a>`
-
----
-
-## Data Fetching
-
-### On Page Load
-1. Load account details (entity ID, name, path, code, unit)
-2. Load entity details (for header context)
-3. Load unit details (symbol, divisor)
-4. Load ledger entries for account
-5. Load view state from localStorage (expand/collapse, closed date)
-
-### On Transaction Save/Delete
-- Refresh ledger entries
-- Update account balance in header
-- Maintain scroll position
-- Restore expand/collapse state
-
-### Running Balance
-- Calculated by backend SQL query
-- Each entry includes `runningBalance` field
-- Displayed in Balance column
-- Updates on page reload (not real-time within session)
-
----
-
-## Keyboard Shortcuts
-
-**Global (page-level):**
-- Ctrl+Enter: Toggle split mode (when in transaction editor)
-
-**Within Transaction Editor:**
-- Tab: Advance through fields, save from last field
-- Enter: Save transaction (from input field), activate button (on button)
-- Escape: Cancel edit
-- Space: Activate button (on split button or action buttons)
-- Arrow keys: Navigate in account autocomplete dropdown
-- Colon `:`: Progressive path completion in account autocomplete
-
----
-
-## Validation & Error Handling
-
-### Transaction Validation
-- Date: Required, must be valid date
-- Account: Required, must have selectedId (simple mode or each split)
-- Amount: One of Debit OR Credit required (not both, not neither)
-- Balance: Split transactions must sum to $0.00 (within $0.01 tolerance)
-
-### Visual Feedback
-- Invalid fields: Red border or highlight
-- Balance indicator (splits): ✓ or ⚠ with amount
-- Save button: Disabled until valid
-- Inline error messages below invalid fields
-
-### Error States
-- Account not found: Show error, prevent save
-- Backend save failure: Show error toast, keep editor open with data
-- Network error: Show retry option
-
----
-
-## Dependencies
-
-### Components
-- `AccountAutocomplete.svelte`: Account selection with search and path completion
-- `TransactionEditor.svelte`: (Future) Extracted inline editor component
-- Currently: Inline editor within ledger page component
-
-### Stores
-- `entities`: Entity data
-- `accounts`: Account data (for autocomplete)
-- `viewState`: Per-account UI state (expand/collapse, closed date)
-
-### Services
-- `DataService.getLedgerEntries(accountId)`: Fetch transactions for account
-- `DataService.createTransaction(transaction)`: Save new transaction
-- `DataService.updateTransaction(transactionId, updates)`: Update existing transaction
-- `DataService.deleteTransaction(transactionId)`: Delete transaction
-- `DataService.searchAccounts(entityId, query)`: For autocomplete
-
-### Libraries
-- `sql.js`: SQLite backend (mock mode)
-- Svelte 5: Runes mode (`$state`, `$derived`, `$effect`)
-
----
-
-## Current Implementation Status
-
-**✅ Implemented:**
-- Fixed header with back link, context, balance
-- Column headers (single row)
-- Transaction list with expand/collapse
-- Collapsed/expanded view modes
-- Locked transaction separator
-- New entry row at bottom
-- Full inline transaction editor (simple and split modes)
-- Click-to-edit for existing transactions
-- Blue border in edit mode
-- Actions footer (buttons left, totals right for splits)
-- Auto-balance calculation
-- Debit/Credit mutual exclusion
-- Account autocomplete with colon completion
-- Account hyperlinks with hover tooltips
-- View state persistence (expand/collapse, closed date)
-- Delete with confirmation
-- Keyboard navigation (Tab, Enter, Escape, Ctrl+Enter)
-
-**⚠️ Known Limitations:**
-- Save function updates transaction metadata only (date, ref, memo)
-- Does not yet update individual entry amounts/accounts
-- Requires additional DataService methods: `updateEntry`, `deleteEntry`, `createEntry`
-- Running balance not real-time (requires page refresh)
-
-**🐛 Outstanding Issues:**
-- Split entry data not loading correctly into editor (investigation in progress)
-- Debug logging added to diagnose data loading
-
-**🔜 Future Enhancements:**
-- Extract transaction editor into separate component
-- Real-time balance updates
-- Undo/redo support
-- Transaction search within ledger
-- Keyboard shortcuts summary (Help dialog)
-- Transaction templates (recurring entries)
-
----
-
-## Testing Notes
-
-**Manual Test Cases:**
-1. Load ledger → Verify header, columns, transactions display
-2. Expand transaction → Verify shows all entries correctly
-3. Click transaction → Verify edit mode with blue border
-4. Edit simple transaction → Save → Verify updates
-5. Convert simple → split → Add splits → Save → Verify
-6. Edit split transaction → Modify amounts → Verify balance indicator
-7. Delete transaction → Confirm → Verify removed
-8. Cancel edit → Verify no changes
-9. Tab through new entry → Verify rapid entry workflow
-10. Lock transaction (set closed date) → Verify separator, dimming, no edit
-11. Account autocomplete → Type, colon completion, tab select → Verify
-12. Account hyperlinks → Click → Verify navigation
-13. Expand all / Collapse all → Verify state persists
-14. Reload page → Verify view state restored
-
-**Browser Console:**
-- Check for debug logging when entering edit mode
-- Verify transaction data structure
-- Verify editingData structure
-- Check for errors during save/delete
-
----
-
-## Future Architecture
-
-**Component Extraction:**
-```
-ledger/[accountId]/+page.svelte
-├── LedgerHeader.svelte (entity, account, balance)
-├── TransactionList.svelte (view mode)
-│   ├── TransactionRow.svelte (collapsed)
-│   └── TransactionExpanded.svelte (expanded)
-└── TransactionEditor.svelte (new/edit mode)
-    ├── AccountAutocomplete.svelte (already extracted)
-    └── SplitEntryRow.svelte (repeating split lines)
-```
-
-**State Management:**
-- Consider Svelte store for ledger data (reactive updates)
-- WebSocket or polling for multi-user real-time updates
-- Optimistic UI updates with rollback on error
-
-**Performance:**
-- Virtual scrolling for large ledgers (1000+ transactions)
-- Lazy load transactions (pagination or infinite scroll)
-- Debounce autocomplete queries
-- Memoize balance calculations
-
----
-
-## Updates — 2026-07 (perf pass)
-
-- **`getLedgerEntries` rewritten for scale (data-layer, screen behavior unchanged).** The production
-  service loads the entity's transactions + entries as single-table indexed reads and resolves
-  offset/split siblings in JS (via shared `buildAccountDir`/`entriesByTxn`), replacing a per-row N+1
-  SQL join that hung at scale. A busy account's ledger now renders in ~2.5 s at 5k entries. Offset
-  accounts, `[Split]` detection, and running balance are unchanged. See docs/STATUS.md.
-- **Known theming nit:** this screen references `--surface-primary/secondary/hover` CSS vars that aren't
-  defined in `app.css` (the app uses `--bg-card/secondary/hover`); it renders via fallbacks but should be
-  reconciled (same class of bug fixed in the import screen).
+## Deferred / Notes
+- **Editing amounts/accounts of an existing transaction does not persist** — `updateTransaction` saves
+  only date/reference/memo. This is the most significant gap; the edit UI shows editable amounts and
+  offset accounts but discards those changes on save. New-transaction creation writes full entries.
+- **Keyboard shortcuts** (Esc cancel, Enter save, Ctrl+Enter split toggle) from the editor spec are
+  unimplemented — no keydown handlers exist. Blank-row Tab-to-activate works.
+- **Real-time running balance** — updates only on reload after save/delete (spec acceptance item left
+  unchecked).
+- **Locked "period closed" tooltip** and any in-screen control to set the closed date are absent.
+- **JS virtual scrolling** — only `content-visibility` native virtualization; no TanStack integration.
+- **Individual expansion persistence** — code persists per-txn expansion, which the spec says it should not.
+- Dev-only bulk test-data generator (`generateTestData`, gated by `ENABLE_TEST_DATA`) exists for
+  performance testing; not a spec requirement.
+
+## Updates — 2026-07 (perf)
+- `getLedgerEntries` was rewritten for scale (data-layer only, screen behavior unchanged): single-table
+  indexed reads with offset/split siblings resolved in JS, replacing a per-row N+1 SQL join that hung at
+  scale. Offset accounts, `[Split]` detection, and running balance are unchanged. See docs/STATUS.md.

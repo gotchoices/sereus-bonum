@@ -1,147 +1,121 @@
-# Transaction Search Screen
+---
+dependsOn:
+  - design/specs/web/screens/search.md
+  - design/stories/web/06-search.md
+depHashes:
+  design/specs/web/screens/search.md: 57f7f50bb05e63843ce0183127fb63a59425b079f968f75da6d149b55ab8ca04
+  design/stories/web/06-search.md: 1d867a0c6ad9399593830444fe68c41cafc9643371bc48db7b2c10407880320e
+provides:
+  - screen:Search
+  - component:TransactionResultsTable
+needs:
+  - service:DataService
+  - util:export
+generated: 2026-07-18
+lastUpdated: 2026-07-18
+component: apps/web/src/routes/search/+page.svelte
+---
 
-**Status:** Phase 1 Consolidation (Transaction Browser)  
-**Stories:** [06-search.md](../../../stories/web/06-search.md) (Phase 1 only)  
+# Consolidation: Transaction Search Screen
+
 **Route:** `/search`
+**Component:** `apps/web/src/routes/search/+page.svelte`
+**Generated:** 2026-07-18
 
 ---
 
 ## Purpose
 
-Provide a global view of all transactions across all entities. Phase 1 focuses on "show all" to support debugging and data exploration. Phase 2 (future) will add query builder functionality.
+Cross-entity **"show all"** transaction browser (Phase 1 of the search story). One button loads every
+entry across every entity into a shared results table for balance verification, data debugging, and
+export. The story's Phase 2 (query builder, saved searches) is not built. Data comes from
+`DataService.getAllTransactions`, which was rewritten for scale (single-table reads joined in JS
+instead of a cross-entity SQL JOIN); "show all" loads everything with no pagination.
+
+## Architecture
+
+- **Screen** (`+page.svelte`): holds `entries`, `loading`, `error`, `showExportMenu`. `loadAllTransactions`
+  calls the service; renders header (load + export) and delegates all display to the table.
+- **Table** (`$lib/components/TransactionResultsTable.svelte`): reusable. Groups flat `LedgerEntry[]` by
+  transaction (`transactionGroups`), renders header row + split rows, computes debit/credit `totals`.
+  Props: `entries`, `showEntity`, `showTotals`, `emptyMessage`.
+- **Data** (`DataService.getAllTransactions`): flattens `entry`/`txn`/`account`/`entity` in JS, ordered
+  date DESC; decorates each entry with `entityName`, `accountName`, `accountPath`.
+- **Export** (`$lib/utils/export.ts`): `exportToCSV` / `exportToExcel` (xlsx), same grouping + totals.
 
 ---
 
-## Layout
+## Source Requirements Verification
 
-### Header
-- **Title:** "Transaction Search"
-- **"Show All Transactions" button** — loads all transactions across all entities
+### specs/web/screens/search.md — Phase 1
 
-### Results Area
+#### Initial state & loading
+| Requirement | Status | Implementation |
+|---|---|---|
+| Title + "Show All Transactions" button | ✅ | `page-header`; `btn-primary` → `loadAllTransactions` |
+| Empty message before load | ✅ | Table `empty-state` (`search.empty`) |
+| Loading indicator while fetching | ⚠️ | Button label flips to "Loading..." + `disabled`; no spinner |
+| Cross-entity (all entities together) | ✅ | `getAllTransactions` iterates all `entity` rows |
 
-#### Empty State
-- Message: "Click 'Show All Transactions' to view all entries."
+#### Transaction display (table)
+| Requirement | Status | Implementation |
+|---|---|---|
+| Txn header row: date, entity link, memo, ref ("—" if empty) | ✅ | `txn-header-row`; `<a href="/entities/{id}">`; `memo/reference \|\| '—'` |
+| Split rows indented, all shown as splits (no offset shortcut) | ✅ | `split-row` per `txnGroup.entries`; `↳` account, `split-account` |
+| Account link → ledger, full path on hover | ✅ | `<a href="/ledger/{accountId}" title={accountPath}>` |
+| Debit if amount > 0, credit if < 0 (abs), never both | ✅ | `amount > 0` / `amount < 0` cell guards |
+| Entry-level note shown | ✅ | `split-note` when `entry.note` |
+| Header visually distinct | ✅ | `txn-header-row` background/weight (CSS) |
+| Date formatted per user preference | ⚠️ | Raw `txnGroup.date` rendered; no locale/pref formatting |
 
-#### Results Table (when populated)
+#### Totals footer
+| Requirement | Status | Implementation |
+|---|---|---|
+| Entry count | ⚠️ | Totals/verification rows present; **no entry-count cell** rendered |
+| Total debits / total credits | ✅ | `totals()` sums by sign; `totals-row` |
+| ✓ Balanced / ⚠ Imbalance within $0.01 | ✅ | `isBalanced = imbalance < 0.01`; `verification-row` balanced/imbalanced |
 
-**Display Format:**
+#### Export
+| Requirement | Status | Implementation |
+|---|---|---|
+| Export button appears after load, CSV + Excel menu | ✅ | `export-dropdown` shown when `entries.length > 0`; `handleExportCSV/Excel` |
+| Filename `transactions-YYYY-MM-DD.{csv,xlsx}` | ✅ | ISO date slice in both handlers |
+| Content: header, txn rows, split rows, totals, verification | ✅ | `exportToCSV` / `exportToExcel` row builders |
+| Amounts as decimal (cents ÷ 100, 2 dp) | ✅ | `formatAmountForExport` |
+| Excel failure falls back to CSV | ✅ | `handleExportExcel` catch → `handleExportCSV` |
 
-Each transaction is displayed as a group:
+#### Navigation & errors
+| Requirement | Status | Implementation |
+|---|---|---|
+| Entity name → `/entities/[id]` | ✅ | Table header-row link |
+| Account name → `/ledger/[accountId]`, path tooltip | ✅ | Table split-row link `title` |
+| "Failed to load" error shown | ✅ | `error-message` block from `error` state |
+| Retry button on failure | ⛔ | Error message only; no retry control |
+| Distinct "No transactions found" vs initial-empty message | ⚠️ | Single `emptyMessage`; no post-load empty variant |
 
-1. **Transaction Header Row** (bold, distinct background)
-   - Date
-   - Entity (hyperlink)
-   - Memo
-   - Reference
+#### Behavior the old doc claimed (not in current code)
+| Requirement | Status | Implementation |
+|---|---|---|
+| Expand/Collapse per-txn + Expand All/Collapse All | ⛔ | Splits always expanded; no expand state or buttons |
+| Table props `showAccount`, `allowExpand` | ⛔ | Not on component; props are `showEntity`/`showTotals`/`emptyMessage` |
 
-2. **Split Rows** (indented under header)
-   - Account (hyperlink, full path on hover)
-   - Debit (if amount > 0)
-   - Credit (if amount < 0, absolute value)
-   - Note (if present)
-
-**Key Requirements:**
-- All transactions shown as splits (no "offset account" format)
-- Debit/Credit columns based on amount sign
-- All splits expanded by default
-
-#### Totals Footer
-- **Left side:** Total count of entries
-- **Right side:**
-  - Total Debits: $X.XX
-  - Total Credits: $X.XX
-  - Status: ✓ Balanced (if equal) or ⚠ Imbalance: $X.XX (if not)
-
----
-
-## Components
-
-### `TransactionResultsTable.svelte`
-**Reusable component** for displaying transaction lists.
-
-**Props:**
-```typescript
-{
-  entries: LedgerEntry[];
-  showEntity?: boolean = true;      // Show entity column
-  showAccount?: boolean = true;     // Show account column
-  allowExpand?: boolean = true;     // Allow split expansion
-  showTotals?: boolean = true;      // Show debit/credit totals
-  emptyMessage?: string;            // Custom empty state
-}
-```
-
-**Usage:**
-- `/search` — shows all transactions with entity + account columns
-- `/ledger/[accountId]` — could refactor to use this (account column hidden)
-- Future: reconciliation, report drill-downs
+### stories/web/06-search.md
+| Requirement | Status | Notes |
+|---|---|---|
+| Results across entities, expandable, debit/credit totals + balance | ✅ | Phase 1 table (expansion is static-all) |
+| Export results to CSV | ✅ | Alt Path C |
+| Search builder (fields, operators, AND/OR grouping, preview) | ⛔ Deferred | Phase 2, not built |
+| Saved searches (persist, run/edit/duplicate/delete) | ⛔ Deferred | Phase 2, not built |
+| ≥100 results efficiently (pagination/virtual scroll) | ⛔ Deferred | Loads + renders everything; see below |
 
 ---
 
-## Behavior
-
-### Data Loading
-- "Show All Transactions" button calls `DataService.getAllTransactions()`
-- Returns all entries across all entities
-- Client-side display (Phase 1 is simple)
-
-### Expand/Collapse
-- Per-transaction expand state (stored in local component state)
-- "Expand All" / "Collapse All" buttons
-
-### Hyperlinks
-- Entity name → `/entities/[id]` (Accounts View)
-- Account name → `/ledger/[accountId]`
-
-### Balance Verification
-- Sum all debits
-- Sum all credits
-- Compare: should always be equal (double-entry)
-- If not: display imbalance warning with amount
-
----
-
-## Future (Phase 2)
-
-- Query builder UI (field selection, operators, AND/OR logic, grouping)
-- Save/recall named searches
-- Export to CSV
-
----
-
-## i18n Keys
-
-Add to `en.ts`:
-
-```typescript
-search: {
-  title: 'Transaction Search',
-  show_all: 'Show All Transactions',
-  empty: 'Click "Show All Transactions" to view all entries.',
-  expand_all: 'Expand All',
-  collapse_all: 'Collapse All',
-  entity_col: 'Entity',
-  account_col: 'Account',
-  date_col: 'Date',
-  ref_col: 'Ref',
-  memo_col: 'Memo',
-  debit_col: 'Debit',
-  credit_col: 'Credit',
-  total_entries: '{count} entries',
-  total_debits: 'Total Debits',
-  total_credits: 'Total Credits',
-  balanced: 'Balanced',
-  imbalance: 'Imbalance',
-}
-```
-
-
----
-
-## Updates — 2026-07 (perf pass)
-
-- **`getAllTransactions` rewritten for scale (data-layer, screen behavior unchanged).** Replaced a
-  cross-entity 5-way SQL `JOIN` + N+1 offset lookups with single-table reads joined in JS. "Show all"
-  now loads ~8 s at 20k / ~22 s at 40k entries (was effectively hung). Still loads everything (feeds
-  export-all); a `LIMIT`/pagination story is the remaining follow-up. See docs/STATUS.md.
+## Deferred / Notes
+- **Query builder + saved searches (Phase 2).** The entire story flow (criteria fields, boolean
+  grouping, named searches) is unimplemented; Phase 1 is a fixed "show all".
+- **Pagination / virtual scroll.** "Show all" loads every entry (feeds export-all) and renders it
+  in one table — no `LIMIT`. `getAllTransactions` was rewritten (JS-side joins) to make large loads
+  finish, but rendering thousands of rows remains the follow-up.
+- **Expand/collapse controls** absent — every transaction's splits render inline. No per-txn toggle.
+- **Entry-count total** and **retry-on-error** are minor spec items not yet wired.
+- **Date/locale formatting** — dates render as stored strings, not per user preference.

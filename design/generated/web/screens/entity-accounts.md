@@ -1,272 +1,114 @@
+---
+dependsOn:
+  - design/specs/web/screens/accounts-view.md
+  - design/stories/web/01-firstlook.md
+  - design/stories/web/04-reporting.md
+depHashes:
+  design/specs/web/screens/accounts-view.md: 47c819078fb5a996e8b72b050a26ee7c36d3b23493ea8fda578cb4dc65ca0f68
+  design/stories/web/01-firstlook.md: a383e823aa5e362529d07d75688744556ef21848e59b20fa76986ba214169f06
+  design/stories/web/04-reporting.md: 9f2e90d7cefd3e1d23787b6edaafe84cddb6d39c556c1c08c21dd92ff18f90c5
+provides:
+  - screen:EntityAccounts
+needs:
+  - service:DataService
+  - service:native-books
+  - store:entities
+  - store:accounts
+generated: 2026-07-18
+lastUpdated: 2026-07-18
+component: apps/web/src/routes/entities/[id]/+page.svelte
+---
+
 # Consolidation: Entity Accounts View
 
-**Route:** `/entities/[id]`  
-**Source:** Stories 01, 04; Spec `design/specs/web/screens/accounts-view.md`  
-**Generated:** 2024-12-12
-
-## Purpose
-
-Display an entity's accounts in multiple reporting formats with hierarchical grouping, expandable sections, date filtering, and navigation to ledgers.
-
-## Report Modes Implementation
-
-### Balance Sheet Mode
-
-**Display:**
-- Account types shown: ASSET, LIABILITY, EQUITY
-- Retained Earnings: expandable line under EQUITY
-  - Collapsed: shows Net Income total
-  - Expanded: shows Income and Expense account breakdown
-- Date input: single "As of" date
-- Default date: today
-
-**Data query:**
-- All account types
-- Transaction filter: `date <= endDate`
-- No startDate parameter
-
-**Calculation:**
-- `netIncome = totalIncome - totalExpense`
-- `retainedEarnings = netIncome` (accumulated)
-- Display Equity total includes Retained Earnings
-
-### Trial Balance Mode
-
-**Display:**
-- Account types shown: All 5 (ASSET, LIABILITY, EQUITY, INCOME, EXPENSE)
-- Retained Earnings: non-expandable line under EQUITY (I/E already visible separately)
-- Date input: single "As of" date
-- Verification line: `Assets = Liabilities + Equity + Net Income ✓`
-
-**Data query:**
-- All account types
-- Transaction filter: `date <= endDate`
-- No startDate parameter
-
-**Calculation:**
-- Same as Balance Sheet
-- Verification: `totalAssets === (totalLiabilities + totalEquity + netIncome)`
-
-### Income Statement Mode
-
-**Display:**
-- Account types shown: INCOME, EXPENSE only
-- Date inputs: "From" and "To" (both required, vertically stacked)
-- Default: Jan 1 of current year to today
-- Net Income line at bottom
-
-**Data query:**
-- INCOME and EXPENSE accounts only
-- Transaction filter: `date >= startDate AND date <= endDate`
-- Both startDate and endDate required
-
-**Calculation:**
-- `netIncome = totalIncome - totalExpense`
-
-### Cash Flow Mode (Future)
-
-**Display:**
-- Pre-selected account groups categorized as Operating/Investing/Financing
-- Date inputs: "From" and "To"
-- Change in balance (not cumulative)
-
-### Custom Mode (Future)
-
-**Display:**
-- User-selected account groups
-- Flexible date inputs
-
-## Component Structure
-
-**Main Page:** `apps/web/src/routes/entities/[id]/+page.svelte`
-
-**State Management:**
-```typescript
-// Report mode
-let reportMode = $state<'balance-sheet' | 'trial-balance' | 'income-statement'>('balance-sheet');
-
-// Dates
-let endDate = $state(today());
-let startDate = $state(jan1OfCurrentYear());
-
-// Expand/collapse
-let expandedGroups = $state<Record<string, boolean>>({});
-
-// Persistence
-const viewState = createViewStateStore<{
-  reportMode: string;
-  endDate: string;
-  startDate: string;
-  expandedGroups: Record<string, boolean>;
-}>(`accounts-${entityId}`, defaults);
-```
-
-**Data Loading:**
-```typescript
-async function loadEntityData() {
-  const dataService = await getDataService();
-  const data = await dataService.getBalanceSheet(
-    entityId, 
-    endDate,
-    reportMode === 'income-statement' ? startDate : undefined
-  );
-  
-  balanceData = data;
-  // Contains: totalAssets, totalLiabilities, totalEquity, totalIncome, totalExpense, accounts[]
-}
-```
-
-**Derived Values:**
-```typescript
-const netIncome = $derived(
-  (balanceData?.totalIncome || 0) - (balanceData?.totalExpense || 0)
-);
-
-const isBalanced = $derived(() => {
-  const assets = balanceData?.totalAssets || 0;
-  const liabilities = balanceData?.totalLiabilities || 0;
-  const equity = balanceData?.totalEquity || 0;
-  return Math.abs(assets - (liabilities + equity + netIncome)) < 1;
-});
-```
-
-## UI Layout
-
-**Header:**
-- Back link to home
-- Entity name
-- Report mode dropdown
-- Date picker(s) - vertically stacked, right-aligned
-- Disabled buttons: "+" (Add Column), "⭐" (Saved Reports)
-
-**Account Display:**
-- Hierarchical tree: Type > Group > Account
-- Indentation: 0 spaces (Type), 2 spaces (Group), 4 spaces (Account)
-- Expand/collapse icons on groups with children
-- Account names are hyperlinks to `/ledger/[accountId]`
-- Balances right-aligned, tabular numbers
-
-**Special Sections:**
-- Retained Earnings: pseudo-account under Equity
-  - Balance Sheet: expandable, shows I/E breakdown
-  - Trial Balance: non-expandable line item
-- Verification line (Trial Balance only): comparison of Assets vs L+E
-
-**Actions:**
-- "Expand All" / "Collapse All" buttons
-- Click type/group header to toggle expansion
-- Click account name to navigate to ledger
-
-## Event Handlers
-
-**Mode change:**
-```typescript
-function handleModeChange(newMode) {
-  reportMode = newMode;
-  
-  // Auto-set dates based on mode
-  if (newMode === 'income-statement') {
-    if (!startDate) startDate = jan1OfCurrentYear();
-  }
-  
-  // Save to viewState
-  viewState.update(s => ({ ...s, reportMode }));
-  
-  // Reload data
-  loadEntityData();
-}
-```
-
-**Date change:**
-```typescript
-function handleDateBlur() {
-  // Only reload on blur (not every keystroke)
-  if (needsReload) {
-    viewState.update(s => ({ ...s, startDate, endDate }));
-    loadEntityData();
-    needsReload = false;
-  }
-}
-
-function handleDateInput() {
-  needsReload = true;
-}
-```
-
-**Expand/collapse:**
-```typescript
-function toggleGroup(groupId: string) {
-  expandedGroups[groupId] = !expandedGroups[groupId];
-  viewState.update(s => ({ ...s, expandedGroups }));
-}
-
-function expandAll() {
-  const newState = {};
-  allGroupIds.forEach(id => newState[id] = true);
-  expandedGroups = newState;
-  viewState.update(s => ({ ...s, expandedGroups }));
-}
-
-function collapseAll() {
-  expandedGroups = {};
-  viewState.update(s => ({ ...s, expandedGroups }));
-}
-```
-
-## Backend Data Requirements
-
-**DataService method:**
-```typescript
-getBalanceSheet(
-  entityId: string, 
-  endDate: string,
-  startDate?: string
-): Promise<BalanceSheetData>
-```
-
-**Return type:**
-```typescript
-interface BalanceSheetData {
-  totalAssets: number;
-  totalLiabilities: number;
-  totalEquity: number;        // Equity accounts only (excludes net income)
-  totalIncome: number;         // Separate from equity
-  totalExpense: number;        // Separate from equity
-  accounts: AccountWithBalance[];
-  groups: AccountGroupWithBalance[];
-  startDate?: string;          // Echoes input (for period reports)
-  endDate: string;             // Echoes input
-}
-```
-
-**SQL Query Logic:**
-- Single query with conditional date filtering using CASE statements
-- A/L/E accounts: `WHERE date <= endDate` (cumulative)
-- I/E accounts: `WHERE date <= endDate AND (startDate IS NULL OR date >= startDate)` (period if startDate provided)
-- Group by account type and group for hierarchical display
-- Calculate running totals per account
-
-## Acceptance Criteria
-
-- [ ] Can switch between Balance Sheet, Trial Balance, Income Statement modes
-- [ ] Date inputs appear appropriately (single "As of" vs "From/To" range)
-- [ ] Accounts filter correctly by date
-- [ ] Expand/collapse state persists per entity
-- [ ] Account names are clickable links to ledgers
-- [ ] Trial Balance shows verification line
-- [ ] Retained Earnings appears correctly in each mode
-- [ ] Equity total includes Retained Earnings
-- [ ] Date changes only reload on blur (performance optimization)
+**Route:** `/entities/[id]`
+**Component:** `apps/web/src/routes/entities/[id]/+page.svelte`
+**Generated:** 2026-07-18
 
 ---
 
-## Updates — 2026-07 (perf pass + native export)
+## Purpose
 
-- **Native export trigger added.** Header "Export" button (`exportNative` in `+page.svelte`) dumps the
-  entity's full books to a re-importable native `.json` (`$lib/import/native.ts` `exportBooks`). See
-  `accounts-view.md` User Actions and [domain/export.md](../../../specs/domain/export.md). CSV/Excel of
-  the current view remains future.
-- **`getBalanceSheet` rewritten for scale (data-layer, screen behavior unchanged).** The production
-  service now loads single-table indexed reads and joins in JS instead of a 3-way SQL `JOIN`
-  (~140× faster on the IndexedDB store; see `tmp/quereus-join-index-perf.md` and docs/STATUS.md
-  "Native Books + Perf Pass"). Renders ~5 s at 20k txns. Balance-sheet math/output is unchanged.
+An entity's accounts rendered as one of several report modes (Balance Sheet, Trial Balance, Income
+Statement; Cash Flow / Custom are future). Hierarchical Type → Group → Account tree with expand/collapse,
+mode-appropriate date inputs, per-entity persistence, and per-account links to the ledger. All balances
+come from a single `DataService.getBalanceSheet(entityId, endDate, startDate?)` call; the screen holds no
+balance math beyond netIncome/verification derivations. See
+[specs/web/screens/accounts-view.md](../../../specs/web/screens/accounts-view.md).
+
+## Architecture
+
+- **Screen** (`+page.svelte`): mode + date state, `loadEntityData` fetch, and the type/group/account
+  render tree. Visible types per mode via `getVisibleTypes`; totals via `getTypeTotal` / `getGroupTotal` /
+  `getAccountBalance`.
+- **Data** (`$lib/data` `getBalanceSheet`): returns `BalanceSheetData` (`totalAssets/Liabilities/Equity/
+  Income/Expense`, `accountBalances[]`, `groupBalances[]`). Production impl loads single-table indexed
+  reads and joins in JS (not a 3-way SQL `JOIN`) — ~140× faster on the IndexedDB store; balance math and
+  output shape unchanged. Renders ~5 s at 20k txns.
+- **Export** (`$lib/import/native.ts` `exportBooks`): header Export button `exportNative` dumps the
+  entity's full books to a re-importable native `.json` download.
+- **Persistence** (`$lib/stores/viewState` `loadViewState`/`saveViewState`): mode, dates, expand map, and
+  RE-expanded flag, keyed per entity.
+
+---
+
+## Source Requirements Verification
+
+### Report modes
+| Requirement | Status | Implementation |
+|---|---|---|
+| Balance Sheet: A/L/E only, "As of" single date, cumulative | ✅ | `getVisibleTypes` `balance_sheet`; `requiresDateRange` false |
+| Balance Sheet: RE expandable under Equity, I/E breakdown, in Equity total | ✅ | `retainedEarningsExpandable`; RE breakdown block; `getTypeTotal('EQUITY')` adds `netIncome` |
+| Trial Balance: all 5 types as sections | ✅ | `getVisibleTypes` `trial_balance` |
+| Trial Balance: RE non-expandable line, in Equity total | ✅ | non-expandable RE branch; `getTypeTotal('EQUITY')` |
+| Trial Balance: verification line (balanced / imbalance) | ✅ | `isBalanced` / `imbalanceAmount`; verification-row |
+| Income Statement: I/E only, From/To required, period-filtered | ✅ | `getVisibleTypes` `income_statement`; `requiresDateRange`; `startDate` passed to `getBalanceSheet` |
+| Income Statement: default Jan 1 → today | ✅ | `$effect` sets `startDate` to `${year}-01-01` when required |
+| Income Statement: Net Income line | ✅ | `netIncome`; net-income-row footer |
+| Cash Flow (future) | ⚠️ Placeholder | Dropdown option + `requiresDateRange`; falls to `getVisibleTypes` default (all 5), no Operating/Investing/Financing grouping |
+| Custom (future) | ⚠️ Placeholder | Dropdown option only; default all-5 render, no group selection |
+
+### Date inputs
+| Requirement | Status | Implementation |
+|---|---|---|
+| Single "As of" vs stacked From/To per mode | ✅ | `requiresDateRange` toggle; `date-range-stack` |
+| Persist dates per entity | ✅ | `accounts-dates-{entityId}` via `persistViewState` |
+| Reload on blur, not per keystroke | ✅ | `handleDateInput` sets `needsReload`; `handleDateBlur` refetches |
+
+### Account display
+| Requirement | Status | Implementation |
+|---|---|---|
+| Type → Group → Account hierarchy, indented | ✅ | `topLevelGroupsByType` / `childGroupsByParent`; `.account-row(.child)` CSS |
+| Expand/collapse header + Expand All / Collapse All | ✅ | `toggleGroup`; `expandAll` / `collapseAll` |
+| Account names link to `/ledger/[id]` | ✅ | `.account-name` anchor `href="/ledger/{account.id}"` |
+| Hover tooltip with full account path | ⛔ Missing | No `title` on account link |
+| Hide empty/zero-balance groups (future preference) | ⚠️ Partial | `hasAccounts`/`hasKids` guard hides accountless groups; no zero-balance toggle |
+
+### User actions & persistence
+| Requirement | Status | Implementation |
+|---|---|---|
+| Change mode (dropdown) | ✅ | `setMode`; persists `accounts-mode-{entityId}` |
+| Navigate to ledger | ✅ | account-name links |
+| Export → native re-importable `.json` | ✅ | `exportNative` → `exportBooks` (native books round-trip) |
+| Add Column (future) | ✅ Placeholder | disabled `+` button |
+| Save Report (future) | ✅ Placeholder | disabled `⭐` button |
+| Persist mode / dates / expand state per entity | ✅ | `loadViewState` on mount; `saveViewState` on each mutation |
+
+### Empty & error states
+| Requirement | Status | Implementation |
+|---|---|---|
+| No accounts message | ⚠️ Partial | `.empty-state` text (`no_accounts` + `create_prompt`); no Create/Import action buttons |
+| No transactions → $0.00 balances | ✅ | `getAccountBalance` defaults to 0 |
+| Failed to load → error + Retry | ⛔ Missing | `loadEntityData` catch only logs; no error UI / retry |
+| Date range invalid (From after To) | ⛔ Missing | No validation |
+
+---
+
+## Deferred / Notes
+- **Cash Flow & Custom modes** are selectable but not implemented — they render the default all-5 view
+  with no cash-flow categorization or custom group selection.
+- **Error handling** (load-failure UI + retry, date-range validation) and the **account-path tooltip**
+  are unimplemented.
+- **Empty-state actions** (Create accounts / Import) are copy-only, not wired buttons.
+- Future per spec: multi-column comparison, saved reports, charts (Add Column / Saved Reports are inert
+  placeholders today).

@@ -140,6 +140,16 @@ export function saveDb(database?: Database): void {
     log.sqlite.debug('Saved to localStorage');
   } catch (e) {
     log.sqlite.error('Failed to save to localStorage', e);
+    // A quota failure is silent data loss (the in-memory DB has the data but it isn't persisted, so a
+    // reload shows a half-empty state). Surface only this case so callers can report it; other save
+    // errors keep the prior log-and-continue behavior.
+    const quota = e instanceof DOMException && (e.name === 'QuotaExceededError' || e.code === 22);
+    if (quota) {
+      throw new Error(
+        'Browser storage limit reached — this dataset is too large for the mock backend and was not saved. '
+        + 'Switch to the quereus-local backend (IndexedDB) for large imports.',
+      );
+    }
   }
 }
 

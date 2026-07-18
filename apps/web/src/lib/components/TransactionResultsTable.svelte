@@ -197,19 +197,19 @@
   .transaction-results-table {
     display: flex;
     flex-direction: column;
-    gap: var(--spacing-md);
+    gap: var(--space-md);
   }
   
   .empty-state {
     text-align: center;
-    padding: var(--spacing-xl);
+    padding: var(--space-xl);
     color: var(--text-muted);
   }
   
   .table-container {
     overflow-x: auto;
     border: 1px solid var(--border-color);
-    border-radius: var(--border-radius);
+    border-radius: var(--radius-md);
   }
   
   table {
@@ -219,12 +219,12 @@
   }
   
   thead {
-    background: var(--card-bg);
+    background: var(--bg-card);
     border-bottom: 2px solid var(--border-color);
   }
   
   th {
-    padding: var(--spacing-sm);
+    padding: var(--space-sm);
     text-align: left;
     font-weight: 600;
     white-space: nowrap;
@@ -235,7 +235,7 @@
   }
   
   td {
-    padding: var(--spacing-sm);
+    padding: var(--space-sm);
     border-bottom: 1px solid var(--border-color);
   }
   
@@ -245,12 +245,12 @@
   }
   
   .txn-header-row {
-    background: var(--card-bg);
+    background: var(--bg-card);
     font-weight: 500;
   }
   
   .txn-header-row:hover {
-    background: var(--hover-bg);
+    background: var(--bg-hover);
   }
   
   .split-row {
@@ -259,22 +259,22 @@
   }
   
   .split-row:hover {
-    background: var(--hover-bg);
+    background: var(--bg-hover);
   }
   
   .split-account {
-    padding-left: var(--spacing-md);
+    padding-left: var(--space-md);
     font-style: italic;
   }
   
   .split-note {
     color: var(--text-muted);
     font-size: 0.75rem;
-    margin-left: var(--spacing-xs);
+    margin-left: var(--space-xs);
   }
   
   a {
-    color: var(--link-color);
+    color: var(--accent-color);
     text-decoration: none;
   }
   
@@ -283,35 +283,35 @@
   }
   
   .totals-row {
-    background: var(--card-bg);
+    background: var(--bg-card);
     border-top: 2px solid var(--border-color);
     font-weight: 600;
   }
   
   .totals-row td {
-    padding: var(--spacing-sm) var(--spacing-sm);
+    padding: var(--space-sm) var(--space-sm);
   }
   
   .verification-row {
-    background: var(--card-bg);
+    background: var(--bg-card);
     font-weight: 600;
     border-bottom: none;
   }
   
   .verification-row td {
-    padding: var(--spacing-xs) var(--spacing-sm);
+    padding: var(--space-xs) var(--space-sm);
     border-bottom: none;
   }
   
   .verification-row.balanced {
-    color: var(--success-color);
+    color: var(--success);
   }
   
   .verification-row.imbalanced {
-    color: var(--error-color);
+    color: var(--danger);
   }
   
   .status-icon {
-    margin-right: var(--spacing-xs);
+    margin-right: var(--space-xs);
   }
 </style>

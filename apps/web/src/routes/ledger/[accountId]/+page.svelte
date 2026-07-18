@@ -1258,7 +1258,7 @@
     position: sticky;
     top: 0;
     z-index: 100;
-    background: var(--surface-primary);
+    background: var(--bg-card);
     border-bottom: 2px solid var(--border-color);
     padding: 1rem 1.5rem;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
@@ -1269,7 +1269,7 @@
   }
   
   .back-link {
-    color: var(--primary-color);
+    color: var(--accent-color);
     text-decoration: none;
     font-size: 0.875rem;
   }
@@ -1318,7 +1318,7 @@
   
   /* Column Headers (fixed, outside scroll area) */
   .column-headers {
-    background: var(--surface-primary);
+    background: var(--bg-card);
     flex-shrink: 0;
     border-bottom: 2px solid var(--border-color);
     padding: 0.75rem 0;
@@ -1398,7 +1398,7 @@
   }
   
   .expand-all-btn:hover {
-    color: var(--primary-color);
+    color: var(--accent-color);
   }
   
   /* Expand/collapse buttons */
@@ -1412,7 +1412,7 @@
   }
   
   .expand-btn:hover {
-    color: var(--primary-color);
+    color: var(--accent-color);
   }
   
   /* Transaction rows */
@@ -1423,7 +1423,7 @@
   
   .transaction-line.clickable:hover,
   .transaction-header.clickable:hover {
-    background: var(--surface-hover);
+    background: var(--bg-hover);
     cursor: pointer;
   }
   
@@ -1434,7 +1434,7 @@
   }
   
   .entry-line {
-    background: var(--surface-secondary);
+    background: var(--bg-secondary);
   }
   
   /* Locked separator */
@@ -1452,7 +1452,7 @@
   
   .lock-icon {
     position: absolute;
-    background: var(--surface-primary);
+    background: var(--bg-card);
     padding: 0 0.5rem;
     font-size: 1.25rem;
   }
@@ -1468,27 +1468,27 @@
   .edit-metadata-row,
   .edit-entry-row,
   .edit-actions-row {
-    background: var(--surface-hover, #f9f9f9) !important;
+    background: var(--bg-hover, #f9f9f9) !important;
     position: relative;
   }
   
   /* First row in edit group gets top border */
   .edit-simple-row,
   .edit-metadata-row {
-    border: 2px solid var(--primary-color, #0066cc);
+    border: 2px solid var(--accent-color, #0066cc);
     border-bottom: none;
   }
   
   /* Middle rows get left/right borders only */
   .edit-entry-row {
-    border-left: 2px solid var(--primary-color, #0066cc);
-    border-right: 2px solid var(--primary-color, #0066cc);
+    border-left: 2px solid var(--accent-color, #0066cc);
+    border-right: 2px solid var(--accent-color, #0066cc);
     border-bottom: none;
   }
   
   /* Last row (actions) gets bottom border */
   .edit-actions-row {
-    border: 2px solid var(--primary-color, #0066cc);
+    border: 2px solid var(--accent-color, #0066cc);
     border-top: none;
   }
   
@@ -1499,7 +1499,7 @@
   }
   
   .split-toggle-btn {
-    background: var(--surface-secondary);
+    background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 4px;
     padding: 0.375rem 0.5rem;
@@ -1512,8 +1512,8 @@
   }
   
   .split-toggle-btn:hover:not(:disabled) {
-    background: var(--surface-hover);
-    border-color: var(--primary-color);
+    background: var(--bg-hover);
+    border-color: var(--accent-color);
   }
   
   .split-toggle-btn:disabled {
@@ -1522,12 +1522,12 @@
   }
   
   .edit-current-account {
-    background: var(--surface-secondary);
+    background: var(--bg-secondary);
   }
   
   .edit-actions-row td {
     padding: 0 !important;
-    background: var(--surface-hover, #f9f9f9) !important;
+    background: var(--bg-hover, #f9f9f9) !important;
   }
   
   /* Edit inputs */
@@ -1536,18 +1536,18 @@
     padding: 0.375rem 0.5rem;
     border: 1px solid var(--border-light);
     border-radius: 4px;
-    background: var(--surface-primary);
+    background: var(--bg-card);
     color: var(--text-primary);
     font-size: 0.875rem;
   }
   
   .edit-input:focus {
     outline: none;
-    border-color: var(--primary-color);
+    border-color: var(--accent-color);
   }
   
   .edit-input.edit-disabled {
-    background: var(--surface-secondary);
+    background: var(--bg-secondary);
     color: var(--text-muted);
     cursor: not-allowed;
   }
@@ -1576,7 +1576,7 @@
   .btn-remove-split {
     background: transparent;
     border: none;
-    color: var(--danger-color);
+    color: var(--danger);
     font-size: 1.5rem;
     cursor: pointer;
     padding: 0;
@@ -1584,7 +1584,7 @@
   }
   
   .btn-remove-split:hover {
-    color: var(--danger-color-hover);
+    color: var(--danger-hover);
   }
   
   /* Actions footer */
@@ -1593,7 +1593,7 @@
     justify-content: space-between;
     align-items: center;
     padding: 0.75rem 1rem;
-    background: var(--surface-secondary);
+    background: var(--bg-secondary);
     border-top: 1px solid var(--border-color);
     gap: 2rem;
     min-height: 50px;
@@ -1626,12 +1626,12 @@
   }
   
   .balanced {
-    color: var(--success-color);
+    color: var(--success);
     font-weight: 600;
   }
   
   .imbalanced {
-    color: var(--danger-color);
+    color: var(--danger);
     font-weight: 600;
   }
   
@@ -1652,31 +1652,31 @@
   }
   
   .btn-primary {
-    background: var(--primary-color, #0066cc);
+    background: var(--accent-color, #0066cc);
     color: white;
   }
   
   .btn-primary:hover {
-    background: var(--primary-color-hover, #0052a3);
+    background: var(--accent-hover, #0052a3);
   }
   
   .btn-secondary {
-    background: var(--surface-secondary, #f5f5f5);
+    background: var(--bg-secondary, #f5f5f5);
     color: var(--text-primary, #000);
     border: 1px solid var(--border-color, #ccc);
   }
   
   .btn-secondary:hover {
-    background: var(--surface-hover, #e8e8e8);
+    background: var(--bg-hover, #e8e8e8);
   }
   
   .btn-danger {
-    background: var(--danger-color, #dc3545);
+    background: var(--danger, #dc3545);
     color: white;
   }
   
   .btn-danger:hover {
-    background: var(--danger-color-hover, #bd2130);
+    background: var(--danger-hover, #bd2130);
   }
   
   /* Loading/Error states */
@@ -1692,7 +1692,7 @@
     width: 2rem;
     height: 2rem;
     border: 3px solid var(--border-color);
-    border-top-color: var(--primary-color);
+    border-top-color: var(--accent-color);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }
@@ -1708,12 +1708,12 @@
   
   /* Blank entry row */
   .blank-entry-row {
-    background: var(--surface-secondary);
+    background: var(--bg-secondary);
     border-top: 2px dashed var(--border-color);
   }
   
   .blank-entry-row:hover {
-    background: var(--surface-hover);
+    background: var(--bg-hover);
   }
   
   /* Blank entry row inputs - subtle styling */
@@ -1730,19 +1730,19 @@
   
   .blank-input:hover {
     border-color: var(--border-light);
-    background: var(--surface-primary);
+    background: var(--bg-card);
   }
   
   .blank-input:focus {
     outline: none;
-    border-color: var(--primary-color);
-    background: var(--surface-primary);
+    border-color: var(--accent-color);
+    background: var(--bg-card);
     color: var(--text-primary);
     font-style: normal;
   }
   
   .new-entry-row {
-    border-left: 4px solid var(--success-color);
+    border-left: 4px solid var(--success);
   }
   
   /* Current account link */
@@ -1754,7 +1754,7 @@
   
   .current-account-link:hover {
     text-decoration: underline;
-    color: var(--primary-color);
+    color: var(--accent-color);
   }
   
   /* Dev tools (compact, config-controlled) */
@@ -1781,7 +1781,7 @@
     border-radius: 3px;
     font-size: 0.75rem;
     text-align: right;
-    background: var(--surface-primary);
+    background: var(--bg-card);
     color: var(--text-primary);
   }
   

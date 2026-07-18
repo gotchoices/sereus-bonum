@@ -12,6 +12,7 @@
   } from '$lib/import';
   import { importNativeBooks, type BonumBooksFile } from '$lib/import/native';
   import { initializeEntities, entities } from '$lib/stores/entities';
+  import { getDataService } from '$lib/data';
 
   // Plan-driven merge import: parse → build a merge plan (accounts + transaction dispositions) with no
   // writes → review the exact preview → execute. What the user sees here is what gets written.
@@ -59,6 +60,10 @@
     const ok = ['.gnucash', '.iif', '.json'].some((ext) => file.name.toLowerCase().endsWith(ext));
     if (!ok) { error = 'Invalid file type. Choose a .gnucash, .iif, or .json file.'; selectedFile = null; return; }
     error = null; selectedFile = file;
+    // Convenience: infill a New-entity name from the file if the user dropped a file before naming it.
+    if (targetMode === 'new' && !entityName.trim() && !file.name.toLowerCase().endsWith('.json')) {
+      entityName = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+    }
     log.ui.info('[Import] File selected:', file.name, file.size);
   }
 
@@ -125,11 +130,17 @@
   function toggleExpand(g: string) { expanded.has(g) ? expanded.delete(g) : expanded.add(g); expanded = new Set(expanded); }
 
   // Nesting depth of a to-create account (by its parentSourceGuid chain) for indented display.
-  function accountDepth(r: ResolvedAccount): number {
-    let d = 0; let p = r.parentSourceGuid;
-    const byGuid = resolvedByGuid;
-    while (p && d < 12) { d++; p = byGuid.get(p)?.parentSourceGuid; }
-    return d;
+  // The entity-account portion of the path (this account + any intermediate parent accounts),
+  // colon-joined: e.g. "Jeppson : AOF Loan". The group portion is r.targetGroupPath.
+  function accountPathSegments(r: ResolvedAccount): string {
+    const names: string[] = [];
+    let cur: ResolvedAccount | undefined = r;
+    let guard = 0;
+    while (cur && guard++ < 12) {
+      names.unshift(cur.targetAccountName ?? cur.sourceName);
+      cur = cur.parentSourceGuid ? resolvedByGuid.get(cur.parentSourceGuid) : undefined;
+    }
+    return names.join(' : ');
   }
 
   function txnAmount(tx: PreviewTransaction): number {
@@ -149,10 +160,12 @@
   async function doImport() {
     if (!plan || !parsedData || !canImport) return;
     step = 'importing'; statusMessage = 'Creating accounts and writing transactions…'; error = null;
+    const isNew = targetMode !== 'existing';
+    let entityId = '';
     try {
-      const entityId = targetMode === 'existing'
-        ? selectedEntityId
-        : await importService.createOrGetEntity({ entityName: entityName.trim() }, parsedData);
+      entityId = isNew
+        ? await importService.createOrGetEntity({ entityName: entityName.trim() }, parsedData)
+        : selectedEntityId;
 
       // New (not excluded) + force-included already-imported (promoted to 'new').
       const toWrite: PreviewTransaction[] = plan.transactions.map((tx) => {
@@ -161,7 +174,7 @@
       });
 
       const result = await importService.executeMerge({ ...plan, entityId }, toWrite);
-      if (result.errors.length) { error = result.errors.join(', '); step = 'preview'; return; }
+      if (result.errors.length) { await discardNewEntity(isNew, entityId); error = result.errors.join(', '); step = 'preview'; return; }
 
       await initializeEntities();
       const name = targetMode === 'existing' ? ($entities.find((e) => e.id === entityId)?.name ?? 'entity') : entityName;
@@ -169,9 +182,20 @@
       goto(`/entities/${entityId}?view=trial-balance`);
     } catch (e) {
       log.ui.error('[Import] Execute failed:', e);
+      await discardNewEntity(isNew, entityId);
       error = `Import failed: ${e instanceof Error ? e.message : 'Unknown error'}`;
       step = 'preview';
     }
+  }
+
+  // On a failed import into a freshly-created entity, remove it so no empty entity is left behind.
+  async function discardNewEntity(isNew: boolean, entityId: string) {
+    if (!isNew || !entityId) return;
+    try {
+      const ds = await getDataService();
+      await ds.deleteEntity(entityId);
+      await initializeEntities();
+    } catch (e) { log.ui.warn('[Import] Could not discard entity after failure:', e); }
   }
 
   function showToast(message: string) {
@@ -283,9 +307,10 @@
             {#if accountsOpen}
               <div class="acct-list">
                 {#each accountsToCreate as r}
-                  <div class="acct-row" style="padding-left:{accountDepth(r) * 1.25 + 0.5}rem" title={r.sourcePath}>
-                    <span class="acct-name">{r.targetAccountName ?? r.sourceName}</span>
-                    <span class="acct-group">{r.targetGroupPath}</span>
+                  <div class="acct-row" title="source: {r.sourcePath}">
+                    <span class="path">
+                      <span class="path-group">{r.targetGroupPath}</span><span class="path-sep"> : </span><span class="path-account">{accountPathSegments(r)}</span>
+                    </span>
                   </div>
                 {/each}
               </div>
@@ -415,9 +440,11 @@
   .badge-muted { background: var(--bg-hover, #eee); color: var(--text-muted); }
 
   .acct-list { max-height: 260px; overflow-y: auto; }
-  .acct-row { display: flex; justify-content: space-between; gap: 1rem; padding: 0.3rem 0.9rem; border-bottom: 1px solid var(--border-light, #f0f0f0); }
-  .acct-name { font-weight: 500; color: var(--text-primary); }
-  .acct-group { color: var(--accent-color); font-size: 0.85rem; }
+  .acct-row { padding: 0.3rem 0.9rem; border-bottom: 1px solid var(--border-light); font-size: 0.9rem; }
+  /* Full account path: group segments muted, entity-account segments in accent (the specific part). */
+  .path-group { color: var(--text-muted); }
+  .path-sep { color: var(--text-muted); white-space: pre; }
+  .path-account { color: var(--accent-color); font-weight: 600; }
 
   .txn { border-bottom: 1px solid var(--border-light, #f0f0f0); }
   .txn.excluded { opacity: 0.45; }

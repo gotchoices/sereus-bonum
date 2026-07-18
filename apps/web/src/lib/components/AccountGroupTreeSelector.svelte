@@ -276,7 +276,7 @@
   }
   
   .group-row.selected {
-    background: var(--primary-color, #007bff);
+    background: var(--accent-color, #007bff);
     color: white;
   }
   
