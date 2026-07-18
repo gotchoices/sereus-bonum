@@ -361,7 +361,11 @@ class QuereusDataService implements DataService {
     return (await this.getTransaction(id))!;
   }
 
-  async updateTransaction(id: string, data: Partial<TransactionInput>): Promise<Transaction> {
+  async updateTransaction(id: string, data: Partial<TransactionInput>, entries?: EntryInput[]): Promise<Transaction> {
+    if (entries) {
+      const total = entries.reduce((sum, e) => sum + e.amount, 0);
+      if (Math.abs(total) > 0.001) throw new Error(`Transaction entries do not balance: ${total}`);
+    }
     const cols: Record<string, string> = { date: 'date', memo: 'memo', reference: 'reference' };
     const sets: string[] = [];
     const vals: SqlValue[] = [];
@@ -369,8 +373,25 @@ class QuereusDataService implements DataService {
       if (key in data) { sets.push(`${col} = ?`); vals.push((data as Row)[key] ?? null); }
     }
     sets.push('updated_at = ?');
-    vals.push(nowIso(), id);
-    await run(this.getDb(), `UPDATE txn SET ${sets.join(', ')} WHERE id = ?`, vals);
+    vals.push(nowIso());
+
+    const db = this.getDb();
+    await run(db, 'BEGIN');
+    try {
+      await run(db, `UPDATE txn SET ${sets.join(', ')} WHERE id = ?`, [...vals, id]);
+      if (entries) {
+        // Replace the transaction's entries wholesale (simplest correct edit).
+        await run(db, 'DELETE FROM entry WHERE txn_id = ?', [id]);
+        for (const e of entries) {
+          await run(db, 'INSERT INTO entry (id, txn_id, account_id, amount, note, tag_id, reconciliation_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [uuid(), id, e.accountId, e.amount, e.note ?? null, e.tagId ?? null, e.reconciliationId ?? null]);
+        }
+      }
+      await run(db, 'COMMIT');
+    } catch (err) {
+      try { await run(db, 'ROLLBACK'); } catch { /* ignore */ }
+      throw err;
+    }
     return (await this.getTransaction(id))!;
   }
 

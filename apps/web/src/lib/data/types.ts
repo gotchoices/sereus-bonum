@@ -241,7 +241,9 @@ export interface DataService {
   }): Promise<Transaction[]>;
   getTransaction(id: string): Promise<Transaction | null>;
   createTransaction(data: TransactionInput, entries: EntryInput[]): Promise<Transaction>;
-  updateTransaction(id: string, data: Partial<TransactionInput>): Promise<Transaction>;
+  // When `entries` is provided, the transaction's entries are fully replaced (must balance); when
+  // omitted, only the transaction header fields are updated.
+  updateTransaction(id: string, data: Partial<TransactionInput>, entries?: EntryInput[]): Promise<Transaction>;
   deleteTransaction(id: string): Promise<void>;
   
   // Entries (usually accessed via transaction)

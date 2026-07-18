@@ -290,12 +290,23 @@
       }
     }
     
-    // Otherwise, scroll to blank entry (latest date position)
-    const blankEntry = scrollElement.querySelector('.blank-entry-row');
-    if (blankEntry) {
-      log.ui.info('[Ledger] Scrolling to latest date (blank entry)');
-      blankEntry.scrollIntoView({ block: 'center', behavior: 'instant' });
-    }
+    // Otherwise, land on the latest activity (+ blank entry for data entry): bottom for oldest-first,
+    // top for newest-first. scrollIntoView mis-computes against content-visibility rows, so drive
+    // scrollTop directly and re-assert as virtualized rows render and their heights settle.
+    scrollToLatest();
+  }
+
+  // Scroll to the newest transactions / blank entry, robust to content-visibility virtualization.
+  function scrollToLatest() {
+    const el = scrollElement;
+    if (!el) return;
+    const toBottom = $settings.transactionSortOrder !== 'newest';
+    const apply = () => { el.scrollTop = toBottom ? el.scrollHeight : 0; };
+    log.ui.info('[Ledger] Scrolling to latest activity', toBottom ? '(bottom)' : '(top)');
+    apply();
+    requestAnimationFrame(apply);
+    setTimeout(apply, 150);
+    setTimeout(apply, 450); // final settle after off-screen rows render
   }
   
   // Restore scroll position after data loads
@@ -535,67 +546,40 @@
       const divisor = unit?.displayDivisor ?? 100;
       let savedTransactionId: string | null = null;
       
-      if (isNewEntry) {
-        // Create new transaction
-        const currentDebit = editingData.currentAccountDebit ? parseFloat(editingData.currentAccountDebit) : 0;
-        const currentCredit = editingData.currentAccountCredit ? parseFloat(editingData.currentAccountCredit) : 0;
-        const currentAmount = (currentDebit || -currentCredit) * divisor;
-        
-        // For simple transaction (1 split)
-        if (editingData.splits.length === 1 && editingData.splits[0].accountId) {
-          const split = editingData.splits[0];
-          const txn = await dataService.createTransaction({
-            entityId: entity!.id,
-            date: editingData.date,
-            reference: editingData.reference || undefined,
-            memo: editingData.memo || undefined,
-          }, [
-            {
-              accountId: accountId,
-              amount: currentAmount,
-            },
-            {
-              accountId: split.accountId,
-              amount: -currentAmount,
-            },
-          ]);
-          savedTransactionId = txn.id;
-        } else {
-          // Split transaction
-          const entries = [
-            {
-              accountId: accountId,
-              amount: currentAmount,
-            },
-            ...editingData.splits.filter(s => s.accountId).map(s => {
+      // Build the balanced entry set from the editor (this account + splits) — shared by create/edit.
+      const currentDebit = editingData.currentAccountDebit ? parseFloat(editingData.currentAccountDebit) : 0;
+      const currentCredit = editingData.currentAccountCredit ? parseFloat(editingData.currentAccountCredit) : 0;
+      const currentAmount = (currentDebit || -currentCredit) * divisor;
+
+      const isSimple = editingData.splits.length === 1 && !!editingData.splits[0].accountId;
+      const entries = isSimple
+        ? [
+            { accountId, amount: currentAmount },
+            { accountId: editingData.splits[0].accountId, amount: -currentAmount },
+          ]
+        : [
+            { accountId, amount: currentAmount },
+            ...editingData.splits.filter((s) => s.accountId).map((s) => {
               const debit = s.debit ? parseFloat(s.debit) : 0;
               const credit = s.credit ? parseFloat(s.credit) : 0;
-              return {
-                accountId: s.accountId,
-                amount: (debit || -credit) * divisor,
-              };
+              return { accountId: s.accountId, amount: (debit || -credit) * divisor };
             }),
           ];
-          
-          const txn = await dataService.createTransaction({
-            entityId: entity!.id,
-            date: editingData.date,
-            reference: editingData.reference || undefined,
-            memo: editingData.memo || undefined,
-          }, entries);
-          savedTransactionId = txn.id;
-        }
-        
+
+      const header = {
+        date: editingData.date,
+        reference: editingData.reference || undefined,
+        memo: editingData.memo || undefined,
+      };
+
+      if (isNewEntry) {
+        const txn = await dataService.createTransaction({ entityId: entity!.id, ...header }, entries);
+        savedTransactionId = txn.id;
         log.ui.info('[Ledger] New transaction created:', savedTransactionId);
       } else if (editingTransactionId) {
-        // Update existing transaction
-        await dataService.updateTransaction(editingTransactionId, {
-          date: editingData.date,
-          reference: editingData.reference || undefined,
-          memo: editingData.memo || undefined,
-        });
+        // Replace header AND entries so edited amounts/accounts persist.
+        await dataService.updateTransaction(editingTransactionId, header, entries);
         savedTransactionId = editingTransactionId;
-        
         log.ui.info('[Ledger] Transaction updated:', savedTransactionId);
       }
       

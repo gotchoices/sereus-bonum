@@ -166,6 +166,13 @@ Transaction list order is controlled by user preference in **[Settings](./settin
 
 The sort order persists across sessions and applies to all account ledgers.
 
+### Initial Scroll Position
+
+On opening an account, the ledger shows the **latest activity** — the most recent transactions, current
+balance, and the blank data-entry row — without the user scrolling. This means scrolled to the **bottom**
+for oldest-first, and to the **top** for newest-first (the blank entry's natural position). Returning to
+an account the user has scrolled restores that saved position instead.
+
 ### Collapsed View (Default)
 
 ```

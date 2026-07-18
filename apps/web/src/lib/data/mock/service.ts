@@ -357,19 +357,38 @@ class SqliteDataService implements DataService {
     return (await this.getTransaction(id))!;
   }
   
-  async updateTransaction(id: string, data: Partial<TransactionInput>): Promise<Transaction> {
+  async updateTransaction(id: string, data: Partial<TransactionInput>, entries?: EntryInput[]): Promise<Transaction> {
+    if (entries) {
+      const total = entries.reduce((sum, e) => sum + e.amount, 0);
+      if (Math.abs(total) > 0.001) throw new Error(`Transaction entries do not balance: ${total}`);
+    }
     const updates: string[] = [];
     const values: (string | null)[] = [];
-    
+
     if (data.date !== undefined) { updates.push('date = ?'); values.push(data.date); }
     if (data.memo !== undefined) { updates.push('memo = ?'); values.push(data.memo ?? null); }
     if (data.reference !== undefined) { updates.push('reference = ?'); values.push(data.reference ?? null); }
-    
+
     updates.push('updated_at = ?');
     values.push(now());
-    values.push(id);
-    
-    this.getDb().run(`UPDATE txn SET ${updates.join(', ')} WHERE id = ?`, values);
+
+    const db = this.getDb();
+    db.run('BEGIN');
+    try {
+      db.run(`UPDATE txn SET ${updates.join(', ')} WHERE id = ?`, [...values, id]);
+      if (entries) {
+        // Replace the transaction's entries wholesale (simplest correct edit).
+        db.run('DELETE FROM entry WHERE txn_id = ?', [id]);
+        for (const e of entries) {
+          db.run('INSERT INTO entry (id, txn_id, account_id, amount, note, tag_id, reconciliation_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [uuid(), id, e.accountId, e.amount, e.note ?? null, e.tagId ?? null, e.reconciliationId ?? null]);
+        }
+      }
+      db.run('COMMIT');
+    } catch (err) {
+      try { db.run('ROLLBACK'); } catch { /* ignore */ }
+      throw err;
+    }
     this.save();
     return (await this.getTransaction(id))!;
   }
