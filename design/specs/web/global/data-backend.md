@@ -7,13 +7,13 @@ the concrete web toggle and package choices. All modes execute the same
 
 ## Three Modes
 
-Selected by the `VITE_BACKEND` environment variable (default `mock`):
+Selected by the `VITE_BACKEND` environment variable (default `quereus-local`):
 
 | `VITE_BACKEND` | What it uses | Networking | Purpose |
 |----------------|--------------|-----------|---------|
-| `mock` | In-browser SQLite (`sql.js`), persisted to `localStorage` | none | Development, testing, demos (default) |
-| `quereus-local` | Quereus with the browser IndexedDB store | none | Real Quereus SQL, single device |
-| `quereus-p2p` | Quereus + Optimystic over the Sereus cadre | libp2p | Distributed, multi-device, sharing |
+| `quereus-local` | Quereus with the browser IndexedDB store | none | Real Quereus SQL, single device — **default** (`npm run dev`) |
+| `quereus-p2p` | Quereus + Optimystic over the Sereus cadre | libp2p | Distributed, multi-device, sharing (`npm run dev:p2p`) |
+| `mock` | In-browser SQLite (`sql.js`), persisted to `localStorage` | none | Demo/dev only, opt-in (`npm run dev:mock`); can't hold large datasets (localStorage quota) |
 
 Higher-level code (screens, stores, data adapters) checks only `USE_QUEREUS` (mock vs. real DB). The
 local-vs-p2p distinction is derived as `USE_OPTIMYSTIC` and handled entirely inside the production
@@ -35,7 +35,7 @@ Bonum consumes the Sereus stack from npm — **no local clones**. Versions track
 
 ## Status
 
-- `mock` is implemented and is the **default** (`VITE_BACKEND` unset).
+- `quereus-local` is the **default** (`VITE_BACKEND` unset / `npm run dev`); `mock` is opt-in.
 - `quereus-local` is **fully implemented and runtime-verified** — real Quereus SQL over browser
   IndexedDB, seeded, all screens working.
 - `quereus-p2p` is **wired but not runnable in a browser yet**: cadre-core / p2p-fret / libp2p require

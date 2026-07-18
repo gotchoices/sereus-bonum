@@ -119,11 +119,28 @@ async function stampSchemaVersion(database: Database): Promise<void> {
   await database.exec('INSERT INTO schema_meta (version) VALUES (?)', [SCHEMA_VERSION]);
 }
 
+// Dependents before the tables they reference, so FK constraints don't block DELETE/DROP. Any table
+// not in this known order is handled first (assumed to be a leaf/dependent).
+const DROP_ORDER = [
+  'entry', 'exchange', 'reconciliation', 'txn', 'account', 'tag', 'account_group', 'partner', 'entity',
+  'unit', 'schema_meta',
+];
+
+// Fully clear the persisted store. IMPORTANT: on the IndexedDB store, `DROP TABLE` removes only the
+// Quereus schema registration — it does NOT purge the underlying rows, so a re-created table still
+// holds its old data (and the re-seed hits a duplicate PK). So DELETE the rows first, then drop.
 async function dropAllTables(database: Database): Promise<void> {
-  const rows = await all<{ name: string }>(database, "SELECT name FROM schema() WHERE type = 'table'");
-  for (const r of rows) {
-    try { await database.exec(`DROP TABLE ${r.name}`); }
-    catch (e) { log.data.warn(`[Quereus] drop ${r.name} failed`, e); }
+  const present = new Set(
+    (await all<{ name: string }>(database, "SELECT name FROM schema() WHERE type = 'table'")).map((r) => r.name),
+  );
+  const order = [...[...present].filter((n) => !DROP_ORDER.includes(n)), ...DROP_ORDER].filter((n) => present.has(n));
+  for (const name of order) {
+    try { await database.exec(`DELETE FROM ${name}`); }
+    catch (e) { log.data.warn(`[Quereus] clear ${name} failed`, e); }
+  }
+  for (const name of order) {
+    try { await database.exec(`DROP TABLE ${name}`); }
+    catch (e) { log.data.warn(`[Quereus] drop ${name} failed`, e); }
   }
 }
 

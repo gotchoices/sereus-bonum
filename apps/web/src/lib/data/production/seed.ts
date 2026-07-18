@@ -5,7 +5,7 @@
 // Reuses the same data arrays as the mock backend to avoid drift.
 
 import type { Database } from '@quereus/quereus';
-import { run, nowIso } from './db';
+import { run, get, nowIso } from './db';
 import { DEBUG_DATA } from '$lib/config';
 import {
   UNITS, ACCOUNT_GROUPS,
@@ -15,6 +15,11 @@ import {
 
 export async function seedQuereus(db: Database): Promise<void> {
   const ts = nowIso();
+
+  // Idempotent: only seed a genuinely empty catalog. On the IndexedDB store, DROP TABLE keeps the
+  // underlying rows, so a rebuilt DB can still hold the seed — re-inserting would hit a duplicate PK.
+  const existing = await get<{ c: number }>(db, 'SELECT count(*) as c FROM unit');
+  if (existing && Number(existing.c) > 0) return;
 
   for (const u of UNITS) {
     await run(db, 'INSERT INTO unit (code, name, symbol, unit_type, display_divisor) VALUES (?, ?, ?, ?, ?)',

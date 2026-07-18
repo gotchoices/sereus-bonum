@@ -4,10 +4,11 @@
 
 /**
  * Backend selection — three modes:
- *   'mock'          — in-browser SQLite (sql.js), persisted to localStorage. Default.
  *   'quereus-local' — Quereus with the browser IndexedDB store (@quereus/plugin-indexeddb).
- *                     Real Quereus SQL, single-device, no networking.
- *   'quereus-p2p'   — Quereus + Optimystic distributed storage over the Sereus cadre.
+ *                     Real Quereus SQL, single-device, no networking. **Default** (`npm run dev`).
+ *   'quereus-p2p'   — Quereus + Optimystic distributed storage over the Sereus cadre (`dev:p2p`).
+ *   'mock'          — in-browser SQLite (sql.js), persisted to localStorage. Demo/dev only, opt-in
+ *                     via `npm run dev:mock`; can't hold large datasets (localStorage quota).
  *
  * Set via the VITE_BACKEND environment variable. Higher-level code should only ask
  * `USE_QUEREUS` (mock vs real DB); the local-vs-p2p distinction is handled inside
@@ -16,7 +17,7 @@
 export type Backend = 'mock' | 'quereus-local' | 'quereus-p2p';
 
 export const BACKEND: Backend =
-  (import.meta.env.VITE_BACKEND as Backend) || 'mock';
+  (import.meta.env.VITE_BACKEND as Backend) || 'quereus-local';
 
 /** True for any real Quereus backend (local or p2p) — the only flag screens/data code should need. */
 export const USE_QUEREUS: boolean = BACKEND !== 'mock';
