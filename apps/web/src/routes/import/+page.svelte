@@ -13,6 +13,7 @@
   import { importNativeBooks, type BonumBooksFile } from '$lib/import/native';
   import { initializeEntities, entities } from '$lib/stores/entities';
   import { getDataService } from '$lib/data';
+  import { notifyError, notifySuccess } from '$lib/stores/notifications';
 
   // Plan-driven merge import: parse → build a merge plan (accounts + transaction dispositions) with no
   // writes → review the exact preview → execute. What the user sees here is what gets written.
@@ -86,8 +87,7 @@
       step = 'preview';
       log.ui.info('[Import] Plan built:', plan.counts);
     } catch (e) {
-      log.ui.error('[Import] Planning failed:', e);
-      error = `Failed to analyze file: ${e instanceof Error ? e.message : 'Unknown error'}`;
+      notifyError(e, 'Import — could not analyze file');
       step = 'upload';
     }
   }
@@ -100,10 +100,10 @@
       statusMessage = `Restoring "${data.entity?.name ?? 'books'}"…`;
       const entityId = await importNativeBooks(data);
       await initializeEntities();
-      showToast(`Restored "${data.entity?.name ?? 'books'}"`);
+      notifySuccess(`Restored "${data.entity?.name ?? 'books'}"`);
       goto(`/entities/${entityId}?view=trial-balance`);
     } catch (e) {
-      error = `Restore failed: ${e instanceof Error ? e.message : 'Unknown error'}`;
+      notifyError(e, 'Restore failed');
       step = 'upload';
     }
   }
@@ -174,16 +174,20 @@
       });
 
       const result = await importService.executeMerge({ ...plan, entityId }, toWrite);
-      if (result.errors.length) { await discardNewEntity(isNew, entityId); error = result.errors.join(', '); step = 'preview'; return; }
+      if (result.errors.length) {
+        await discardNewEntity(isNew, entityId);
+        notifyError(result.errors.join(', '), 'Import failed');
+        step = 'preview';
+        return;
+      }
 
       await initializeEntities();
       const name = targetMode === 'existing' ? ($entities.find((e) => e.id === entityId)?.name ?? 'entity') : entityName;
-      showToast(`Imported ${result.transactionsImported} transactions into "${name}"`);
+      notifySuccess(`Imported ${result.transactionsImported} transactions into "${name}"`);
       goto(`/entities/${entityId}?view=trial-balance`);
     } catch (e) {
-      log.ui.error('[Import] Execute failed:', e);
       await discardNewEntity(isNew, entityId);
-      error = `Import failed: ${e instanceof Error ? e.message : 'Unknown error'}`;
+      notifyError(e, 'Import failed');
       step = 'preview';
     }
   }
@@ -196,15 +200,6 @@
       await ds.deleteEntity(entityId);
       await initializeEntities();
     } catch (e) { log.ui.warn('[Import] Could not discard entity after failure:', e); }
-  }
-
-  function showToast(message: string) {
-    const toast = document.createElement('div');
-    toast.className = 'toast-notification';
-    toast.textContent = message;
-    document.body.appendChild(toast);
-    setTimeout(() => toast.classList.add('show'), 10);
-    setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 300); }, 3000);
   }
 </script>
 
@@ -348,8 +343,6 @@
               {/if}
             </div>
           {/if}
-
-          {#if error}<div class="error-message">{error}</div>{/if}
         </div>
         <div class="dialog-footer">
           <button class="btn-secondary" onclick={goBack}>{$t('common.back') || 'Back'}</button>
@@ -468,6 +461,4 @@
   .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-secondary { background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); }
 
-  :global(.toast-notification) { position: fixed; top: 2rem; right: 2rem; padding: 1rem 1.5rem; background: var(--success, #16a34a); color: #fff; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); opacity: 0; transform: translateY(-1rem); transition: all 0.3s ease; z-index: 10000; }
-  :global(.toast-notification.show) { opacity: 1; transform: translateY(0); }
 </style>

@@ -6,15 +6,14 @@
   import { t } from '$lib/i18n';
   import { log } from '$lib/logger';
   import { exportToCSV, exportToExcel } from '$lib/utils/export';
+  import { notifyError } from '$lib/stores/notifications';
   
   let entries = $state<LedgerEntry[]>([]);
   let loading = $state(false);
-  let error = $state<string | null>(null);
   let showExportMenu = $state(false);
   
   async function loadAllTransactions() {
     loading = true;
-    error = null;
     log.ui.info('Loading all transactions');
     
     try {
@@ -22,8 +21,7 @@
       entries = await dataService.getAllTransactions();
       log.ui.info(`Loaded ${entries.length} transactions`);
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to load transactions';
-      log.ui.error(`Error loading transactions: ${error}`);
+      notifyError(err, 'Search — could not load transactions');
     } finally {
       loading = false;
     }
@@ -109,13 +107,7 @@
     </div>
   </header>
   
-  {#if error}
-    <div class="error-message">
-      <p>⚠ {error}</p>
-    </div>
-  {/if}
-  
-  <TransactionResultsTable 
+  <TransactionResultsTable
     {entries}
     showEntity={true}
     showTotals={true}

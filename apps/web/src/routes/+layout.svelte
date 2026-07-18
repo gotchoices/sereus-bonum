@@ -7,6 +7,8 @@
   import { t } from '$lib/i18n';
   import { log } from '$lib/logger';
   import AIAssistant from '$lib/components/AIAssistant.svelte';
+  import Notifications from '$lib/components/Notifications.svelte';
+  import { notifyError } from '$lib/stores/notifications';
   import '../app.css';
   
   console.log('[Layout] Script executing, browser:', browser);
@@ -33,6 +35,20 @@
     }
   }
   
+  // Safety net: surface otherwise-unhandled errors/rejections as notifications instead of failing
+  // silently in the console.
+  $effect(() => {
+    if (!browser) return;
+    const onRejection = (e: PromiseRejectionEvent) => notifyError(e.reason, 'Unexpected error');
+    const onError = (e: ErrorEvent) => notifyError(e.error ?? e.message, 'Unexpected error');
+    window.addEventListener('unhandledrejection', onRejection);
+    window.addEventListener('error', onError);
+    return () => {
+      window.removeEventListener('unhandledrejection', onRejection);
+      window.removeEventListener('error', onError);
+    };
+  });
+
   // Use $effect for Svelte 5 - runs after mount on client
   $effect(() => {
     if (browser && !initStarted) {
@@ -57,6 +73,8 @@
     }
   });
 </script>
+
+<Notifications />
 
 {#if initError}
   <div class="init-error">
