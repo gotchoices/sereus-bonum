@@ -234,9 +234,33 @@ incomplete** and writes only new ones. Milestones:
     **44,488 ms for 2 k entries** (per-row async nested loop). Rewriting `getBalanceSheet` to two
     single-table indexed reads joined **in JS** dropped that to ~310 ms (**~140× faster**), and batching
     `bulkImport` into multi-row `VALUES` cut writes ~6×.
-- ⬜ **M3 — rebuild import screen:** new-or-existing target, conditional mapping, Transaction Preview &
-  Merge Review (grouped dispositions, hide already-imported by default + toggle, complete-incomplete inline).
-- ⬜ **M4 — test with real data** (`tmp/Kyle.gnucash`) on quereus-local; refresh the import consolidation.
+- ✅ **M3 — rebuilt import screen (plan-driven).** Replaced the disconnected mapping table with a
+  preview built from `buildMergePlan` (no writes) that **drives** `executeMerge`. New-or-existing
+  target; hierarchy-aware account resolution (general levels → shared groups, specific → nested
+  accounts via `parentId`); transaction **dispositions** (new / incomplete / already-imported) grouped
+  with counts; **already-imported hidden by default + toggle**; expandable entries; exclude / force-
+  include. Import gated until no unresolved Incomplete remains. Regenerated
+  `design/generated/web/screens/import.md`. Verified: `scripts/test-hierarchy.mjs` (9 assertions) +
+  real `Kyle.gnucash` (161 accts / 17,756 txns) on quereus-local.
+  - **Deferred (tracked in the consolidation):** editable account mapping (autocomplete/tree/settle/
+    rescan), inline completion of Incomplete txns (must exclude for now), Import-Transactions mode
+    (CSV/QIF/OFX).
+- ✅ **M4 — real data verified** (`Kyle.gnucash`, quereus-local) as part of M3.
+- ✅ **Stale schema (source_id) + GnuCash mapping bugs fixed** — see "GnuCash import fixes" below.
+
+## GnuCash import fixes — ✅ Done
+
+- **`source_id` error on import** was a **stale persisted DB** (pre-`source_id` schema). Replaced the
+  earlier in-place ALTER idea with a **schema-version stamp + rebuild-on-mismatch** (mock `PRAGMA
+  user_version`, quereus `schema_meta`): a persisted DB whose version ≠ current is discarded and rebuilt
+  from the authoritative DDL. No in-place migration; backends are **not** kept in sync (switching wipes,
+  by design). `SCHEMA_VERSION = 2`.
+- **Flattened target groups** — the importer now maps general source levels to shared catalog groups and
+  nests specific levels as accounts via `parentId` (see M3 / domain/import.md Hierarchy Mapping).
+- **Entity page stuck "Loading…" after import** — the entities store wasn't refreshed post-import
+  (GnuCash *and* native paths); both now call `initializeEntities()` before navigating.
+- **Mock can't persist ~17k txns** (`QuotaExceededError`, localStorage ~5-10 MB). Use `quereus-local`
+  (IndexedDB) for real data; mock stays the small demo backend.
 
 ## Native Books (dump / restore) + Perf Pass — ✅ Done
 

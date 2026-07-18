@@ -8,9 +8,9 @@ await page.goto(`${base}/import`, { waitUntil: 'networkidle', timeout: 30000 });
 await page.fill('#entity-name', 'Synth');
 await page.setInputFiles('input[type=file]', '../../tmp/synth.gnucash');
 await page.waitForTimeout(300);
-await page.click('button.btn-primary');
-await page.waitForSelector('.mapping-row', { timeout: 30000 });
-await page.locator('.dialog-footer button.btn-primary').click();
+await page.click('.dialog-footer button.btn-primary'); // Next → plan
+await page.waitForSelector('.summary-stats', { timeout: 30000 });
+await page.locator('.dialog-footer button.btn-primary').click(); // Import
 await page.waitForURL('**/entities/**', { timeout: 30000 });
 await page.waitForFunction(() => !/Loading\.\.\./.test(document.body.innerText), { timeout: 30000, polling: 300 }).catch(()=>{});
 // Export native JSON

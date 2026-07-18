@@ -76,11 +76,16 @@ export class ImportService {
   // Merge plan: resolve accounts + classify transactions
   // ---------------------------------------------------------------------------
 
-  async buildMergePlan(parsed: ParsedBooks, targetEntityId: string): Promise<MergePlan> {
+  /**
+   * Build the merge plan (accounts + transaction dispositions) WITHOUT writing anything.
+   * `targetEntityId` null → planning a brand-new entity (nothing exists yet, so everything is new);
+   * the entity is created only at executeMerge time so a cancelled preview leaves no empty entity.
+   */
+  async buildMergePlan(parsed: ParsedBooks, targetEntityId: string | null): Promise<MergePlan> {
     const ds = await getDataService();
     const groups = await ds.getAccountGroups();
-    const existingAccounts = await ds.getAccounts(targetEntityId);
-    const existingTxns = await ds.getTransactions(targetEntityId);
+    const existingAccounts = targetEntityId ? await ds.getAccounts(targetEntityId) : [];
+    const existingTxns = targetEntityId ? await ds.getTransactions(targetEntityId) : [];
 
     // Existing identity indexes for merge/dedup.
     const acctBySourceId = new Map<string, string>();
@@ -99,7 +104,7 @@ export class ImportService {
     const counts = { exists: 0, new: 0, incomplete: 0 };
     for (const t of transactions) counts[t.disposition]++;
 
-    return { entityId: targetEntityId, resolved, transactions, counts };
+    return { entityId: targetEntityId ?? '', resolved, transactions, counts };
   }
 
   /**
