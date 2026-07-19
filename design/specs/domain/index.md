@@ -15,7 +15,7 @@ topic appears in both, docs stays narrative and links here for the specifics.
 | Schema (human) | [schema.md](./schema.md) | Entities, fields, relationships, invariants — the readable data model |
 | Schema (executable) | [schema.qsql](./schema.qsql) | Canonical Quereus DDL the production backend runs; mirrors schema.md |
 | Account groups | [account-groups.md](./account-groups.md) | Shared account taxonomy: 5 types, seed hierarchy, rules |
-| Rules | [rules.md](./rules.md) | Double-entry integrity, imbalance account, closed periods, reconciliation, audit trail |
+| Rules | [rules.md](./rules.md) | Double-entry integrity, imbalance account, closing (period & account), reconciliation, audit trail |
 | Units & exchange | [units.md](./units.md) | Multi-unit balancing, rendering in a chosen unit, costing policy |
 | Interfaces | [interfaces.md](./interfaces.md) | Storage & sync model (mock ↔ Sereus/Quereus), selective sharing |
 | Import | [import.md](./import.md) | Formats accepted, source→Bonum type mapping, duplicate handling |

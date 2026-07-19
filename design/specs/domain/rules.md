@@ -27,12 +27,26 @@ there rather than repeating it.
 
 - Each Entity has a system **Imbalance** account that absorbs unclassified or partial amounts so no
   value is ever silently lost.
-- **A period cannot be closed while the Imbalance account carries a balance.**
 
-## Closed Periods
+## Closing
 
-- An account's `closedDate` locks it: **no new or modified entries dated on or before that date.**
-- Locked entries are presented as read-only.
+Two distinct operations share the word "close":
+
+- **Close out a period** (per account): an account is marked **closed through** a date
+  (`closedThrough`) — entries dated on or before it are final and read-only. This is routine period
+  finalization; **non-zero balances are normal.** Reopening (moving `closedThrough` earlier) makes
+  those entries editable again.
+  - The **Imbalance account closes out like any other account**, but may only be closed through a date
+    once its balance there is zero (all value allocated).
+  - A **period is closed for the entity** exactly when **every** account — Imbalance included — is
+    closed through a date ≥ the period's last day. (Hence a period can't fully close while Imbalance
+    carries a balance.)
+- **Close an account** (retire it): `isActive = false` disables the account for further activity and
+  hides it from active views. **Allowed only when the account's balance is zero.**
+
+Bonum posts **no closing entries**: income and expense accounts accumulate perpetually (income
+statements are period-scoped at query time), and retained earnings is **derived** as accumulated net
+income, never posted.
 
 ## Reconciliation
 

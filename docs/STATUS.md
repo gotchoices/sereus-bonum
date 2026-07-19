@@ -6,42 +6,82 @@
 
 ## Dev Configuration
 
-**Backend mode** — set `VITE_BACKEND` in `apps/web/.env.local` (default `mock`):
-- `mock` — in-browser SQLite (sql.js), persisted to localStorage. Default; the only implemented mode.
-- `quereus-local` — Quereus + browser IndexedDB (real SQL, single device). Service stubbed.
-- `quereus-p2p` — Quereus + Optimystic over the Sereus cadre (distributed). Service stubbed.
+**Backend** — `VITE_BACKEND` (default now **`quereus-local`**). npm scripts:
+- `npm run dev` → **quereus-local** (Quereus + browser IndexedDB, real SQL). Default & recommended; fully implemented.
+- `npm run dev:p2p` → quereus-p2p (Quereus + Optimystic, single-node cadre — runs on latest Sereus).
+- `npm run dev:mock` → mock (sql.js + localStorage). Demo/dev only; **can't hold large datasets** (localStorage quota → a big import silently isn't persisted, now surfaced as an error).
 
 See `design/specs/web/global/data-backend.md`.
 
-To enable the test data generator:
-1. Create `apps/web/.env.local` (not tracked by git)
-2. Add: `VITE_ENABLE_TEST_DATA=true`
-3. Restart dev server: `npm run dev`
-4. Generator appears in ledger header (top-right, above balance)
-
-**Note:** When test data mode is enabled, localStorage persistence is **disabled** for:
-- ✅ **Much faster** test data generation (no serialization overhead)
-- ✅ **No storage quota errors** (localStorage has 5-10MB limit)
-- ⚠️ **Data is ephemeral** - refreshing the page creates a fresh database
+**Schema versioning:** a schema change bumps `SCHEMA_VERSION` (`production/db.ts`); a persisted quereus DB
+stamped with an older version is **rebuilt from the authoritative DDL** (data discarded — export via the
+native `.json` dump to keep it). To reset from scratch: clear the `bonum` IndexedDB in DevTools →
+Application. Backends are **not** kept in sync; switching wipes.
 
 ---
 
-## Immediate Next Steps
+## Roadmap — resume here
 
-The earlier blocker — too many overlapping global specs clouding AI context — has been addressed by
-the July 2026 reorganization (see "Spec Reorganization" below): cross-target concerns are now a lean,
-human-readable **domain contract** (`design/specs/domain/`), `web/global/` holds only view-specific
-specs, and stories are current (01–03 completed, 08–09 added).
+Pick-up list for returning after a pause (e.g. while cadre management matures). Grouped by theme,
+roughly prioritized. The app currently runs on **quereus-local** with real GnuCash data (Kyle.gnucash:
+143 accounts / 17,756 txns) importing and browsing; the biggest felt issue is read performance at scale.
 
-**Ready to regenerate.** Recommended order:
-1. Refresh consolidations under `design/generated/` against the moved/renamed specs (they still
-   reference old `web/global/…` paths — staleness is expected and regen resolves it).
-2. Generate/update app slices from the refreshed consolidations.
+### A. Closing & reconciliation (new domain area — terminology settled in `domain/rules.md` § Closing)
+None of the four are implemented yet; story/spec status noted per item.
+- ⬜ **Close out a period for an account** — set `closedThrough`; entries dated ≤ it become read-only;
+  reopen support. **No story yet.** Needs: a story; app schema rename `closed_date`→`closed_through`
+  (+ `SCHEMA_VERSION` bump); ledger lock UI; the close action. This is the trigger for the balance cache
+  (see `docs/quereus-perf.md`). **Test:** locking, reopen, edit-blocked-on-closed.
+- ⬜ **Period close progress** — a view of which accounts are / aren't closed through a period end
+  ("how closed-out is the period / are the books closed?"). Entity period-close = every account
+  (incl. Imbalance) `closedThrough` ≥ period end. **No story.** **Test:** partial vs full close, Imbalance blocks.
+- ⬜ **Reconcile an account** (optional, per-account) — **fully storied** (`05-reconciliation.md`); schema
+  present (`reconciliation` table, `entry.reconciliationId`); **UI/flow NOT built.** Implement the
+  reconcile view, finalize/unreconcile, statement history. **Test:** finalize requires checked==statement
+  balance; unreconcile entry/statement; async new-entry appears.
+- ⬜ **Zero & close an account** — retire via `isActive=false` (requires **zero balance**, hidden from
+  active views). **No story.** Needs a story + close-account action + zero-balance guard. **Test:**
+  refuse on non-zero balance; hidden after close; no new entries.
 
-Still open (feature ideas / not blockers):
-- Quereus backend readiness (at least a local cadre) before wiring the production data layer.
-- A persistent place to remember account-mapping choices from past imports (see story 09).
-- Remaining stories: multi-user/Sereus **sharing** (+ sync-conflict variant) and **tags**.
+### B. Performance (real-data scale — Home ~10 s, balance sheet ~18 s today; both are `getBalanceSheet`)
+See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
+- ⬜ **Adopt MV-based balance caching** — `account_balance` + bucketed `entry_by_period` materialized
+  views (schema change + version bump); read paths (balance sheet / income statement / account balance)
+  read the MVs; bulk import uses drop→load→rebuild; period-close writes the immutable `closing_balance`.
+- ⬜ **Quick wins (low-risk):** JS-join `getBalanceSheet`'s `account⋈account_group`; add composite index
+  `txn(entity_id, date)`.
+- 🔮 **Upstream (filed, pending maintainer):** `tmp/quereus-join-index-perf.md` (store JOINs don't push
+  join keys), `tmp/quereus-mv-maintenance-perf.md` (per-row MV maintenance ~50–120× a one-shot rebuild).
+
+### C. Import
+- ⬜ **Stock / multi-unit base-unit fix** — `pickBaseUnit` grabs the first 3-letter commodity (a stock,
+  e.g. AEF) instead of the CURRENCY (USD), and missing units aren't created → `Loan_Investments.gnucash`
+  fails on `fk_entity_unit` (error now visible via notifications). Prefer CURRENCY + create missing units.
+- ⬜ **Editable account mapping** in the preview (autocomplete / tree / settle / rescan) — M3 deferred.
+- ⬜ **Inline completion of Incomplete transactions** (today they must be excluded).
+- 🔮 **Import Transactions mode** (CSV / QIF / OFX bank downloads).
+
+### D. Screen gaps (from the generated-consolidation audit)
+- ⬜ Ledger: keyboard shortcuts (Esc/Enter/Ctrl+Enter); real-time running balance (recomputes on reload); no closed-date control.
+- ⬜ Entity view: Cash Flow / Custom modes are selectable but unimplemented; no load-error + Retry UI; no account-name hover tooltip.
+- ⬜ Search: query builder / saved searches (Phase 2); pagination for "show all" (loads everything).
+- ⬜ Catalog: reorder child groups; delete has no usage gate.
+- ⬜ Settings: API key not actually validated on blur; Sereus Nodes UI is a stub.
+- ⬜ Adopt unified notifications (`stores/notifications`) in remaining screens (entity, ledger, catalog).
+
+### E. Storied but unimplemented features
+- ⬜ Multi-unit (08), Tags (11), Sharing / multi-user (10), AI assistant + capture (07 / 09).
+
+### F. Cadre / p2p (the gating item being waited on)
+- 🔄 quereus-p2p runs **single-node** on latest Sereus (see Track C below). **Multi-node cadre
+  management** is the blocker for sharing/distributed and is what work may pause on. Browser bring-up
+  feedback filed in `tmp/optimystic-web-browser-incompat.md`.
+
+### G. Housekeeping
+- ⬜ On building period-close, sync app code to the domain contract: `closed_date`→`closed_through` in
+  `types.ts` + both schemas + service mappers (+ `SCHEMA_VERSION` bump). Contract is updated; code lags
+  intentionally to avoid a data-wipe rebuild for a rename alone.
+- ⬜ Regenerate `design/generated/` consolidations after the M3 import rebuild + perf/close changes land.
 
 ---
 

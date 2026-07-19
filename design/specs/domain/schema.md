@@ -63,8 +63,9 @@ The five fundamental account classifications from double-entry bookkeeping:
 | `EXPENSE` | Debit | Costs incurred |
 
 *Note: An `IMBALANCE` pseudo-type (or null) is used for a system account that holds
-unclassified/partial entries. Each Entity should have an Imbalance account. Periods cannot be closed
-while this account has a balance.*
+unclassified/partial entries. Each Entity should have an Imbalance account. It closes out like any
+account, so a period is fully closed only once Imbalance (and every account) is closed through the
+period end — i.e. it can't close while Imbalance carries a balance. See [rules.md](./rules.md#closing).*
 
 ---
 
@@ -119,10 +120,10 @@ A specific ledger account within an entity.
 | `description` | String | No | Extended description |
 | `unit` | Unit | Yes | Unit of measure for this account (e.g., "USD", "widget") |
 | `costingMethod` | Enum | No | Override: FIFO, LIFO, AVERAGE |
-| `closedDate` | Date | No | No new/modified entries on or before this date |
+| `closedThrough` | Date | No | Period close-out: books final through this date; entries on/before are read-only. Recurring; non-zero balances normal. See [rules.md](./rules.md#closing) |
 | `partnerId` | UUID | No | FK → Partner (for AR/AP accounts) |
 | `linkedAccountId` | UUID | No | FK → Account in another Entity (for inter-entity tracking) |
-| `isActive` | Boolean | Yes | Whether account accepts new entries |
+| `isActive` | Boolean | Yes | Account is active; `false` = closed/retired (no further activity, hidden from active views; requires zero balance to close) |
 | `sourceId` | String | No | Source-system identity (GnuCash account GUID) — lets a repeat import resolve source accounts automatically and skip the mapping step |
 | `createdAt` | Timestamp | Yes | Creation timestamp |
 | `updatedAt` | Timestamp | Yes | Last modification |

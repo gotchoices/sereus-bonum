@@ -70,7 +70,7 @@ create table account (
   description text null,
   unit text,
   costing_method text null,
-  closed_date text null,
+  closed_through text null,
   partner_id text null,
   linked_account_id text null,
   is_active integer default 1,
