@@ -180,10 +180,12 @@ class QuereusDataService implements DataService {
     // Manual cascade (Quereus has no ON DELETE CASCADE): entries → txns → accounts → entity.
     //
     // Two Quereus/store perf gaps shape this (both filed under tmp/):
-    //  1. FK enforcement on DELETE re-scans the child table per deleted parent row (O(parent×child))
-    //     instead of probing the child's FK index — deleting 1k txns took ~49s. Since we cascade
-    //     manually in child→parent order, FK checks are redundant here: disable them for the batch
-    //     (standard SQL idiom for bulk cascade). This alone is the ~30x win. See tmp/quereus-fk-delete-perf.md.
+    //  1. FK RESTRICT enforcement on DELETE costs ~35ms per deleted parent row on the IndexedDB store —
+    //     even with the child FK column indexed (idx_entry_txn etc.) and the check matching nothing.
+    //     (The same schema in-memory is ~0.5ms/row: the index IS used; the store's per-row referential
+    //     probe just isn't batched.) Deleting a 1k-txn entity took ~49s. Since we cascade manually in
+    //     child→parent order, FK checks are redundant here — disable them for the batch (standard SQL
+    //     idiom for bulk cascade). This is the ~30x win. See tmp/quereus-fk-delete-perf.md.
     //  2. `DELETE … WHERE txn_id IN (SELECT …)` re-executes the subquery per row. We delete entries via a
     //     materialized account_id IN list instead. See tmp/quereus-delete-subquery-perf.md.
     const db = this.getDb();

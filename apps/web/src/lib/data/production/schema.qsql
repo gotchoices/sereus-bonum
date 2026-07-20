@@ -143,3 +143,16 @@ create index idx_txn_entity on txn(entity_id);
 create index idx_txn_date on txn(date);
 create index idx_entry_txn on entry(txn_id);
 create index idx_entry_account on entry(account_id);
+
+-- Index EVERY FK child column. Standard SQL hygiene: without a child-side index, a DELETE/UPDATE on the
+-- parent must scan the child table once per affected parent row to enforce the FK (O(parent×child) — a
+-- 1000-row entity delete took ~49s). With these, the referential check is an index seek (~0.5ms/row).
+create index idx_ag_parent on account_group(parent_id);
+create index idx_account_parent on account(parent_id);
+create index idx_account_partner on account(partner_id);
+create index idx_account_linked on account(linked_account_id);
+create index idx_tag_parent on tag(parent_id);
+create index idx_recon_account on reconciliation(account_id);
+create index idx_entry_tag on entry(tag_id);
+create index idx_entry_recon on entry(reconciliation_id);
+create index idx_exchange_txn on exchange(txn_id);
