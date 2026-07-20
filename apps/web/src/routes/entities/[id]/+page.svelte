@@ -36,6 +36,14 @@
   let endDate = $state(new Date().toISOString().split('T')[0]);
   let startDate = $state<string | undefined>(undefined);
   let retainedEarningsExpanded = $state(false);
+
+  // Display filters (persisted per entity) — surfaced via the ⚙ View menu.
+  let hideZeroBalance = $state(false);   // suppress accounts/groups whose total is $0
+  let showClosedAccounts = $state(false); // reveal retired (isActive=false) accounts, hidden by default
+
+  // Transient menu open/close (not persisted)
+  let showOptionsMenu = $state(false);
+  let showExportMenu = $state(false);
   
   // Track if we need to reload data (used for onblur optimization)
   let needsReload = $state(false);
@@ -46,7 +54,9 @@
       expandedGroups = loadViewState(`accounts-expand-${entityId}`, {});
       reportMode = loadViewState(`accounts-mode-${entityId}`, 'balance_sheet');
       retainedEarningsExpanded = loadViewState(`accounts-re-expanded-${entityId}`, false);
-      
+      hideZeroBalance = loadViewState(`accounts-hidezero-${entityId}`, false);
+      showClosedAccounts = loadViewState(`accounts-showclosed-${entityId}`, false);
+
       // Load persisted dates (or use defaults)
       const savedDates = loadViewState(`accounts-dates-${entityId}`, {
         endDate: new Date().toISOString().split('T')[0],
@@ -92,22 +102,58 @@
   async function handleDateBlur() {
     if (browser && entityId && needsReload) {
       needsReload = false;
-      balanceLoading = true;
-      try {
-        const ds = await getDataService();
-        balanceData = await ds.getBalanceSheet(entityId, endDate, startDate);
-        
-        // Persist dates to viewState
-        persistViewState();
-        log.ui.debug('[Accounts] Dates updated and persisted:', { endDate, startDate });
-      } catch (e) {
-        log.ui.error('[Accounts] Failed to reload:', e);
-      } finally {
-        balanceLoading = false;
-      }
+      await reloadBalance();
     }
   }
   
+  async function reloadBalance() {
+    if (!browser || !entityId) return;
+    balanceLoading = true;
+    try {
+      const ds = await getDataService();
+      balanceData = await ds.getBalanceSheet(entityId, endDate, startDate);
+      persistViewState();
+    } catch (e) {
+      log.ui.error('[Accounts] Failed to reload:', e);
+    } finally {
+      balanceLoading = false;
+    }
+  }
+
+  // Relative date presets. For "as of" modes only the end date matters; range modes get both bounds.
+  const iso = (d: Date) => d.toISOString().split('T')[0];
+  function presetRange(preset: string): { start?: string; end: string } {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    const q = Math.floor(m / 3) * 3;
+    switch (preset) {
+      case 'today': return { start: iso(now), end: iso(now) };
+      case 'this_month': return { start: iso(new Date(y, m, 1)), end: iso(new Date(y, m + 1, 0)) };
+      case 'last_month': return { start: iso(new Date(y, m - 1, 1)), end: iso(new Date(y, m, 0)) };
+      case 'this_quarter': return { start: iso(new Date(y, q, 1)), end: iso(new Date(y, q + 3, 0)) };
+      case 'this_year': return { start: iso(new Date(y, 0, 1)), end: iso(new Date(y, 11, 31)) };
+      case 'last_year': return { start: iso(new Date(y - 1, 0, 1)), end: iso(new Date(y - 1, 11, 31)) };
+      case 'all_time': return { start: '1900-01-01', end: iso(now) };
+      default: return { end: iso(now) };
+    }
+  }
+  const datePresets = ['today', 'this_month', 'last_month', 'this_quarter', 'this_year', 'last_year', 'all_time'];
+  function applyDatePreset(preset: string) {
+    const { start, end } = presetRange(preset);
+    endDate = end;
+    if (requiresDateRange) startDate = start;
+    showOptionsMenu = false;
+    reloadBalance();
+  }
+
+  // Print/PDF: the browser print dialog renders the report (print CSS hides app chrome).
+  // "Save as PDF" in that dialog produces the PDF — no separate PDF pipeline yet.
+  function printReport() {
+    showExportMenu = false;
+    if (browser) window.print();
+  }
+
   // Check if current mode requires date range
   let requiresDateRange = $derived(
     reportMode === 'income_statement' || reportMode === 'cash_flow'
@@ -165,6 +211,17 @@
     saveViewState(`accounts-mode-${entityId}`, reportMode);
     saveViewState(`accounts-re-expanded-${entityId}`, retainedEarningsExpanded);
     saveViewState(`accounts-dates-${entityId}`, { endDate, startDate });
+    saveViewState(`accounts-hidezero-${entityId}`, hideZeroBalance);
+    saveViewState(`accounts-showclosed-${entityId}`, showClosedAccounts);
+  }
+
+  function toggleHideZeroBalance() {
+    hideZeroBalance = !hideZeroBalance;
+    saveViewState(`accounts-hidezero-${entityId}`, hideZeroBalance);
+  }
+  function toggleShowClosedAccounts() {
+    showClosedAccounts = !showClosedAccounts;
+    saveViewState(`accounts-showclosed-${entityId}`, showClosedAccounts);
   }
   
   function toggleGroup(groupId: string) {
@@ -256,6 +313,7 @@
     code?: string;
     toggleId?: string;      // set → row is expand/collapse-able (group id, or 're')
     expanded?: boolean;
+    direct?: boolean;       // synthetic "(direct)" row: a parent account's own postings
   }
 
   const byDisplay = (a: { displayOrder?: number; name: string }, b: { displayOrder?: number; name: string }) =>
@@ -283,30 +341,49 @@
       return s;
     };
 
+    const acctVisible = (a: (typeof $accounts)[number]): boolean => showClosedAccounts || a.isActive;
+
     const build = (type: AccountType): ReportRow[] => {
       const rows: ReportRow[] = [];
-      const addAccount = (acct: (typeof $accounts)[number], depth: number, kids: Map<string, typeof $accounts>) => {
+      // Returns the rows for an account subtree, or [] when the zero-balance filter suppresses it.
+      const buildAccount = (acct: (typeof $accounts)[number], depth: number, kids: Map<string, typeof $accounts>): ReportRow[] => {
         const rawSub = (a: (typeof $accounts)[number]): number =>
           (rawById.get(a.id) ?? 0) + (kids.get(a.id) ?? []).reduce((s, k) => s + rawSub(k), 0);
-        rows.push({ key: `a-${acct.id}`, depth, label: acct.name, code: acct.code || undefined, kind: 'account', accountId: acct.id, amount: presentBalance(rawSub(acct), type) });
-        for (const k of (kids.get(acct.id) ?? []).slice().sort(byCodeName)) addAccount(k, depth + 1, kids);
-      };
-      const addGroup = (group: (typeof $accountGroups)[number], depth: number) => {
-        if (!groupHasAccounts(group.id)) return;
-        rows.push({ key: `g-${group.id}`, depth, label: group.name, kind: 'group', toggleId: group.id, expanded: expandedGroups[group.id] ?? false, amount: presentBalance(groupRawTotal(group.id), type) });
-        if (!(expandedGroups[group.id] ?? false)) return;
-        const accts = acctsByGroup.get(group.id) ?? [];
-        const inGroup = new Set(accts.map((a) => a.id));
-        const kids = new Map<string, typeof $accounts>();
-        const roots: typeof $accounts = [];
-        for (const a of accts) {
-          if (a.parentId && inGroup.has(a.parentId)) (kids.get(a.parentId) ?? kids.set(a.parentId, []).get(a.parentId)!).push(a);
-          else roots.push(a);
+        const kidAccts = (kids.get(acct.id) ?? []).filter(acctVisible).slice().sort(byCodeName);
+        const childRows = kidAccts.flatMap((k) => buildAccount(k, depth + 1, kids));
+        const rolled = presentBalance(rawSub(acct), type);
+        if (hideZeroBalance && rolled === 0 && childRows.length === 0) return [];
+        const out: ReportRow[] = [{ key: `a-${acct.id}`, depth, label: acct.name, code: acct.code || undefined, kind: 'account', accountId: acct.id, amount: rolled }];
+        // A parent account with both its own postings and children shows the rolled-up total on its
+        // own row and its direct postings on a synthetic "(direct)" child row.
+        const ownRaw = rawById.get(acct.id) ?? 0;
+        if (kidAccts.length > 0 && ownRaw !== 0) {
+          out.push({ key: `a-${acct.id}-direct`, depth: depth + 1, label: `(${$t('accounts.direct')})`, kind: 'account', amount: presentBalance(ownRaw, type), direct: true });
         }
-        for (const r of roots.slice().sort(byCodeName)) addAccount(r, depth + 1, kids);
-        for (const c of (childGroups.get(group.id) ?? []).slice().sort(byDisplay)) addGroup(c, depth + 1);
+        out.push(...childRows);
+        return out;
       };
-      for (const g of ($topLevelGroupsByType.get(type) ?? []).slice().sort(byDisplay)) addGroup(g, 1);
+      const buildGroup = (group: (typeof $accountGroups)[number], depth: number): ReportRow[] => {
+        if (!groupHasAccounts(group.id)) return [];
+        const expanded = expandedGroups[group.id] ?? false;
+        const childRows: ReportRow[] = [];
+        if (expanded) {
+          const accts = (acctsByGroup.get(group.id) ?? []).filter(acctVisible);
+          const inGroup = new Set(accts.map((a) => a.id));
+          const kids = new Map<string, typeof $accounts>();
+          const roots: typeof $accounts = [];
+          for (const a of accts) {
+            if (a.parentId && inGroup.has(a.parentId)) (kids.get(a.parentId) ?? kids.set(a.parentId, []).get(a.parentId)!).push(a);
+            else roots.push(a);
+          }
+          for (const r of roots.slice().sort(byCodeName)) childRows.push(...buildAccount(r, depth + 1, kids));
+          for (const c of (childGroups.get(group.id) ?? []).slice().sort(byDisplay)) childRows.push(...buildGroup(c, depth + 1));
+        }
+        const total = presentBalance(groupRawTotal(group.id), type);
+        if (hideZeroBalance && total === 0 && childRows.length === 0) return [];
+        return [{ key: `g-${group.id}`, depth, label: group.name, kind: 'group', toggleId: group.id, expanded, amount: total }, ...childRows];
+      };
+      for (const g of ($topLevelGroupsByType.get(type) ?? []).slice().sort(byDisplay)) rows.push(...buildGroup(g, 1));
       // Retained Earnings pseudo-node under Equity.
       if (type === 'EQUITY' && showRetainedEarningsInEquity) {
         rows.push({ key: 're', depth: 1, label: $t('accounts.retained_earnings'), kind: 'group', amount: netIncome(), toggleId: retainedEarningsExpandable ? 're' : undefined, expanded: retainedEarningsExpanded });
@@ -358,7 +435,7 @@
   }
 
   function formatCurrency(amount: number, unit: string = 'USD'): string {
-    const value = amount / 100;
+    const value = amount / 100 || 0; // normalize -0 → 0 (avoids "-$0.00")
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: unit,
@@ -368,6 +445,9 @@
 </script>
 
 <div class="accounts-page">
+  {#if showOptionsMenu || showExportMenu}
+    <div class="menu-backdrop" onclick={() => { showOptionsMenu = false; showExportMenu = false; }} role="presentation"></div>
+  {/if}
   <header class="page-header">
     <div class="header-left">
       <a href="/" class="back-link">← {$t('nav.home')}</a>
@@ -387,7 +467,7 @@
         </select>
       </div>
       
-      <!-- Saved Reports dropdown (placeholder) -->
+      <!-- Saved Reports dropdown (placeholder — see saved-reports-ux.md) -->
       <button
         class="saved-reports-btn"
         disabled
@@ -396,16 +476,41 @@
         ⭐ {$t('accounts.saved_reports')}
       </button>
 
-      <!-- Native books export (round-trips via Import Books → .json) -->
+      <!-- Export menu: native JSON works; CSV/XLSX are stubbed (see domain/export.md) -->
+      <div class="menu-wrap">
+        <button
+          class="saved-reports-btn"
+          onclick={() => (showExportMenu = !showExportMenu)}
+          disabled={!entity}
+          title="Export the current books / view"
+        >
+          ⬇ {exporting ? $t('common.loading') : $t('accounts.export')} ▾
+        </button>
+        {#if showExportMenu}
+          <div class="dropdown-menu" role="menu">
+            <button class="menu-item" role="menuitem" onclick={() => { showExportMenu = false; exportNative(); }}>
+              🗄 {$t('accounts.export_native')}
+            </button>
+            <button class="menu-item" role="menuitem" disabled title="Coming soon">
+              📄 {$t('accounts.export_csv')}
+            </button>
+            <button class="menu-item" role="menuitem" disabled title="Coming soon">
+              📊 {$t('accounts.export_xlsx')}
+            </button>
+          </div>
+        {/if}
+      </div>
+
+      <!-- Print / Save-as-PDF via the browser print dialog -->
       <button
         class="saved-reports-btn"
-        onclick={exportNative}
-        disabled={exporting || !entity}
-        title="Download a native Bonum books file (re-importable)"
+        onclick={printReport}
+        disabled={!entity}
+        title="Print or save the current view as PDF"
       >
-        ⬇ {exporting ? $t('common.loading') : 'Export'}
+        🖨 {$t('accounts.print')}
       </button>
-      
+
       <!-- Spacer to push date picker right -->
       <div class="spacer"></div>
       
@@ -472,6 +577,30 @@
     <button class="btn-tool" onclick={collapseAll}>
       {$t('common.collapse_all')}
     </button>
+
+    <!-- View menu: display filters + relative date presets -->
+    <div class="menu-wrap">
+      <button class="btn-tool" onclick={() => (showOptionsMenu = !showOptionsMenu)}>
+        ⚙ {$t('accounts.view_options')} ▾
+      </button>
+      {#if showOptionsMenu}
+        <div class="dropdown-menu wide" role="menu">
+          <button class="menu-item check" role="menuitemcheckbox" aria-checked={hideZeroBalance} onclick={toggleHideZeroBalance}>
+            <span class="check-box">{hideZeroBalance ? '☑' : '☐'}</span> {$t('accounts.hide_zero')}
+          </button>
+          <button class="menu-item check" role="menuitemcheckbox" aria-checked={showClosedAccounts} onclick={toggleShowClosedAccounts}>
+            <span class="check-box">{showClosedAccounts ? '☑' : '☐'}</span> {$t('accounts.show_closed')}
+          </button>
+          <div class="menu-divider"></div>
+          <div class="menu-label">{$t('accounts.date_preset')}</div>
+          {#each datePresets as p}
+            <button class="menu-item" role="menuitem" onclick={() => applyDatePreset(p)}>
+              {$t(`accounts.preset_${p}`)}
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
   </div>
   
   {#if !entity}
@@ -498,7 +627,7 @@
           <!-- Groups + accounts, flattened with depth: name indents forward, amount reverse-indents -->
           <div class="report-rows">
             {#each reportRowsByType.get(type) ?? [] as row (row.key)}
-              <div class="report-row {row.kind}" style="--depth: {row.depth}">
+              <div class="report-row {row.kind}" class:rr-direct={row.direct} style="--depth: {row.depth}">
                 <span class="rr-name">
                   {#if row.toggleId}
                     <button class="rr-toggle" onclick={() => toggleReportRow(row.toggleId)} aria-label="Toggle">
@@ -732,6 +861,44 @@
   .btn-tool:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
+  }
+
+  /* Dropdown menus (View options, Export) */
+  .menu-wrap { position: relative; display: inline-flex; }
+  .menu-backdrop { position: fixed; inset: 0; z-index: 40; }
+  .dropdown-menu {
+    position: absolute; top: calc(100% + 4px); left: 0; z-index: 50;
+    min-width: 12rem;
+    background: var(--bg-card); border: 1px solid var(--border-color);
+    border-radius: var(--radius-md); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+    padding: 0.25rem; display: flex; flex-direction: column;
+  }
+  .dropdown-menu.wide { min-width: 14rem; }
+  .menu-item {
+    display: flex; align-items: center; gap: 0.5rem;
+    width: 100%; text-align: left;
+    padding: 0.4rem 0.6rem; background: none; border: none; border-radius: var(--radius-sm);
+    font-size: 0.85rem; color: var(--text-primary); cursor: pointer;
+  }
+  .menu-item:hover:not(:disabled) { background: var(--bg-hover); }
+  .menu-item:disabled { color: var(--text-muted); cursor: default; }
+  .menu-item.check .check-box { font-size: 0.95rem; }
+  .menu-divider { height: 1px; background: var(--border-light); margin: 0.25rem 0; }
+  .menu-label { padding: 0.3rem 0.6rem 0.15rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+
+  /* Synthetic "(direct)" breakdown row for a parent account's own postings */
+  .report-row.rr-direct .rr-label { font-style: italic; color: var(--text-muted); }
+  .report-row.rr-direct .rr-amount { color: var(--text-muted); }
+
+  /* Print / Save-as-PDF: show only the report, drop app chrome. */
+  @media print {
+    :global(.global-nav), :global(.ai-assistant),
+    .page-header .header-controls, .toolbar, .back-link, .menu-backdrop {
+      display: none !important;
+    }
+    .accounts-page { padding: 0; }
+    .report-row { break-inside: avoid; }
+    .type-section { break-inside: avoid; }
   }
   
   .loading, .empty-state {

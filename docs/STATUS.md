@@ -76,6 +76,19 @@ See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
 - ✅ **Compact reverse-indent number column — DONE.** Names indent forward, amounts reverse-indent by
   depth (~2.5 ch/level via `--depth` + `padding-right`); the 5 type totals sit flush right (level 0).
 - ✅ **Account ordering — DONE** (by code then name within each parent; groups by display order).
+- ✅ **Reporting UI feature pass — DONE (this round).** Entity Accounts View now has:
+  - ✅ **⚙ View menu:** *Hide zero-balance accounts* (client-side subtree filter) + *Show closed accounts*
+    (reveals `isActive=false`, hidden by default — also fixes closed accounts leaking in as $0 rows) +
+    **relative date presets** (Today / This-Last month / This quarter / This-Last year / All time).
+  - ✅ **`(direct)` row:** a parent account with both own postings and children shows its rolled-up total on
+    its row and a synthetic italic `(direct)` child for its own postings. Design per user (GnuCash-style
+    variant). Verified visually (Vehicles $37k = direct $2k + Car $15k + Truck $20k).
+  - ✅ **Export ▾ menu** (native `.json` real; **CSV/XLSX stubbed**, disabled) + **🖨 Print** (browser
+    print dialog → Save-as-PDF, print stylesheet hides app chrome).
+  - Spec: `accounts-view.md` (§ Display Filters, § Parent-with-own-postings, § Export/Print), `export.md`
+    (§ Print/PDF). Persists filters per entity. Still stubbed: ⭐ Reports, + Add Column, Custom, Cash Flow.
+  - ⬜ **Closed-account toggle** logic-verified/typechecked but not visually exercised (native import forces
+    `isActive=true`; needs a fixture that retires an account post-import).
 - ✅ **CORRECTNESS: balance sheet not balancing (Imbalance −$460,087.04) — FIXED.** Not an import
   problem (data summed to 0). `getBalanceSheet` presented credit-normal totals with `Math.abs(...)`,
   which is only right when a total has its usual sign; Kyle's equity is net-**debit**, so abs kept it

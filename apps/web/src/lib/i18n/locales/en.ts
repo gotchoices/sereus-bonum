@@ -129,6 +129,25 @@ export default {
     // Saved reports & multi-column (future features)
     saved_reports: 'Reports',
     add_column: 'Add Column',
+    // View options menu (display filters + relative date presets)
+    view_options: 'View',
+    hide_zero: 'Hide zero-balance accounts',
+    show_closed: 'Show closed accounts',
+    direct: 'direct',
+    date_preset: 'Date preset',
+    preset_today: 'Today',
+    preset_this_month: 'This month',
+    preset_last_month: 'Last month',
+    preset_this_quarter: 'This quarter',
+    preset_this_year: 'This year',
+    preset_last_year: 'Last year',
+    preset_all_time: 'All time',
+    // Export / print
+    export: 'Export',
+    export_native: 'Native Bonum file (.json)',
+    export_csv: 'CSV (.csv)',
+    export_xlsx: 'Excel (.xlsx)',
+    print: 'Print',
   },
   
   ledger: {

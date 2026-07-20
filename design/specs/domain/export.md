@@ -44,6 +44,13 @@ and a grand total. Columns: account code (if any), name, balance/debit, credit.
 - Empty values are left blank (no `N/A` placeholder).
 - Dates use ISO format (`YYYY-MM-DD`).
 
+## Print / PDF
+
+The initial PDF path is the **browser print dialog** ("Save as PDF"), driven by a per-screen print
+stylesheet that hides app chrome and prints just the report. A dedicated server/client PDF pipeline
+(pixel-controlled layout, headers/footers, page numbers) is future.
+
 ## Future
 
-PDF export, custom column selection, date-range filtering, multi-sheet workbooks, saved templates.
+Dedicated PDF pipeline, custom column selection, date-range filtering, multi-sheet workbooks, saved
+templates.

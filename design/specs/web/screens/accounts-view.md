@@ -110,8 +110,30 @@ convention (credit-normal balances read positive; see [rules.md](../../domain/ru
 - Click account name → navigates to that account's ledger
 - Hover shows tooltip with full account path
 
-**Empty Groups:**
-- Groups with zero balance can be hidden (user preference - future)
+**Parent account with its own postings AND children:** an account may carry direct postings *and* be the
+parent of sub-accounts. Its own row shows the **rolled-up subtree total**; its direct postings appear on a
+synthetic, non-clickable child row labelled **`(direct)`** indented one level beneath it (so the parent
+total reads as `(direct) + children`). The `(direct)` row is only emitted when the parent has both child
+accounts and a non-zero own balance.
+
+## Display Filters (⚙ View menu)
+
+A **⚙ View** menu on the toolbar holds display filters and relative-date presets. Filter state persists per
+entity (local storage).
+
+**Hide zero-balance accounts:** when on, accounts and groups whose rolled-up total is $0 are suppressed
+(a group is kept if any descendant survives). Account-type sections (Assets/Liabilities/…) always remain as
+the report skeleton. Off by default.
+
+**Show closed accounts:** *closed/retired* accounts (`isActive = false`, which requires a zero balance to
+set — see [rules.md](../../domain/rules.md)) are **hidden by default**; this toggle reveals them. This is
+distinct from two other concepts the UI must not conflate:
+- **Zero-balance** — an active account that happens to total $0 (governed by "Hide zero-balance" above).
+- **Closed-out period** — a per-account `closedThrough` date (a posting lock), unrelated to visibility.
+
+**Relative date presets:** Today, This month, Last month, This quarter, This year, Last year, All time.
+Selecting one sets the report date(s) — the end date for "as of" modes, both bounds for period modes — and
+reloads. Manual date entry (above) still works alongside presets.
 
 ## User Actions
 
@@ -123,13 +145,19 @@ convention (credit-normal balances read positive; see [rules.md](../../domain/ru
 
 **Navigate to Ledger:** Click any account name
 
-**Export:** Export button downloads the entity's full books as a **native Bonum `.json` dump**
-(re-importable — see [domain/export.md](../../domain/export.md) and the native books restore in
-[domain/import.md](../../domain/import.md)). CSV/Excel export of the current view is future.
+**Export:** An **Export ▾** menu. *Native Bonum `.json` dump* (the entity's full books, re-importable — see
+[domain/export.md](../../domain/export.md) and the native restore in [domain/import.md](../../domain/import.md))
+is implemented; *CSV* and *Excel (.xlsx)* of the current view are stubbed (disabled, "coming soon").
 
-**Add Column:** (future) - Adds another date range column for period comparison
+**Print / PDF:** A **🖨 Print** button opens the browser print dialog with a print stylesheet that drops app
+chrome (nav, toolbar, assistant) and prints just the report. "Save as PDF" in that dialog is the initial PDF
+path; a dedicated PDF pipeline is future.
 
-**Save Report:** (future) - Saves current view configuration as named report
+**Add Column:** (stubbed, disabled) - Adds another date range column for period comparison
+([saved-reports-ux.md](./saved-reports-ux.md))
+
+**Save Report:** (stubbed, disabled) - Saves current view configuration as named report
+([saved-reports-ux.md](./saved-reports-ux.md))
 
 ## Persistence
 
