@@ -505,7 +505,7 @@
                       {row.expanded ? '▼' : '▶'}
                     </button>
                   {:else}
-                    <span class="rr-toggle spacer"></span>
+                    <span class="rr-toggle rr-toggle-empty"></span>
                   {/if}
                   {#if row.code}<span class="rr-code">{row.code}</span>{/if}
                   {#if row.accountId}
@@ -793,7 +793,7 @@
     background: none; border: none; cursor: pointer; color: var(--text-muted);
     width: 1rem; padding: 0; font-size: 0.7rem; flex-shrink: 0;
   }
-  .rr-toggle.spacer { visibility: hidden; }
+  .rr-toggle-empty { visibility: hidden; }
   .rr-code { color: var(--text-muted); font-size: 0.8rem; font-family: var(--font-mono); flex-shrink: 0; }
   .rr-label { overflow: hidden; text-overflow: ellipsis; }
   .rr-label.link { color: inherit; text-decoration: none; }
@@ -802,7 +802,7 @@
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     text-align: right; white-space: nowrap; flex-shrink: 0;
-    padding-right: calc(var(--depth) * 0.72rem);
+    padding-right: calc(var(--depth) * 1.4rem);
   }
 
   /* Footer section */

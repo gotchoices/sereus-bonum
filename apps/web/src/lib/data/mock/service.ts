@@ -99,7 +99,12 @@ class SqliteDataService implements DataService {
   }
   
   async deleteEntity(id: string): Promise<void> {
-    this.getDb().run('DELETE FROM entity WHERE id = ?', [id]);
+    // Manual cascade (FK ON DELETE CASCADE isn't enforced with sql.js's default foreign_keys=OFF).
+    const db = this.getDb();
+    db.run('DELETE FROM entry WHERE account_id IN (SELECT id FROM account WHERE entity_id = ?)', [id]);
+    db.run('DELETE FROM txn WHERE entity_id = ?', [id]);
+    db.run('DELETE FROM account WHERE entity_id = ?', [id]);
+    db.run('DELETE FROM entity WHERE id = ?', [id]);
     this.save();
   }
   

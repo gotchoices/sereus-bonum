@@ -178,11 +178,33 @@ class QuereusDataService implements DataService {
 
   async deleteEntity(id: string): Promise<void> {
     // Manual cascade (Quereus has no ON DELETE CASCADE): entries → txns → accounts → entity.
+    //
+    // Two Quereus/store perf gaps shape this (both filed under tmp/):
+    //  1. FK enforcement on DELETE re-scans the child table per deleted parent row (O(parent×child))
+    //     instead of probing the child's FK index — deleting 1k txns took ~49s. Since we cascade
+    //     manually in child→parent order, FK checks are redundant here: disable them for the batch
+    //     (standard SQL idiom for bulk cascade). This alone is the ~30x win. See tmp/quereus-fk-delete-perf.md.
+    //  2. `DELETE … WHERE txn_id IN (SELECT …)` re-executes the subquery per row. We delete entries via a
+    //     materialized account_id IN list instead. See tmp/quereus-delete-subquery-perf.md.
     const db = this.getDb();
-    await run(db, 'DELETE FROM entry WHERE txn_id IN (SELECT id FROM txn WHERE entity_id = ?)', [id]);
-    await run(db, 'DELETE FROM txn WHERE entity_id = ?', [id]);
-    await run(db, 'DELETE FROM account WHERE entity_id = ?', [id]);
-    await run(db, 'DELETE FROM entity WHERE id = ?', [id]);
+    await run(db, 'PRAGMA foreign_keys = off');
+    const acctIds = (await all<{ id: string }>(db, 'SELECT id FROM account WHERE entity_id = ?', [id])).map((r) => r.id);
+    await run(db, 'BEGIN');
+    try {
+      for (let i = 0; i < acctIds.length; i += 200) {
+        const chunk = acctIds.slice(i, i + 200);
+        await run(db, `DELETE FROM entry WHERE account_id IN (${chunk.map(() => '?').join(',')})`, chunk);
+      }
+      await run(db, 'DELETE FROM txn WHERE entity_id = ?', [id]);
+      await run(db, 'DELETE FROM account WHERE entity_id = ?', [id]);
+      await run(db, 'DELETE FROM entity WHERE id = ?', [id]);
+      await run(db, 'COMMIT');
+    } catch (e) {
+      try { await run(db, 'ROLLBACK'); } catch { /* ignore */ }
+      throw e;
+    } finally {
+      try { await run(db, 'PRAGMA foreign_keys = on'); } catch { /* ignore */ }
+    }
   }
 
   // ===========================================================================
