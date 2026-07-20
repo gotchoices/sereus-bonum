@@ -151,7 +151,26 @@ create table exchange (
 -- Without these the entry⋈txn⋈account joins degrade to nested scans at scale.
 create index idx_account_entity on account(entity_id);
 create index idx_account_group on account(account_group_id);
-create index idx_txn_entity on txn(entity_id);
-create index idx_txn_date on txn(date);
 create index idx_entry_txn on entry(txn_id);
 create index idx_entry_account on entry(account_id);
+
+-- txn is always queried entity-first: getBalanceSheet (entity_id = ? and date <= ?), getTransactions
+-- (entity_id = ? [and date range] order by date), getLedger (entity_id = ?). No query filters date alone.
+-- One composite (entity_id, date) serves all of them (prefix covers entity-only + the entity FK check,
+-- and the date column adds range pruning + ordering) — strictly better than two single-column indexes.
+create index idx_txn_entity_date on txn(entity_id, date);
+
+-- Index EVERY FK child column. Standard SQL hygiene: without a child-side index, a DELETE/UPDATE on the
+-- parent must scan the child table once per affected parent row to enforce the FK (O(parent×child) — a
+-- 1000-row entity delete took ~49s). With these, the referential check is an index seek (~0.5ms/row).
+-- (On the IndexedDB store the check is still ~35ms/row even indexed — see tmp/quereus-fk-delete-perf.md —
+-- so bulk cascades additionally disable FK enforcement; these indexes remain correct for other backends.)
+create index idx_ag_parent on account_group(parent_id);
+create index idx_account_parent on account(parent_id);
+create index idx_account_partner on account(partner_id);
+create index idx_account_linked on account(linked_account_id);
+create index idx_tag_parent on tag(parent_id);
+create index idx_recon_account on reconciliation(account_id);
+create index idx_entry_tag on entry(tag_id);
+create index idx_entry_recon on entry(reconciliation_id);
+create index idx_exchange_txn on exchange(txn_id);
