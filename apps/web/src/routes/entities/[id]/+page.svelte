@@ -9,10 +9,14 @@
     accountsLoading, 
     accountGroups,
     topLevelGroupsByType,
-    childGroupsByParent,
     loadAccounts
   } from '$lib/stores/accounts';
-  import { getDataService, type AccountType, type BalanceSheetData } from '$lib/data';
+  import { getDataService, NORMAL_BALANCE, type AccountType, type BalanceSheetData } from '$lib/data';
+
+  // Present a raw signed balance for display: credit-normal types (Liability/Equity/Income) read
+  // positive when they carry a (normal) credit balance, so signs match balance-sheet convention.
+  const presentBalance = (raw: number, type: AccountType): number =>
+    NORMAL_BALANCE[type] === 'credit' ? -raw : raw;
   import { loadViewState, saveViewState } from '$lib/stores/viewState';
   
   // Report modes
@@ -191,22 +195,6 @@
     saveViewState(`accounts-mode-${entityId}`, mode);
   }
   
-  // Helper functions
-  function getAccountsForGroup(groupId: string) {
-    return $accounts.filter(a => a.accountGroupId === groupId);
-  }
-  
-  function getAccountBalance(accountId: string): number {
-    if (!balanceData) return 0;
-    const ab = balanceData.accountBalances.find(b => b.accountId === accountId);
-    return ab?.balance ?? 0;
-  }
-  
-  function getGroupTotal(groupId: string): number {
-    if (!balanceData) return 0;
-    const gb = balanceData.groupBalances.find(b => b.groupId === groupId);
-    return gb?.balance ?? 0;
-  }
   
   function getTypeTotal(type: AccountType): number {
     if (!balanceData) return 0;
@@ -253,7 +241,99 @@
     if (!balanceData) return 0;
     return balanceData.totalAssets - liabilitiesPlusEquity();
   });
-  
+
+  // --- Hierarchical report rows -------------------------------------------
+  // Flatten the group tree + account (parentId) tree of each type into depth-tagged rows with
+  // rolled-up subtotals, honoring expand/collapse. Names indent forward, amounts reverse-indent by
+  // depth (see .report-row CSS). Type headers are rendered separately (depth 0, rightmost).
+  interface ReportRow {
+    key: string;
+    depth: number;          // 1 = top-level group; deeper = subgroups / nested accounts
+    label: string;
+    amount: number;         // presented (sign convention applied)
+    kind: 'group' | 'account';
+    accountId?: string;
+    code?: string;
+    toggleId?: string;      // set → row is expand/collapse-able (group id, or 're')
+    expanded?: boolean;
+  }
+
+  const byDisplay = (a: { displayOrder?: number; name: string }, b: { displayOrder?: number; name: string }) =>
+    (a.displayOrder ?? 0) - (b.displayOrder ?? 0) || a.name.localeCompare(b.name);
+  const byCodeName = (a: { code?: string; name: string }, b: { code?: string; name: string }) =>
+    (a.code ?? '').localeCompare(b.code ?? '') || a.name.localeCompare(b.name);
+
+  let reportRowsByType = $derived.by(() => {
+    const out = new Map<AccountType, ReportRow[]>();
+    if (!balanceData) return out;
+
+    const rawById = new Map<string, number>();
+    for (const ab of balanceData.accountBalances) rawById.set(ab.accountId, ab.balance);
+    const acctsByGroup = new Map<string, typeof $accounts>();
+    for (const a of $accounts) { (acctsByGroup.get(a.accountGroupId) ?? acctsByGroup.set(a.accountGroupId, []).get(a.accountGroupId)!).push(a); }
+    const childGroups = new Map<string, typeof $accountGroups>();
+    for (const g of $accountGroups) if (g.parentId) (childGroups.get(g.parentId) ?? childGroups.set(g.parentId, []).get(g.parentId)!).push(g);
+
+    const groupHasAccounts = (gid: string): boolean =>
+      (acctsByGroup.get(gid)?.length ?? 0) > 0 || (childGroups.get(gid) ?? []).some((c) => groupHasAccounts(c.id));
+    const groupRawTotal = (gid: string): number => {
+      let s = 0;
+      for (const a of acctsByGroup.get(gid) ?? []) s += rawById.get(a.id) ?? 0;
+      for (const c of childGroups.get(gid) ?? []) s += groupRawTotal(c.id);
+      return s;
+    };
+
+    const build = (type: AccountType): ReportRow[] => {
+      const rows: ReportRow[] = [];
+      const addAccount = (acct: (typeof $accounts)[number], depth: number, kids: Map<string, typeof $accounts>) => {
+        const rawSub = (a: (typeof $accounts)[number]): number =>
+          (rawById.get(a.id) ?? 0) + (kids.get(a.id) ?? []).reduce((s, k) => s + rawSub(k), 0);
+        rows.push({ key: `a-${acct.id}`, depth, label: acct.name, code: acct.code || undefined, kind: 'account', accountId: acct.id, amount: presentBalance(rawSub(acct), type) });
+        for (const k of (kids.get(acct.id) ?? []).slice().sort(byCodeName)) addAccount(k, depth + 1, kids);
+      };
+      const addGroup = (group: (typeof $accountGroups)[number], depth: number) => {
+        if (!groupHasAccounts(group.id)) return;
+        rows.push({ key: `g-${group.id}`, depth, label: group.name, kind: 'group', toggleId: group.id, expanded: expandedGroups[group.id] ?? false, amount: presentBalance(groupRawTotal(group.id), type) });
+        if (!(expandedGroups[group.id] ?? false)) return;
+        const accts = acctsByGroup.get(group.id) ?? [];
+        const inGroup = new Set(accts.map((a) => a.id));
+        const kids = new Map<string, typeof $accounts>();
+        const roots: typeof $accounts = [];
+        for (const a of accts) {
+          if (a.parentId && inGroup.has(a.parentId)) (kids.get(a.parentId) ?? kids.set(a.parentId, []).get(a.parentId)!).push(a);
+          else roots.push(a);
+        }
+        for (const r of roots.slice().sort(byCodeName)) addAccount(r, depth + 1, kids);
+        for (const c of (childGroups.get(group.id) ?? []).slice().sort(byDisplay)) addGroup(c, depth + 1);
+      };
+      for (const g of ($topLevelGroupsByType.get(type) ?? []).slice().sort(byDisplay)) addGroup(g, 1);
+      // Retained Earnings pseudo-node under Equity.
+      if (type === 'EQUITY' && showRetainedEarningsInEquity) {
+        rows.push({ key: 're', depth: 1, label: $t('accounts.retained_earnings'), kind: 'group', amount: netIncome(), toggleId: retainedEarningsExpandable ? 're' : undefined, expanded: retainedEarningsExpanded });
+        if (retainedEarningsExpandable && retainedEarningsExpanded) {
+          for (const it of ['INCOME', 'EXPENSE'] as AccountType[]) {
+            rows.push({ key: `re-${it}`, depth: 2, label: $t(`account_types.${it}`), kind: 'group', amount: getTypeTotal(it) });
+            for (const g of ($topLevelGroupsByType.get(it) ?? []).slice().sort(byDisplay)) {
+              for (const a of (acctsByGroup.get(g.id) ?? []).slice().sort(byCodeName)) {
+                rows.push({ key: `re-a-${a.id}`, depth: 3, label: a.name, code: a.code || undefined, kind: 'account', accountId: a.id, amount: presentBalance(rawById.get(a.id) ?? 0, it) });
+              }
+            }
+          }
+        }
+      }
+      return rows;
+    };
+
+    for (const type of visibleTypes) out.set(type, build(type));
+    return out;
+  });
+
+  function toggleReportRow(id: string | undefined) {
+    if (!id) return;
+    if (id === 're') toggleRetainedEarnings();
+    else toggleGroup(id);
+  }
+
   // Dump this entity's full books to a native .json file the browser downloads.
   let exporting = $state(false);
   async function exportNative() {
@@ -406,128 +486,37 @@
   {:else}
     <div class="accounts-grid">
       {#each visibleTypes as type}
-        {@const topGroups = $topLevelGroupsByType.get(type) || []}
         {@const info = typeInfo[type]}
-        {@const typeTotal = getTypeTotal(type)}
-        
         <section class="type-section">
+          <!-- Level 0: the type total sits flush at the right column -->
           <div class="type-header" style="--type-color: {info.color}">
             <span class="type-icon">{info.icon}</span>
             <span class="type-name">{$t(`account_types.${type}`)}</span>
-            <span class="type-total">{formatCurrency(typeTotal, entity.baseUnit)}</span>
+            <span class="type-total">{formatCurrency(getTypeTotal(type), entity.baseUnit)}</span>
           </div>
-          
-          <div class="groups-list">
-            {#each topGroups as group}
-              {@const children = $childGroupsByParent.get(group.id) || []}
-              {@const hasKids = children.length > 0}
-              {@const groupAccounts = getAccountsForGroup(group.id)}
-              {@const hasAccounts = groupAccounts.length > 0 || children.some(c => getAccountsForGroup(c.id).length > 0)}
-              {@const isExpanded = expandedGroups[group.id] ?? false}
-              {@const groupTotal = getGroupTotal(group.id)}
-              
-              {#if hasAccounts || hasKids}
-                <div class="group-item">
-                  <button 
-                    class="group-row expandable"
-                    onclick={() => toggleGroup(group.id)}
-                  >
-                    <span class="expand-icon">{isExpanded ? '▼' : '▶'}</span>
-                    <span class="group-name">{group.name}</span>
-                    <span class="group-total">{formatCurrency(groupTotal, entity.baseUnit)}</span>
-                  </button>
-                  
-                  {#if isExpanded}
-                    <div class="group-contents">
-                      {#each groupAccounts as account}
-                        <div class="account-row">
-                          <span class="account-code">{account.code || ''}</span>
-                          <a href="/ledger/{account.id}" class="account-name">{account.name}</a>
-                          <span class="account-balance">{formatCurrency(getAccountBalance(account.id), account.unit)}</span>
-                        </div>
-                      {/each}
-                      
-                      {#each children as child}
-                        {@const childAccounts = getAccountsForGroup(child.id)}
-                        {@const childTotal = getGroupTotal(child.id)}
-                        
-                        {#if childAccounts.length > 0}
-                          <div class="child-group">
-                            <div class="child-group-header">
-                              <span class="child-group-name">{child.name}</span>
-                              <span class="child-group-total">{formatCurrency(childTotal, entity.baseUnit)}</span>
-                            </div>
-                            {#each childAccounts as account}
-                              <div class="account-row child">
-                                <span class="account-code">{account.code || ''}</span>
-                                <a href="/ledger/{account.id}" class="account-name">{account.name}</a>
-                                <span class="account-balance">{formatCurrency(getAccountBalance(account.id), account.unit)}</span>
-                              </div>
-                            {/each}
-                          </div>
-                        {/if}
-                      {/each}
-                    </div>
+
+          <!-- Groups + accounts, flattened with depth: name indents forward, amount reverse-indents -->
+          <div class="report-rows">
+            {#each reportRowsByType.get(type) ?? [] as row (row.key)}
+              <div class="report-row {row.kind}" style="--depth: {row.depth}">
+                <span class="rr-name">
+                  {#if row.toggleId}
+                    <button class="rr-toggle" onclick={() => toggleReportRow(row.toggleId)} aria-label="Toggle">
+                      {row.expanded ? '▼' : '▶'}
+                    </button>
+                  {:else}
+                    <span class="rr-toggle spacer"></span>
                   {/if}
-                </div>
-              {/if}
-            {/each}
-            
-            <!-- Retained Earnings (pseudo-account under Equity) -->
-            {#if type === 'EQUITY' && showRetainedEarningsInEquity}
-              <div class="group-item retained-earnings">
-                {#if retainedEarningsExpandable}
-                  <!-- Balance Sheet mode: expandable to show I/E breakdown -->
-                  <button 
-                    class="group-row expandable"
-                    onclick={toggleRetainedEarnings}
-                  >
-                    <span class="expand-icon">{retainedEarningsExpanded ? '▼' : '▶'}</span>
-                    <span class="group-name">{$t('accounts.retained_earnings')}</span>
-                    <span class="group-total">{formatCurrency(netIncome(), entity.baseUnit)}</span>
-                  </button>
-                  
-                  {#if retainedEarningsExpanded}
-                    <div class="group-contents re-breakdown">
-                      <!-- Income section -->
-                      <div class="re-type-section">
-                        <div class="re-type-header">{$t('account_types.INCOME')}</div>
-                        {#each $topLevelGroupsByType.get('INCOME') || [] as group}
-                          {#each getAccountsForGroup(group.id) as account}
-                            <div class="account-row child">
-                              <span class="account-code">{account.code || ''}</span>
-                              <a href="/ledger/{account.id}" class="account-name">{account.name}</a>
-                              <span class="account-balance">{formatCurrency(getAccountBalance(account.id), account.unit)}</span>
-                            </div>
-                          {/each}
-                        {/each}
-                      </div>
-                      
-                      <!-- Expense section -->
-                      <div class="re-type-section">
-                        <div class="re-type-header">{$t('account_types.EXPENSE')}</div>
-                        {#each $topLevelGroupsByType.get('EXPENSE') || [] as group}
-                          {#each getAccountsForGroup(group.id) as account}
-                            <div class="account-row child">
-                              <span class="account-code">{account.code || ''}</span>
-                              <a href="/ledger/{account.id}" class="account-name">{account.name}</a>
-                              <span class="account-balance">{formatCurrency(getAccountBalance(account.id), account.unit)}</span>
-                            </div>
-                          {/each}
-                        {/each}
-                      </div>
-                    </div>
+                  {#if row.code}<span class="rr-code">{row.code}</span>{/if}
+                  {#if row.accountId}
+                    <a href="/ledger/{row.accountId}" class="rr-label link" title={row.label}>{row.label}</a>
+                  {:else}
+                    <span class="rr-label">{row.label}</span>
                   {/if}
-                {:else}
-                  <!-- Trial Balance mode: non-expandable line item -->
-                  <div class="group-row">
-                    <span class="expand-icon"></span>
-                    <span class="group-name">{$t('accounts.retained_earnings')}</span>
-                    <span class="group-total">{formatCurrency(netIncome(), entity.baseUnit)}</span>
-                  </div>
-                {/if}
+                </span>
+                <span class="rr-amount">{formatCurrency(row.amount, entity.baseUnit)}</span>
               </div>
-            {/if}
+            {/each}
           </div>
         </section>
       {/each}
@@ -780,142 +769,42 @@
     font-family: var(--font-mono);
     font-size: 1rem;
   }
-  
-  .groups-list {
-    display: flex;
-    flex-direction: column;
-  }
-  
-  .group-item {
-    border-top: 1px solid var(--border-color);
-  }
-  
-  .group-item:first-child { border-top: none; }
-  
-  .group-row {
+
+  /* Hierarchical rows: name indents forward, amount reverse-indents, both by --depth.
+     Type total (level 0, above) sits flush right; each level steps the amount ~2.5 chars left. */
+  .report-rows { display: flex; flex-direction: column; }
+  .report-row {
     display: flex;
     align-items: center;
-    gap: var(--space-sm);
-    width: 100%;
-    padding: var(--space-sm) var(--space-lg);
-    background: none;
-    border: none;
-    color: var(--text-primary);
-    text-align: left;
-    font-size: 0.9rem;
-    cursor: pointer;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.22rem var(--space-lg);
+    border-top: 1px solid var(--border-light);
   }
-  
-  .group-row:hover {
-    background: var(--bg-hover);
+  .report-row.group { font-weight: 600; }
+  .report-row.account { color: var(--text-secondary); font-weight: 400; }
+  .rr-name {
+    display: flex; align-items: center; gap: 0.35rem;
+    min-width: 0; flex: 1;
+    padding-left: calc(var(--depth) * 1.4rem);
+    overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
   }
-  
-  .expand-icon {
-    font-size: 0.65rem;
-    color: var(--text-muted);
-    width: 1rem;
-    flex-shrink: 0;
+  .rr-toggle {
+    background: none; border: none; cursor: pointer; color: var(--text-muted);
+    width: 1rem; padding: 0; font-size: 0.7rem; flex-shrink: 0;
   }
-  
-  .group-name {
-    flex: 1;
-    font-weight: 500;
-  }
-  
-  .group-total {
+  .rr-toggle.spacer { visibility: hidden; }
+  .rr-code { color: var(--text-muted); font-size: 0.8rem; font-family: var(--font-mono); flex-shrink: 0; }
+  .rr-label { overflow: hidden; text-overflow: ellipsis; }
+  .rr-label.link { color: inherit; text-decoration: none; }
+  .rr-label.link:hover { color: var(--accent-color); text-decoration: underline; }
+  .rr-amount {
     font-family: var(--font-mono);
-    font-size: 0.9rem;
-    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+    text-align: right; white-space: nowrap; flex-shrink: 0;
+    padding-right: calc(var(--depth) * 0.72rem);
   }
-  
-  .group-contents {
-    border-top: 1px solid var(--border-subtle);
-    background: var(--bg-secondary);
-  }
-  
-  .account-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-    padding: var(--space-xs) var(--space-lg);
-    padding-left: calc(var(--space-lg) + 2rem);
-    font-size: 0.85rem;
-  }
-  
-  .account-row.child {
-    padding-left: calc(var(--space-lg) + 3rem);
-  }
-  
-  .account-code {
-    width: 60px;
-    font-family: var(--font-mono);
-    font-size: 0.8rem;
-    color: var(--text-muted);
-  }
-  
-  .account-name {
-    flex: 1;
-    color: var(--text-primary);
-    text-decoration: none;
-  }
-  
-  .account-name:hover {
-    color: var(--accent-color);
-  }
-  
-  .account-balance {
-    font-family: var(--font-mono);
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-  }
-  
-  .child-group {
-    border-top: 1px solid var(--border-subtle);
-  }
-  
-  .child-group-header {
-    display: flex;
-    align-items: center;
-    padding: var(--space-xs) var(--space-lg);
-    padding-left: calc(var(--space-lg) + 2rem);
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: var(--text-secondary);
-  }
-  
-  .child-group-name { flex: 1; }
-  .child-group-total {
-    font-family: var(--font-mono);
-    font-size: 0.85rem;
-  }
-  
-  /* Retained Earnings styling */
-  .retained-earnings {
-    border-top: 2px solid var(--border-color);
-  }
-  
-  .retained-earnings .group-name {
-    font-style: italic;
-  }
-  
-  .re-breakdown {
-    padding: var(--space-sm) 0;
-  }
-  
-  .re-type-section {
-    margin-bottom: var(--space-sm);
-  }
-  
-  .re-type-header {
-    padding: var(--space-xs) var(--space-lg);
-    padding-left: calc(var(--space-lg) + 2rem);
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-  
+
   /* Footer section */
   .footer-section {
     display: flex;

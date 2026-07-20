@@ -88,12 +88,17 @@ Date range required. Income/Expense accounts only show transactions within this 
 
 ## Account Display
 
-**Hierarchy:** Type → Group → Account
+**Hierarchy:** Type → Account Group (nested to any depth) → Account (nested by parent account to any
+depth). Accounts appear under their real parent, beside their siblings; a parent's amount is the rolled-up
+subtotal of itself and its descendants. Applies to **every report mode** (Balance Sheet, Trial Balance,
+Income Statement, …) — they share one presentation.
 
-**Indentation:** Visual hierarchy using indentation
-- Type header: No indentation (e.g., "Assets")
-- Account group: 2 spaces (e.g., "  Current Assets")
-- Individual account: 4 spaces (e.g., "    Checking Account")
+**Dual indentation (names forward, amounts reverse):** the 5 top-level account types sit at level 0 with
+their amounts flush to the **right** column. Each level deeper indents the **name forward** by a fixed
+step and the **amount in reverse** (rightward-origin) by a fixed small step (~2–3 characters) — so deeper
+detail steps left in the number column while its label steps right. This keeps deep hierarchies compact
+and leaves room for additional period columns (multi-period reports). Amounts use accounting sign
+convention (credit-normal balances read positive; see [rules.md](../../domain/rules.md)).
 
 **Expand/Collapse:**
 - Click type or group header to expand/collapse its contents

@@ -692,9 +692,12 @@ class SqliteDataService implements DataService {
       startDate: startDate || undefined,
       netWorth,
       totalAssets,
-      totalLiabilities: Math.abs(totalLiabilities),
-      totalEquity: Math.abs(totalEquity),  // Only equity accounts, no net income
-      totalIncome: Math.abs(totalIncome),   // Add for frontend use
+      // Present credit-normal totals by NEGATING the signed sum (not Math.abs) so a net-debit
+      // equity/liability or a net loss keeps the Assets = Liabilities + Equity + Net Income identity
+      // exact. See production/service.ts for the full note.
+      totalLiabilities: -totalLiabilities,
+      totalEquity: -totalEquity,            // Only equity accounts, no net income
+      totalIncome: -totalIncome,            // Add for frontend use
       totalExpense,                         // Add for frontend use
       groupBalances: Array.from(groupTotals.values()),
       accountBalances,

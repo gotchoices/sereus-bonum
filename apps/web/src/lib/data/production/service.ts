@@ -494,13 +494,17 @@ class QuereusDataService implements DataService {
         case 'EXPENSE': totalExpense += balance; break;
       }
     }
+    // Present credit-normal totals by NEGATING the signed sum (not Math.abs): abs is only correct when
+    // a total has its usual sign, but equity/liabilities/income can legitimately be net-debit (e.g. a
+    // debit-heavy equity account or an accumulated deficit). Negation keeps the balance-sheet identity
+    // Assets = -(Liabilities + Equity + Income + Expense_signed) exact in every case.
     return {
       entityId, endDate: end, startDate: startDate || undefined,
       netWorth: totalAssets + totalLiabilities,
       totalAssets,
-      totalLiabilities: Math.abs(totalLiabilities),
-      totalEquity: Math.abs(totalEquity),
-      totalIncome: Math.abs(totalIncome),
+      totalLiabilities: -totalLiabilities,
+      totalEquity: -totalEquity,
+      totalIncome: -totalIncome,
       totalExpense,
       groupBalances: Array.from(groupTotals.values()),
       accountBalances,

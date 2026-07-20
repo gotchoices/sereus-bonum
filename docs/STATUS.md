@@ -69,6 +69,26 @@ See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
 - ⬜ Settings: API key not actually validated on blur; Sereus Nodes UI is a stub.
 - ⬜ Adopt unified notifications (`stores/notifications`) in remaining screens (entity, ledger, catalog).
 
+### H. Reporting: hierarchy display + two correctness bugs (from GnuCash comparison, Kyle data)
+- ✅ **Account hierarchy in reports — DONE.** The entity view now renders the full tree (account-group
+  hierarchy + account `parentId`, any depth) with rolled-up subtotals, ordered by code/name, across all
+  report modes. Spec: `accounts-view.md` § Account Display. Render-only (no data-layer change).
+- ✅ **Compact reverse-indent number column — DONE.** Names indent forward, amounts reverse-indent by
+  depth (~2.5 ch/level via `--depth` + `padding-right`); the 5 type totals sit flush right (level 0).
+- ✅ **Account ordering — DONE** (by code then name within each parent; groups by display order).
+- ✅ **CORRECTNESS: balance sheet not balancing (Imbalance −$460,087.04) — FIXED.** Not an import
+  problem (data summed to 0). `getBalanceSheet` presented credit-normal totals with `Math.abs(...)`,
+  which is only right when a total has its usual sign; Kyle's equity is net-**debit**, so abs kept it
+  +230k when it needed −230k (a 2× error = the imbalance). Now **negates** the signed sum
+  (liabilities/equity/income) in both services → identity holds for net-debit/net-loss cases too.
+  Follow-up **also fixed**: credit-normal account **rows** and group subtotals now present with the
+  sign flipped (via `presentBalance` + `NORMAL_BALANCE`), so a credit reads positive on the balance
+  sheet (e.g. Opening Balance shows +$30,000, not −$30,000); Retained Earnings unchanged; rows now sum
+  to their totals; still balanced.
+- ⚠️ **CORRECTNESS: income statement ignores its date range** — with a 2026 range on pre-2026 data it
+  still shows all-time totals (Net Income == all-time Retained Earnings). The period filter isn't
+  applied to I/E in `getBalanceSheet`'s income-statement path. Verify `startDate`/`endDate` handling.
+
 ### E. Storied but unimplemented features
 - ⬜ Multi-unit (08), Tags (11), Sharing / multi-user (10), AI assistant + capture (07 / 09).
 
