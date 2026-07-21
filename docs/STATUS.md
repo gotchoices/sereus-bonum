@@ -674,15 +674,19 @@ From story 04 (Alt F):
 - ⬜ Update backend to handle multiple date ranges
 - ⬜ Update export to multi-column format
 
-#### ⬜ Saved Reports
+#### ✅ Saved Reports + abstract dates — DONE (single-column)
 From story 04 (Alt G):
-- ✅ UI placeholder: "⭐ Reports" button in header (disabled with tooltip)
-- ✅ Store skeleton: `savedReports.ts` with interface definitions
-- ✅ UX spec: `design/specs/web/screens/saved-reports-ux.md`
-- ⬜ Implement save dialog
-- ⬜ Implement dropdown with saved reports list
-- ⬜ Implement load/rename/delete functionality
-- ⬜ Persist to localStorage
+- ✅ **Abstract dates:** basis selector beside each date field (Fixed vs relative token — Today, Start/End of
+  month/quarter/year, last year). Relative → shows the resolved date read-only. Model `{basis, fixedDate}`
+  per field; replaced the old View-menu hard-date presets. So saved reports auto-adjust.
+- ✅ **⭐ Reports dropdown:** Save current view… (name dialog) + saved list (click to load, ✕ delete).
+  `savedReports.ts` now functional (writable synced to `localStorage['bonum-saved-reports']`, shared across
+  entities). A report stores mode + endField/startField (bases) + filters. Verified: save "End of this year"
+  BS, switch to Income Statement, reload report → restores BS mode + auto-resolved 2026-12-31.
+- ✅ **Print moved under Export ▾** ("Print / Save as PDF…" via browser dialog); structured **PDF (.pdf)**
+  stubbed alongside CSV/XLSX. Dropped the standalone print icon (per user: casual print = browser's job).
+- ⬜ Standalone rename (currently: save under a new name); multi-column (separate item below).
+- Spec: `saved-reports-ux.md` (Phases 1–2 done), `accounts-view.md` (§ Date Inputs, § Export/Print).
 
 #### ⬜ Cash Flow Mode Implementation
 From story 04 (Alt C):

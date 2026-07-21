@@ -282,18 +282,18 @@ Saved in browser local storage (shared across all entities):
 
 This feature will be built in phases:
 
-### Phase 1: UI Hooks (Current - Stubbed)
-- "⭐ Reports" button present but disabled
-- Tooltip: "Coming soon"
-- "+ Add Column" button present but disabled
-- Tooltip: "Multi-column view coming soon"
-- Placeholder functions in code
+### Phase 1: UI Hooks (Stubbed) — DONE
+- "+ Add Column" button present but disabled ("Multi-column view coming soon").
 
-### Phase 2: Single-Column Save/Load
-- Save dialog working
-- Load from dropdown working
-- Basic rename/delete
-- Single column only (no multi-column yet)
+### Phase 2: Single-Column Save/Load — DONE
+- "⭐ Reports ▾" dropdown: **Save current view…** (name dialog) + saved list (click to load, ✕ to delete).
+- A saved report stores `{ mode, endField, startField?, hideZeroBalance, showClosedAccounts }` where each
+  date field is a **DateFieldValue** `{ basis, fixedDate }` — a relative basis (e.g. `eoy`) auto-adjusts on
+  load. Persisted to `localStorage['bonum-saved-reports']`, shared across entities. Store:
+  `$lib/stores/savedReports.ts`. Save-by-name overwrites (case-insensitive). Rename = save under a new name;
+  standalone rename is a later nicety. Single column only.
+- **Abstract dates** (the basis selector beside each date field) shipped with this phase — see
+  [accounts-view.md](./accounts-view.md) § Date Inputs.
 
 ### Phase 3: Multi-Column Support
 - Enable "+ Add Column" button

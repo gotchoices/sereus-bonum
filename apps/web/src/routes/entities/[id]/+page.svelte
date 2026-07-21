@@ -18,9 +18,36 @@
   const presentBalance = (raw: number, type: AccountType): number =>
     NORMAL_BALANCE[type] === 'credit' ? -raw : raw;
   import { loadViewState, saveViewState } from '$lib/stores/viewState';
-  
+  import { savedReports, upsertReport, deleteReport, touchReport, type SavedReport, type DateFieldValue } from '$lib/stores/savedReports';
+
   // Report modes
   type ReportMode = 'balance_sheet' | 'trial_balance' | 'income_statement' | 'cash_flow' | 'custom';
+
+  // --- Date abstraction ---------------------------------------------------
+  // A date field carries a `basis`: 'fixed' (use fixedDate) or a relative token resolved against today.
+  // Storing the basis (not a resolved date) lets a saved report auto-adjust — "End of this year" always
+  // means the current year's end. See accounts-view.md § Date Inputs.
+  const todayIso = () => new Date().toISOString().split('T')[0];
+  const RELATIVE_TOKENS = ['today', 'som', 'eom', 'soq', 'eoq', 'soy', 'eoy', 'soly', 'eoly'] as const;
+  function resolveToken(token: string): string {
+    const now = new Date();
+    const y = now.getFullYear(), m = now.getMonth(), q = Math.floor(m / 3) * 3;
+    const iso = (d: Date) => d.toISOString().split('T')[0];
+    switch (token) {
+      case 'today': return iso(now);
+      case 'som': return iso(new Date(y, m, 1));
+      case 'eom': return iso(new Date(y, m + 1, 0));
+      case 'soq': return iso(new Date(y, q, 1));
+      case 'eoq': return iso(new Date(y, q + 3, 0));
+      case 'soy': return iso(new Date(y, 0, 1));
+      case 'eoy': return iso(new Date(y, 11, 31));
+      case 'soly': return iso(new Date(y - 1, 0, 1));
+      case 'eoly': return iso(new Date(y - 1, 11, 31));
+      default: return iso(now);
+    }
+  }
+  const resolveField = (f: DateFieldValue): string => (f.basis === 'fixed' ? f.fixedDate : resolveToken(f.basis));
+  const fieldLabel = (f: DateFieldValue): string => (f.basis === 'fixed' ? f.fixedDate : $t(`accounts.basis_${f.basis}`));
   
   // Get entity ID from route
   let entityId = $derived($page.params.id!);
@@ -33,17 +60,22 @@
   // View state - persisted
   let expandedGroups = $state<Record<string, boolean>>({});
   let reportMode = $state<ReportMode>('balance_sheet');
-  let endDate = $state(new Date().toISOString().split('T')[0]);
-  let startDate = $state<string | undefined>(undefined);
+  let endField = $state<DateFieldValue>({ basis: 'fixed', fixedDate: todayIso() });
+  let startField = $state<DateFieldValue | undefined>(undefined);
+  let endDate = $derived(resolveField(endField));
+  let startDate = $derived<string | undefined>(startField ? resolveField(startField) : undefined);
   let retainedEarningsExpanded = $state(false);
 
   // Display filters (persisted per entity) — surfaced via the ⚙ View menu.
   let hideZeroBalance = $state(false);   // suppress accounts/groups whose total is $0
   let showClosedAccounts = $state(false); // reveal retired (isActive=false) accounts, hidden by default
 
-  // Transient menu open/close (not persisted)
+  // Transient menu / dialog open state (not persisted)
   let showOptionsMenu = $state(false);
   let showExportMenu = $state(false);
+  let showReportsMenu = $state(false);
+  let showSaveDialog = $state(false);
+  let saveName = $state('');
   
   // Track if we need to reload data (used for onblur optimization)
   let needsReload = $state(false);
@@ -57,14 +89,19 @@
       hideZeroBalance = loadViewState(`accounts-hidezero-${entityId}`, false);
       showClosedAccounts = loadViewState(`accounts-showclosed-${entityId}`, false);
 
-      // Load persisted dates (or use defaults)
-      const savedDates = loadViewState(`accounts-dates-${entityId}`, {
-        endDate: new Date().toISOString().split('T')[0],
-        startDate: undefined
-      });
-      endDate = savedDates.endDate;
-      startDate = savedDates.startDate;
-      
+      // Load persisted date fields (migrate the old {endDate,startDate} resolved-string format).
+      const savedDates = loadViewState<any>(`accounts-dates-${entityId}`, null);
+      if (savedDates?.endField) {
+        endField = savedDates.endField;
+        startField = savedDates.startField ?? undefined;
+      } else if (savedDates?.endDate) {
+        endField = { basis: 'fixed', fixedDate: savedDates.endDate };
+        startField = savedDates.startDate ? { basis: 'fixed', fixedDate: savedDates.startDate } : undefined;
+      } else {
+        endField = { basis: 'fixed', fixedDate: todayIso() };
+        startField = undefined;
+      }
+
       log.ui.debug('[Accounts] Loaded view state for entity:', entityId);
     }
   });
@@ -120,35 +157,13 @@
     }
   }
 
-  // Relative date presets. For "as of" modes only the end date matters; range modes get both bounds.
-  const iso = (d: Date) => d.toISOString().split('T')[0];
-  function presetRange(preset: string): { start?: string; end: string } {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = now.getMonth();
-    const q = Math.floor(m / 3) * 3;
-    switch (preset) {
-      case 'today': return { start: iso(now), end: iso(now) };
-      case 'this_month': return { start: iso(new Date(y, m, 1)), end: iso(new Date(y, m + 1, 0)) };
-      case 'last_month': return { start: iso(new Date(y, m - 1, 1)), end: iso(new Date(y, m, 0)) };
-      case 'this_quarter': return { start: iso(new Date(y, q, 1)), end: iso(new Date(y, q + 3, 0)) };
-      case 'this_year': return { start: iso(new Date(y, 0, 1)), end: iso(new Date(y, 11, 31)) };
-      case 'last_year': return { start: iso(new Date(y - 1, 0, 1)), end: iso(new Date(y - 1, 11, 31)) };
-      case 'all_time': return { start: '1900-01-01', end: iso(now) };
-      default: return { end: iso(now) };
-    }
-  }
-  const datePresets = ['today', 'this_month', 'last_month', 'this_quarter', 'this_year', 'last_year', 'all_time'];
-  function applyDatePreset(preset: string) {
-    const { start, end } = presetRange(preset);
-    endDate = end;
-    if (requiresDateRange) startDate = start;
-    showOptionsMenu = false;
+  // A date field's basis changed (or its fixed date blurred) → reload with the new resolved date.
+  function onDateFieldChange() {
     reloadBalance();
   }
 
   // Print/PDF: the browser print dialog renders the report (print CSS hides app chrome).
-  // "Save as PDF" in that dialog produces the PDF — no separate PDF pipeline yet.
+  // "Save as PDF" in that dialog produces the PDF — no separate structured-PDF pipeline yet.
   function printReport() {
     showExportMenu = false;
     if (browser) window.print();
@@ -158,16 +173,13 @@
   let requiresDateRange = $derived(
     reportMode === 'income_statement' || reportMode === 'cash_flow'
   );
-  
-  // Auto-set default start date for modes that require it
+
+  // Auto-manage the start-date field for modes that require a range (default: start of this year).
   $effect(() => {
-    if (requiresDateRange && !startDate) {
-      // Default to first day of current year
-      const year = new Date().getFullYear();
-      startDate = `${year}-01-01`;
-    } else if (!requiresDateRange && startDate) {
-      // Clear start date for modes that don't need it
-      startDate = undefined;
+    if (requiresDateRange && !startField) {
+      startField = { basis: 'soy', fixedDate: `${new Date().getFullYear()}-01-01` };
+    } else if (!requiresDateRange && startField) {
+      startField = undefined;
     }
   });
   
@@ -210,9 +222,42 @@
     saveViewState(`accounts-expand-${entityId}`, expandedGroups);
     saveViewState(`accounts-mode-${entityId}`, reportMode);
     saveViewState(`accounts-re-expanded-${entityId}`, retainedEarningsExpanded);
-    saveViewState(`accounts-dates-${entityId}`, { endDate, startDate });
+    saveViewState(`accounts-dates-${entityId}`, { endField, startField });
     saveViewState(`accounts-hidezero-${entityId}`, hideZeroBalance);
     saveViewState(`accounts-showclosed-${entityId}`, showClosedAccounts);
+  }
+
+  // --- Saved reports ------------------------------------------------------
+  const modeLabel = (m: ReportMode) => $t(`accounts.mode_${m}`);
+  function openSaveDialog() {
+    saveName = '';
+    showReportsMenu = false;
+    showSaveDialog = true;
+  }
+  function confirmSaveReport() {
+    const name = saveName.trim();
+    if (!name) return;
+    const now = new Date().toISOString();
+    const report: SavedReport = {
+      id: crypto.randomUUID(), name, mode: reportMode,
+      endField: { ...endField },
+      startField: startField ? { ...startField } : undefined,
+      hideZeroBalance, showClosedAccounts,
+      createdAt: now, lastUsedAt: now,
+    };
+    upsertReport(report);
+    showSaveDialog = false;
+  }
+  function applySavedReport(r: SavedReport) {
+    reportMode = r.mode;
+    endField = { ...r.endField };
+    startField = r.startField ? { ...r.startField } : undefined;
+    hideZeroBalance = r.hideZeroBalance;
+    showClosedAccounts = r.showClosedAccounts;
+    touchReport(r.id, new Date().toISOString());
+    showReportsMenu = false;
+    saveViewState(`accounts-mode-${entityId}`, reportMode);
+    reloadBalance();
   }
 
   function toggleHideZeroBalance() {
@@ -449,8 +494,8 @@
 </script>
 
 <div class="accounts-page">
-  {#if showOptionsMenu || showExportMenu}
-    <div class="menu-backdrop" onclick={() => { showOptionsMenu = false; showExportMenu = false; }} role="presentation"></div>
+  {#if showOptionsMenu || showExportMenu || showReportsMenu}
+    <div class="menu-backdrop" onclick={() => { showOptionsMenu = false; showExportMenu = false; showReportsMenu = false; }} role="presentation"></div>
   {/if}
   <header class="page-header">
     <div class="header-left">
@@ -471,22 +516,44 @@
         </select>
       </div>
       
-      <!-- Saved Reports dropdown (placeholder — see saved-reports-ux.md) -->
-      <button
-        class="saved-reports-btn"
-        disabled
-        title="Saved reports coming soon"
-      >
-        ⭐ {$t('accounts.saved_reports')}
-      </button>
+      <!-- Saved Reports dropdown -->
+      <div class="menu-wrap">
+        <button
+          class="saved-reports-btn"
+          onclick={() => (showReportsMenu = !showReportsMenu)}
+          disabled={!entity}
+          title="Save & recall report configurations"
+        >
+          ⭐ {$t('accounts.saved_reports')} ▾
+        </button>
+        {#if showReportsMenu}
+          <div class="dropdown-menu wide" role="menu">
+            <button class="menu-item" role="menuitem" onclick={openSaveDialog}>
+              💾 {$t('accounts.save_current')}
+            </button>
+            {#if $savedReports.length}
+              <div class="menu-divider"></div>
+              {#each $savedReports as r (r.id)}
+                <div class="report-row">
+                  <button class="menu-item report-load" role="menuitem" onclick={() => applySavedReport(r)}>
+                    <span class="report-name">{r.name}</span>
+                    <span class="report-sub">{modeLabel(r.mode)} · {fieldLabel(r.endField)}</span>
+                  </button>
+                  <button class="report-del" title={$t('common.delete')} onclick={() => deleteReport(r.id)}>✕</button>
+                </div>
+              {/each}
+            {/if}
+          </div>
+        {/if}
+      </div>
 
-      <!-- Export menu: native JSON works; CSV/XLSX are stubbed (see domain/export.md) -->
+      <!-- Export menu: native JSON works; CSV/XLSX/PDF stubbed; Print uses the browser dialog -->
       <div class="menu-wrap">
         <button
           class="saved-reports-btn"
           onclick={() => (showExportMenu = !showExportMenu)}
           disabled={!entity}
-          title="Export the current books / view"
+          title="Export or print the current view"
         >
           ⬇ {exporting ? $t('common.loading') : $t('accounts.export')} ▾
         </button>
@@ -501,70 +568,57 @@
             <button class="menu-item" role="menuitem" disabled title="Coming soon">
               📊 {$t('accounts.export_xlsx')}
             </button>
+            <button class="menu-item" role="menuitem" disabled title="Coming soon">
+              📕 {$t('accounts.export_pdf')}
+            </button>
+            <div class="menu-divider"></div>
+            <button class="menu-item" role="menuitem" onclick={printReport}>
+              🖨 {$t('accounts.print')}
+            </button>
           </div>
         {/if}
       </div>
 
-      <!-- Print / Save-as-PDF via the browser print dialog -->
-      <button
-        class="saved-reports-btn"
-        onclick={printReport}
-        disabled={!entity}
-        title="Print or save the current view as PDF"
-      >
-        🖨 {$t('accounts.print')}
-      </button>
-
       <!-- Spacer to push date picker right -->
       <div class="spacer"></div>
       
+      <!-- Date field: a basis selector (fixed vs relative) + a date picker (fixed) or resolved date. -->
+      {#snippet dateField(id: string, label: string, field: DateFieldValue)}
+        <div class="date-input-row">
+          <label for={id}>{label}:</label>
+          <div class="smart-date">
+            <select class="basis-select" bind:value={field.basis} onchange={onDateFieldChange} aria-label="{label} basis">
+              <option value="fixed">{$t('accounts.basis_fixed')}</option>
+              {#each RELATIVE_TOKENS as tok}
+                <option value={tok}>{$t(`accounts.basis_${tok}`)}</option>
+              {/each}
+            </select>
+            {#if field.basis === 'fixed'}
+              <input type="date" {id} bind:value={field.fixedDate} oninput={handleDateInput} onblur={handleDateBlur} />
+            {:else}
+              <span class="resolved-date" title={$t('accounts.resolves_to')}>{resolveField(field)}</span>
+            {/if}
+          </div>
+        </div>
+      {/snippet}
+
       <!-- Date picker group (right-aligned) -->
       <div class="date-picker-group">
-        <!-- Date picker - conditional based on report mode -->
         <div class="date-picker">
           {#if requiresDateRange}
-            <!-- Date range: vertical stack -->
             <div class="date-range-stack">
-              <div class="date-input-row">
-                <label for="start-date">{$t('accounts.from_date')}:</label>
-                <input 
-                  type="date" 
-                  id="start-date"
-                  bind:value={startDate}
-                  oninput={handleDateInput}
-                  onblur={handleDateBlur}
-                />
-              </div>
-              <div class="date-input-row">
-                <label for="end-date">{$t('accounts.to_date')}:</label>
-                <input 
-                  type="date" 
-                  id="end-date"
-                  bind:value={endDate}
-                  oninput={handleDateInput}
-                  onblur={handleDateBlur}
-                />
-              </div>
+              {#if startField}{@render dateField('start-date', $t('accounts.from_date'), startField)}{/if}
+              {@render dateField('end-date', $t('accounts.to_date'), endField)}
             </div>
           {:else}
-            <!-- Single "As of" date -->
-            <div class="date-input-row">
-              <label for="as-of-date">{$t('accounts.as_of')}:</label>
-              <input 
-                type="date" 
-                id="as-of-date"
-                bind:value={endDate}
-                oninput={handleDateInput}
-                onblur={handleDateBlur}
-              />
-            </div>
+            {@render dateField('as-of-date', $t('accounts.as_of'), endField)}
           {/if}
         </div>
-        
+
         <!-- Add Column button (compact icon-only) -->
-        <button 
-          class="add-column-btn" 
-          disabled 
+        <button
+          class="add-column-btn"
+          disabled
           title="Multi-column view coming soon"
         >
           +
@@ -595,17 +649,30 @@
           <button class="menu-item check" role="menuitemcheckbox" aria-checked={showClosedAccounts} onclick={toggleShowClosedAccounts}>
             <span class="check-box">{showClosedAccounts ? '☑' : '☐'}</span> {$t('accounts.show_closed')}
           </button>
-          <div class="menu-divider"></div>
-          <div class="menu-label">{$t('accounts.date_preset')}</div>
-          {#each datePresets as p}
-            <button class="menu-item" role="menuitem" onclick={() => applyDatePreset(p)}>
-              {$t(`accounts.preset_${p}`)}
-            </button>
-          {/each}
         </div>
       {/if}
     </div>
   </div>
+
+  <!-- Save Report dialog -->
+  {#if showSaveDialog}
+    <div class="dialog-backdrop" onclick={() => (showSaveDialog = false)} role="presentation">
+      <div class="save-dialog" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <h3>{$t('accounts.save_report')}</h3>
+        <label for="save-name">{$t('accounts.report_name')}</label>
+        <!-- svelte-ignore a11y_autofocus -->
+        <input id="save-name" bind:value={saveName} autofocus placeholder={$t('accounts.report_name')}
+          onkeydown={(e) => { if (e.key === 'Enter') confirmSaveReport(); if (e.key === 'Escape') showSaveDialog = false; }} />
+        <div class="dialog-summary">
+          {modeLabel(reportMode)} · {requiresDateRange && startField ? `${fieldLabel(startField)} → ` : ''}{fieldLabel(endField)}
+        </div>
+        <div class="dialog-actions">
+          <button class="btn-tool" onclick={() => (showSaveDialog = false)}>{$t('common.cancel')}</button>
+          <button class="btn-tool btn-primary" onclick={confirmSaveReport} disabled={!saveName.trim()}>{$t('common.save')}</button>
+        </div>
+      </div>
+    </div>
+  {/if}
   
   {#if !entity}
     <div class="loading">{$t('common.loading')}</div>
@@ -889,6 +956,51 @@
   .menu-item.check .check-box { font-size: 0.95rem; }
   .menu-divider { height: 1px; background: var(--border-light); margin: 0.25rem 0; }
   .menu-label { padding: 0.3rem 0.6rem 0.15rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+
+  /* Saved-report rows in the Reports dropdown */
+  .report-row { display: flex; align-items: stretch; }
+  .report-row .report-load { flex: 1; flex-direction: column; align-items: flex-start; gap: 0.05rem; }
+  .report-name { font-weight: 500; }
+  .report-sub { font-size: 0.72rem; color: var(--text-muted); }
+  .report-del {
+    background: none; border: none; color: var(--text-muted); cursor: pointer;
+    padding: 0 0.5rem; border-radius: var(--radius-sm); font-size: 0.8rem;
+  }
+  .report-del:hover { background: var(--danger, #f87171); color: #fff; }
+
+  /* Smart date field: basis selector + fixed picker / resolved date */
+  .smart-date { display: flex; align-items: center; gap: 0.35rem; }
+  .basis-select {
+    font-size: 0.78rem; padding: 0.15rem 0.25rem;
+    border: 1px solid var(--border-color); border-radius: var(--radius-sm);
+    background: var(--bg-secondary); color: var(--text-primary); max-width: 11rem;
+  }
+  .resolved-date {
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    font-size: 0.8rem; color: var(--text-secondary);
+    padding: 0.15rem 0.4rem; border: 1px dashed var(--border-color); border-radius: var(--radius-sm);
+  }
+
+  /* Save-report dialog */
+  .dialog-backdrop {
+    position: fixed; inset: 0; z-index: 100;
+    background: rgba(0, 0, 0, 0.4); display: flex; align-items: center; justify-content: center;
+  }
+  .save-dialog {
+    background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg);
+    padding: var(--space-lg); width: min(24rem, 90vw); display: flex; flex-direction: column; gap: 0.5rem;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+  }
+  .save-dialog h3 { margin: 0 0 0.25rem; font-size: 1rem; }
+  .save-dialog label { font-size: 0.8rem; color: var(--text-secondary); }
+  .save-dialog input {
+    padding: 0.45rem 0.6rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);
+    background: var(--bg-secondary); color: var(--text-primary); font-size: 0.9rem;
+  }
+  .dialog-summary { font-size: 0.78rem; color: var(--text-muted); }
+  .dialog-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem; }
+  .btn-primary { background: var(--accent-color); color: #fff; border-color: var(--accent-color); }
+  .btn-primary:disabled { opacity: 0.5; cursor: default; }
 
   /* Synthetic "(direct)" breakdown row for a parent account's own postings */
   .report-row.rr-direct .rr-label { font-style: italic; color: var(--text-muted); }

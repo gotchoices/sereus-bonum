@@ -126,28 +126,36 @@ export default {
     mode_income_statement: 'Income Statement',
     mode_cash_flow: 'Cash Flow',
     mode_custom: 'Custom',
-    // Saved reports & multi-column (future features)
+    // Saved reports
     saved_reports: 'Reports',
+    save_current: 'Save current view…',
+    save_report: 'Save report',
+    report_name: 'Report name',
     add_column: 'Add Column',
-    // View options menu (display filters + relative date presets)
+    // View options menu (display filters)
     view_options: 'View',
     hide_zero: 'Hide zero-balance accounts',
     show_closed: 'Show closed accounts',
     direct: 'direct',
-    date_preset: 'Date preset',
-    preset_today: 'Today',
-    preset_this_month: 'This month',
-    preset_last_month: 'Last month',
-    preset_this_quarter: 'This quarter',
-    preset_this_year: 'This year',
-    preset_last_year: 'Last year',
-    preset_all_time: 'All time',
+    // Date basis (relative vs fixed) — a saved report with a relative basis auto-adjusts
+    resolves_to: 'Resolved date',
+    basis_fixed: 'Fixed date',
+    basis_today: 'Today',
+    basis_som: 'Start of this month',
+    basis_eom: 'End of this month',
+    basis_soq: 'Start of this quarter',
+    basis_eoq: 'End of this quarter',
+    basis_soy: 'Start of this year',
+    basis_eoy: 'End of this year',
+    basis_soly: 'Start of last year',
+    basis_eoly: 'End of last year',
     // Export / print
     export: 'Export',
     export_native: 'Native Bonum file (.json)',
     export_csv: 'CSV (.csv)',
     export_xlsx: 'Excel (.xlsx)',
-    print: 'Print',
+    export_pdf: 'PDF (.pdf)',
+    print: 'Print / Save as PDF…',
   },
   
   ledger: {

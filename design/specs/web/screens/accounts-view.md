@@ -81,10 +81,17 @@ Single date selector. All accounts show totals from beginning of time through th
 ```
 Date range required. Income/Expense accounts only show transactions within this range.
 
+**Fixed vs. relative dates (basis selector):** each date field has a **basis** selector beside it. The basis
+is either **Fixed date** (a literal date picker) or a **relative token** — *Today, Start/End of this month,
+Start/End of this quarter, Start/End of this year, Start/End of last year*. When a relative basis is chosen,
+the date input is replaced by the **resolved date** (read-only), recomputed against the current date at
+load/render time. This is what lets a **saved report auto-adjust**: a report saved as "End of this year"
+always resolves to the current year's end, not a frozen date. The stored value is
+`{ basis, fixedDate }` per field (see [saved-reports-ux.md](./saved-reports-ux.md)).
+
 **Behavior:**
-- Dates persist per entity (saved in local storage)
-- Changing date triggers data reload
-- Only reloads on blur (not on every keystroke)
+- Date fields (basis + fixed date) persist per entity in local storage
+- Changing the basis reloads immediately; editing a fixed date reloads on blur (not per keystroke)
 
 ## Account Display
 
@@ -150,18 +157,19 @@ reloads. Manual date entry (above) still works alongside presets.
 
 **Navigate to Ledger:** Click any account name
 
-**Export:** An **Export ▾** menu. *Native Bonum `.json` dump* (the entity's full books, re-importable — see
-[domain/export.md](../../domain/export.md) and the native restore in [domain/import.md](../../domain/import.md))
-is implemented; *CSV* and *Excel (.xlsx)* of the current view are stubbed (disabled, "coming soon").
+**Export / Print:** An **Export ▾** menu holds all output. *Native Bonum `.json` dump* (the entity's full
+books, re-importable — see [domain/export.md](../../domain/export.md) and the native restore in
+[domain/import.md](../../domain/import.md)) is implemented; *CSV*, *Excel (.xlsx)*, and *structured PDF* of
+the current view are stubbed. The menu's **Print / Save as PDF…** item opens the browser print dialog (a
+print stylesheet drops nav/toolbar/assistant and prints just the report; "Save as PDF" there is the casual
+PDF path). Print lives under Export rather than as its own icon — casual printing is the browser's job; a
+structured PDF is the future *PDF (.pdf)* export (download, then print).
 
-**Print / PDF:** A **🖨 Print** button opens the browser print dialog with a print stylesheet that drops app
-chrome (nav, toolbar, assistant) and prints just the report. "Save as PDF" in that dialog is the initial PDF
-path; a dedicated PDF pipeline is future.
+**Save Report:** A **⭐ Reports ▾** menu — "Save current view…" captures the current mode, date fields
+(bases), and display filters as a named report; the saved list loads a report on click (auto-adjusting its
+relative dates) or deletes it. See [saved-reports-ux.md](./saved-reports-ux.md).
 
 **Add Column:** (stubbed, disabled) - Adds another date range column for period comparison
-([saved-reports-ux.md](./saved-reports-ux.md))
-
-**Save Report:** (stubbed, disabled) - Saves current view configuration as named report
 ([saved-reports-ux.md](./saved-reports-ux.md))
 
 ## Persistence

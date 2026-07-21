@@ -1,73 +1,79 @@
 /**
- * Saved Reports Store (Placeholder)
- * 
- * Future feature: Save and recall report configurations
- * See: design/specs/web/screens/saved-reports-ux.md
+ * Saved Reports — named Accounts-View configurations, persisted to localStorage (shared across entities).
+ * See design/specs/web/screens/saved-reports-ux.md.
+ *
+ * Dates are stored as DateFieldValue (a basis + a fixed date), NOT resolved ISO strings — so a report
+ * saved with a relative basis ("End of this year") auto-adjusts every time it's loaded. See the date
+ * abstraction in accounts-view.md.
  */
 
+import { browser } from '$app/environment';
 import { writable } from 'svelte/store';
+
+export type ReportMode = 'balance_sheet' | 'trial_balance' | 'income_statement' | 'cash_flow' | 'custom';
+
+/**
+ * A date field's value: a `basis` that is either `'fixed'` (use `fixedDate`) or a relative token
+ * (`today`, `eom`, `eoy`, `eoly`, …) resolved against the current date at load/render time.
+ */
+export interface DateFieldValue {
+  basis: string;      // 'fixed' | relative token
+  fixedDate: string;  // ISO date, meaningful when basis === 'fixed' (also the last resolved value)
+}
 
 export interface SavedReport {
   id: string;
   name: string;
-  mode: 'balance_sheet' | 'trial_balance' | 'income_statement' | 'cash_flow' | 'custom';
-  columns: Array<{
-    name: string;
-    startDate?: string;
-    endDate: string;
-  }>;
-  showVariance: boolean;
-  selectedGroups?: string[];  // For Custom mode
+  mode: ReportMode;
+  endField: DateFieldValue;
+  startField?: DateFieldValue;   // only for period modes (income statement / cash flow)
+  hideZeroBalance: boolean;
+  showClosedAccounts: boolean;
   createdAt: string;
   lastUsedAt: string;
 }
 
-export const savedReports = writable<SavedReport[]>([]);
+const KEY = 'bonum-saved-reports';
 
-/**
- * Save current report configuration
- * @param name - Report name
- * @param config - Current view configuration
- */
-export function saveReport(name: string, config: Partial<SavedReport>): void {
-  // TODO: Implement saving report to localStorage
-  console.log('[SavedReports] Save not implemented yet:', name, config);
+function load(): SavedReport[] {
+  if (!browser) return [];
+  try {
+    const raw = localStorage.getItem(KEY);
+    return raw ? (JSON.parse(raw) as SavedReport[]) : [];
+  } catch {
+    return [];
+  }
 }
 
-/**
- * Load a saved report
- * @param reportId - Report ID to load
- */
-export function loadReport(reportId: string): SavedReport | null {
-  // TODO: Implement loading report from localStorage
-  console.log('[SavedReports] Load not implemented yet:', reportId);
-  return null;
+export const savedReports = writable<SavedReport[]>(load());
+
+if (browser) {
+  savedReports.subscribe((list) => {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(list));
+    } catch (e) {
+      console.warn('[SavedReports] persist failed', e);
+    }
+  });
 }
 
-/**
- * Delete a saved report
- * @param reportId - Report ID to delete
- */
-export function deleteReport(reportId: string): void {
-  // TODO: Implement deleting report from localStorage
-  console.log('[SavedReports] Delete not implemented yet:', reportId);
+/** Insert or overwrite by name (case-insensitive), preserving id/createdAt of an existing same-name report. */
+export function upsertReport(report: SavedReport): void {
+  savedReports.update((list) => {
+    const i = list.findIndex((r) => r.name.toLowerCase() === report.name.toLowerCase());
+    if (i >= 0) {
+      const copy = [...list];
+      copy[i] = { ...report, id: list[i].id, createdAt: list[i].createdAt };
+      return copy;
+    }
+    return [...list, report];
+  });
 }
 
-/**
- * Rename a saved report
- * @param reportId - Report ID to rename
- * @param newName - New name
- */
-export function renameReport(reportId: string, newName: string): void {
-  // TODO: Implement renaming report in localStorage
-  console.log('[SavedReports] Rename not implemented yet:', reportId, newName);
+export function deleteReport(id: string): void {
+  savedReports.update((list) => list.filter((r) => r.id !== id));
 }
 
-/**
- * Initialize saved reports from localStorage
- */
-export function initializeSavedReports(): void {
-  // TODO: Load from localStorage on app startup
-  console.log('[SavedReports] Initialize not implemented yet');
+export function touchReport(id: string, now: string): void {
+  savedReports.update((list) => list.map((r) => (r.id === id ? { ...r, lastUsedAt: now } : r)));
 }
-
