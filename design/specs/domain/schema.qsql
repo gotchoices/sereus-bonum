@@ -63,7 +63,7 @@ create table partner (
 create table account (
   id text primary key,
   entity_id text,
-  account_group_id text,
+  account_group_id text not null,
   parent_id text null,
   code text null,
   name text,
@@ -78,9 +78,13 @@ create table account (
   created_at text,
   updated_at text,
   constraint uq_account_code unique (entity_id, code),
+  -- Single logical path: an account's parent is either its group (parent_id null) or another account;
+  -- a nested account MUST share its parent account's group, so group-path + account-path never fork.
+  -- The composite FK enforces this (and is not enforced when parent_id is null). uq target for that FK:
+  constraint uq_account_id_group unique (id, account_group_id),
   constraint fk_account_entity foreign key (entity_id) references entity(id),
   constraint fk_account_group foreign key (account_group_id) references account_group(id),
-  constraint fk_account_parent foreign key (parent_id) references account(id),
+  constraint fk_account_parent foreign key (parent_id, account_group_id) references account(id, account_group_id),
   constraint fk_account_unit foreign key (unit) references unit(code),
   constraint fk_account_partner foreign key (partner_id) references partner(id),
   constraint fk_account_linked foreign key (linked_account_id) references account(id),

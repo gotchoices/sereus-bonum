@@ -129,8 +129,23 @@ export class ImportService {
 
     const parentOf = (a: ParsedAccount): ParsedAccount | undefined =>
       a.parentGuid ? accByGuid.get(a.parentGuid) : undefined;
-    // A source node whose name matches a catalog group → represented by that group, not an account.
-    const isGroupNode = (a: ParsedAccount): boolean => groupByName.has(a.name.toLowerCase());
+
+    // Which source accounts are referenced by transaction entries, and which are ancestors of one.
+    const usedGuids = new Set<string>();
+    for (const t of parsed.transactions) for (const e of t.entries) usedGuids.add(e.accountGuid);
+    const ancestorOfUsed = new Set<string>();
+    for (const guid of usedGuids) {
+      let cur = accByGuid.get(guid) && parentOf(accByGuid.get(guid)!);
+      while (cur) { ancestorOfUsed.add(cur.guid); cur = parentOf(cur); }
+    }
+
+    // A source node is represented by a catalog group (not an account) only if its name matches a
+    // catalog group AND it is NOT posted to directly. A node with its own postings must become an
+    // account — a group can't hold a balance — otherwise it splits into a group PLUS a same-named
+    // sibling account (the "Vehicles" duplicate). When it becomes an account, its children nest under
+    // it as sub-accounts and its direct balance shows on the account's "(direct)" row.
+    const isGroupNode = (a: ParsedAccount): boolean =>
+      groupByName.has(a.name.toLowerCase()) && !usedGuids.has(a.guid);
 
     const groupPath = (g: AccountGroup): string => {
       const parts: string[] = [];
@@ -144,15 +159,6 @@ export class ImportService {
       while (cur) { parts.unshift(cur.name); cur = parentOf(cur); }
       return parts.join(':');
     };
-
-    // Which source accounts are referenced by transaction entries, and which are ancestors of one.
-    const usedGuids = new Set<string>();
-    for (const t of parsed.transactions) for (const e of t.entries) usedGuids.add(e.accountGuid);
-    const ancestorOfUsed = new Set<string>();
-    for (const guid of usedGuids) {
-      let cur = accByGuid.get(guid) && parentOf(accByGuid.get(guid)!);
-      while (cur) { ancestorOfUsed.add(cur.guid); cur = parentOf(cur); }
-    }
 
     // A source node becomes a Bonum account iff it's used, or it's a non-group intermediate that a
     // used account descends from (so the parent chain is preserved). Group nodes never do.
@@ -274,6 +280,10 @@ export class ImportService {
     result.accountsCreated = created.length;
     // Order parents before children so the account.parent_id FK is satisfied on insert.
     const accounts = topoSortByParent(created);
+    // Force each nested account into its parent's group (single-path invariant). Seed with existing
+    // accounts' groups so children of a pre-existing matched account resolve correctly.
+    const seedGroups = new Map((await ds.getAccounts(plan.entityId)).map((a) => [a.id, a.accountGroupId]));
+    normalizeAccountGroupsToParent(accounts, seedGroups);
 
     // Build the transactions + entries to write.
     const transactions: Transaction[] = [];
@@ -323,7 +333,7 @@ export class ImportService {
 }
 
 /** Order accounts so each parent precedes its children (satisfies the account.parent_id FK on insert). */
-function topoSortByParent(accounts: Account[]): Account[] {
+export function topoSortByParent(accounts: Account[]): Account[] {
   const byId = new Map(accounts.map((a) => [a.id, a]));
   const out: Account[] = [];
   const seen = new Set<string>();
@@ -335,6 +345,23 @@ function topoSortByParent(accounts: Account[]): Account[] {
   };
   for (const a of accounts) visit(a);
   return out;
+}
+
+/**
+ * Single-path invariant: a nested account must live in its parent account's group (enforced by the
+ * composite FK fk_account_parent). Given accounts in topo order (parents first), force each child into
+ * its parent's group. `seedGroups` supplies groups for parents outside the set (e.g. pre-existing
+ * matched accounts when merging into an entity). Mutates in place.
+ */
+export function normalizeAccountGroupsToParent(accounts: Account[], seedGroups?: Map<string, string>): void {
+  const groupById = new Map<string, string>(seedGroups);
+  for (const a of accounts) {
+    if (a.parentId) {
+      const parentGroup = groupById.get(a.parentId);
+      if (parentGroup) a.accountGroupId = parentGroup;
+    }
+    groupById.set(a.id, a.accountGroupId);
+  }
 }
 
 /** GnuCash account type → Bonum account type (see domain/import.md). */

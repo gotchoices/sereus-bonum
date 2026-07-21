@@ -49,7 +49,9 @@ Source programs (GnuCash) keep one deep account tree; Bonum splits nesting into 
 **group catalog** and per-entity **account parent-child** links. An import maps the two apart:
 
 - **General source levels** whose names match a Bonum catalog group (e.g. `Fixed Assets`,
-  `Current Assets`, `Income`) map to that **shared group** and create no account.
+  `Current Assets`, `Income`) map to that **shared group** and create no account — **but only if the node
+  has no direct postings of its own.** A node that is posted to directly must become an account (a group
+  can't hold a balance), even if its name matches a catalog group; its children then nest under it.
 - **Specific source levels** below the nearest such group become **entity accounts**, preserving the
   source nesting via account `parentId`. Intermediate nodes are created even if they hold no
   transactions of their own.
@@ -58,6 +60,12 @@ Example: `Assets:Fixed Assets:Jeppson:AOF Loan` → group **Fixed Assets**, acco
 account **AOF Loan**. This keeps per-entity names (`Jeppson`) out of the shared catalog. The group for
 an account is the nearest self-or-ancestor whose name matches the catalog; if none matches, the
 top-level type group (below) is used.
+
+**Catalog name + own balance:** if a source node matches a catalog group name *and* is posted to (e.g.
+`Vehicles` with its own balance plus sub-accounts `Acura`, `Eagle Cap`), it becomes a single **account**
+in its parent group — its own balance shows on its `(direct)` row and the sub-accounts nest under it —
+rather than splitting into a catalog group *plus* a same-named sibling account. This preserves the single
+logical path (see [schema.md](./schema.md#hierarchy)).
 
 ### Books: Type Mapping
 

@@ -114,7 +114,7 @@ A specific ledger account within an entity.
 | `id` | UUID | Yes | Primary key |
 | `entityId` | UUID | Yes | FK → Entity |
 | `accountGroupId` | UUID | Yes | FK → AccountGroup (determines account type) |
-| `parentId` | UUID | No | FK → Account (for hierarchy within entity) |
+| `parentId` | UUID | No | FK → parent Account. When null, the account's parent is its AccountGroup; when set, its parent is that account — and it **must share that account's `accountGroupId`** (composite FK, see Hierarchy) |
 | `code` | String | No | Account number or alpha code (unique within entity) |
 | `name` | String | Yes | Account title |
 | `description` | String | No | Extended description |
@@ -128,9 +128,19 @@ A specific ledger account within an entity.
 | `createdAt` | Timestamp | Yes | Creation timestamp |
 | `updatedAt` | Timestamp | Yes | Last modification |
 
-**Hierarchy:**
+**Hierarchy — one logical path:** An account's parent is **either an AccountGroup** (`parentId` null — the
+account sits directly in `accountGroupId`) **or another Account** (`parentId` set). The group hierarchy and
+the account hierarchy form a *single* path from type root to leaf; it must never fork. Therefore a nested
+account **must live in the same AccountGroup as its parent account**.
+
+This invariant is enforced declaratively by a **composite foreign key**
+`(parent_id, account_group_id) → account(id, account_group_id)` (with a unique key on `(id,
+account_group_id)`): a child row can only exist if its parent has the *same* group. The FK is naturally not
+enforced when `parent_id` is null (account is directly in a group). Import normalizes each nested account
+into its parent's group so this always holds; moving a parent account to another group must move its whole
+account subtree with it.
+
 - `parentId` enables nesting accounts (e.g., "Bank of America" → "BofA Checking", "BofA Savings")
-- Parent must be in same Entity and same AccountGroup
 - Entries can be posted to any level (unlike AccountGroup)
 - Roll-up balances use Exchange rates for mixed-unit children
 

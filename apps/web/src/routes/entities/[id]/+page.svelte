@@ -231,8 +231,10 @@
   }
   
   function expandAll() {
-    const allGroupIds = $accountGroups.map(g => g.id);
-    allGroupIds.forEach(id => expandedGroups[id] = true);
+    // Expand every collapsible node on the path: account groups AND parent accounts (accounts that
+    // are some other account's parent). The account path is part of the same hierarchy.
+    for (const g of $accountGroups) expandedGroups[g.id] = true;
+    for (const a of $accounts) if (a.parentId) expandedGroups[a.parentId] = true;
     expandedGroups = { ...expandedGroups };
     saveViewState(`accounts-expand-${entityId}`, expandedGroups);
   }
@@ -311,7 +313,7 @@
     kind: 'group' | 'account';
     accountId?: string;
     code?: string;
-    toggleId?: string;      // set → row is expand/collapse-able (group id, or 're')
+    toggleId?: string;      // set → row is expand/collapse-able (group id, parent-account id, or 're')
     expanded?: boolean;
     direct?: boolean;       // synthetic "(direct)" row: a parent account's own postings
   }
@@ -325,65 +327,67 @@
     const out = new Map<AccountType, ReportRow[]>();
     if (!balanceData) return out;
 
+    // One logical hierarchy: group-path (group→child-group) then account-path (account→child-account).
+    // Per the schema invariant a nested account shares its parent's group, so groups and accounts are
+    // just two flavours of node on the same path — emitGroup/emitAccount are parallel and each handle
+    // collapse, rolled-up subtotal, and the expand toggle identically (differ only by kind + children).
     const rawById = new Map<string, number>();
     for (const ab of balanceData.accountBalances) rawById.set(ab.accountId, ab.balance);
-    const acctsByGroup = new Map<string, typeof $accounts>();
-    for (const a of $accounts) { (acctsByGroup.get(a.accountGroupId) ?? acctsByGroup.set(a.accountGroupId, []).get(a.accountGroupId)!).push(a); }
+    const push = <T,>(m: Map<string, T[]>, k: string, v: T) => (m.get(k) ?? m.set(k, []).get(k)!).push(v);
     const childGroups = new Map<string, typeof $accountGroups>();
-    for (const g of $accountGroups) if (g.parentId) (childGroups.get(g.parentId) ?? childGroups.set(g.parentId, []).get(g.parentId)!).push(g);
+    for (const g of $accountGroups) if (g.parentId) push(childGroups, g.parentId, g);
+    const rootAccts = new Map<string, typeof $accounts>();     // accounts directly in a group (parent_id null)
+    const childAccts = new Map<string, typeof $accounts>();    // accounts nested under a parent account
+    const acctsByGroup = new Map<string, typeof $accounts>();  // every account by group (for the RE breakdown)
+    for (const a of $accounts) {
+      push(acctsByGroup, a.accountGroupId, a);
+      if (a.parentId) push(childAccts, a.parentId, a);
+      else push(rootAccts, a.accountGroupId, a);
+    }
+    const acctVisible = (a: (typeof $accounts)[number]) => showClosedAccounts || a.isActive;
 
-    const groupHasAccounts = (gid: string): boolean =>
-      (acctsByGroup.get(gid)?.length ?? 0) > 0 || (childGroups.get(gid) ?? []).some((c) => groupHasAccounts(c.id));
-    const groupRawTotal = (gid: string): number => {
+    const acctRaw = (a: (typeof $accounts)[number]): number =>
+      (rawById.get(a.id) ?? 0) + (childAccts.get(a.id) ?? []).reduce((s, k) => s + acctRaw(k), 0);
+    const groupRaw = (gid: string): number => {
       let s = 0;
-      for (const a of acctsByGroup.get(gid) ?? []) s += rawById.get(a.id) ?? 0;
-      for (const c of childGroups.get(gid) ?? []) s += groupRawTotal(c.id);
+      for (const a of rootAccts.get(gid) ?? []) s += acctRaw(a);
+      for (const c of childGroups.get(gid) ?? []) s += groupRaw(c.id);
       return s;
     };
-
-    const acctVisible = (a: (typeof $accounts)[number]): boolean => showClosedAccounts || a.isActive;
+    const groupHasContent = (gid: string): boolean =>
+      (rootAccts.get(gid)?.length ?? 0) > 0 || (childGroups.get(gid) ?? []).some((c) => groupHasContent(c.id));
 
     const build = (type: AccountType): ReportRow[] => {
       const rows: ReportRow[] = [];
-      // Returns the rows for an account subtree, or [] when the zero-balance filter suppresses it.
-      const buildAccount = (acct: (typeof $accounts)[number], depth: number, kids: Map<string, typeof $accounts>): ReportRow[] => {
-        const rawSub = (a: (typeof $accounts)[number]): number =>
-          (rawById.get(a.id) ?? 0) + (kids.get(a.id) ?? []).reduce((s, k) => s + rawSub(k), 0);
-        const kidAccts = (kids.get(acct.id) ?? []).filter(acctVisible).slice().sort(byCodeName);
-        const childRows = kidAccts.flatMap((k) => buildAccount(k, depth + 1, kids));
-        const rolled = presentBalance(rawSub(acct), type);
-        if (hideZeroBalance && rolled === 0 && childRows.length === 0) return [];
-        const out: ReportRow[] = [{ key: `a-${acct.id}`, depth, label: acct.name, code: acct.code || undefined, kind: 'account', accountId: acct.id, amount: rolled }];
-        // A parent account with both its own postings and children shows the rolled-up total on its
-        // own row and its direct postings on a synthetic "(direct)" child row.
-        const ownRaw = rawById.get(acct.id) ?? 0;
-        if (kidAccts.length > 0 && ownRaw !== 0) {
-          out.push({ key: `a-${acct.id}-direct`, depth: depth + 1, label: `(${$t('accounts.direct')})`, kind: 'account', amount: presentBalance(ownRaw, type), direct: true });
+      // Account node: collapsible when it has children; when expanded shows a "(direct)" row for its own
+      // postings (if non-zero) then its child accounts. Returns [] when the zero filter suppresses it.
+      const emitAccount = (a: (typeof $accounts)[number], depth: number): ReportRow[] => {
+        const kids = (childAccts.get(a.id) ?? []).filter(acctVisible).slice().sort(byCodeName);
+        const expanded = kids.length > 0 && (expandedGroups[a.id] ?? false);
+        const childRows: ReportRow[] = [];
+        if (expanded) {
+          const ownRaw = rawById.get(a.id) ?? 0;
+          if (ownRaw !== 0) childRows.push({ key: `a-${a.id}-direct`, depth: depth + 1, label: `(${$t('accounts.direct')})`, kind: 'account', amount: presentBalance(ownRaw, type), direct: true });
+          for (const k of kids) childRows.push(...emitAccount(k, depth + 1));
         }
-        out.push(...childRows);
-        return out;
+        const rolled = presentBalance(acctRaw(a), type);
+        if (hideZeroBalance && rolled === 0 && childRows.length === 0) return [];
+        return [{ key: `a-${a.id}`, depth, label: a.name, code: a.code || undefined, kind: 'account', accountId: a.id, amount: rolled, toggleId: kids.length > 0 ? a.id : undefined, expanded }, ...childRows];
       };
-      const buildGroup = (group: (typeof $accountGroups)[number], depth: number): ReportRow[] => {
-        if (!groupHasAccounts(group.id)) return [];
+      // Group node: same shape — collapsible, rolled-up subtotal; children are its root accounts + child groups.
+      const emitGroup = (group: (typeof $accountGroups)[number], depth: number): ReportRow[] => {
+        if (!groupHasContent(group.id)) return [];
         const expanded = expandedGroups[group.id] ?? false;
         const childRows: ReportRow[] = [];
         if (expanded) {
-          const accts = (acctsByGroup.get(group.id) ?? []).filter(acctVisible);
-          const inGroup = new Set(accts.map((a) => a.id));
-          const kids = new Map<string, typeof $accounts>();
-          const roots: typeof $accounts = [];
-          for (const a of accts) {
-            if (a.parentId && inGroup.has(a.parentId)) (kids.get(a.parentId) ?? kids.set(a.parentId, []).get(a.parentId)!).push(a);
-            else roots.push(a);
-          }
-          for (const r of roots.slice().sort(byCodeName)) childRows.push(...buildAccount(r, depth + 1, kids));
-          for (const c of (childGroups.get(group.id) ?? []).slice().sort(byDisplay)) childRows.push(...buildGroup(c, depth + 1));
+          for (const a of (rootAccts.get(group.id) ?? []).filter(acctVisible).slice().sort(byCodeName)) childRows.push(...emitAccount(a, depth + 1));
+          for (const c of (childGroups.get(group.id) ?? []).slice().sort(byDisplay)) childRows.push(...emitGroup(c, depth + 1));
         }
-        const total = presentBalance(groupRawTotal(group.id), type);
+        const total = presentBalance(groupRaw(group.id), type);
         if (hideZeroBalance && total === 0 && childRows.length === 0) return [];
         return [{ key: `g-${group.id}`, depth, label: group.name, kind: 'group', toggleId: group.id, expanded, amount: total }, ...childRows];
       };
-      for (const g of ($topLevelGroupsByType.get(type) ?? []).slice().sort(byDisplay)) rows.push(...buildGroup(g, 1));
+      for (const g of ($topLevelGroupsByType.get(type) ?? []).slice().sort(byDisplay)) rows.push(...emitGroup(g, 1));
       // Retained Earnings pseudo-node under Equity.
       if (type === 'EQUITY' && showRetainedEarningsInEquity) {
         rows.push({ key: 're', depth: 1, label: $t('accounts.retained_earnings'), kind: 'group', amount: netIncome(), toggleId: retainedEarningsExpandable ? 're' : undefined, expanded: retainedEarningsExpanded });

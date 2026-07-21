@@ -3,6 +3,7 @@
 
 import { getDataService } from '$lib/data';
 import type { Account, Transaction, Entry } from '$lib/data';
+import { topoSortByParent, normalizeAccountGroupsToParent } from './import-service';
 
 export interface BonumBooksFile {
   format: 'bonum-books';
@@ -87,6 +88,10 @@ export async function importNativeBooks(file: BonumBooksFile): Promise<string> {
     };
   });
   file.accounts.forEach((a, i) => { if (a.parentRef) accounts[i].parentId = refToId.get(a.parentRef); });
+  // Parents before children (composite FK on insert), then force nested accounts into their parent's
+  // group (single-path invariant). A well-formed dump is already valid; this also repairs older dumps.
+  const ordered = topoSortByParent(accounts);
+  normalizeAccountGroupsToParent(ordered);
 
   // Transactions + entries.
   const transactions: Transaction[] = [];
@@ -101,6 +106,6 @@ export async function importNativeBooks(file: BonumBooksFile): Promise<string> {
     }
   }
 
-  await ds.bulkImport({ accounts, transactions, entries });
+  await ds.bulkImport({ accounts: ordered, transactions, entries });
   return entity.id;
 }

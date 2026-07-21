@@ -89,6 +89,28 @@ See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
     (§ Print/PDF). Persists filters per entity. Still stubbed: ⭐ Reports, + Add Column, Custom, Cash Flow.
   - ⬜ **Closed-account toggle** logic-verified/typechecked but not visually exercised (native import forces
     `isActive=true`; needs a fixture that retires an account post-import).
+- ✅ **Single logical path + account-level expand + cross-group fix — DONE (this round, SCHEMA_VERSION 4).**
+  - **Model/constraint:** the group-path + account-path are one path that must not fork → a nested account
+    must share its parent account's group. Enforced declaratively by a **composite FK**
+    `(parent_id, account_group_id) → account(id, account_group_id)` (+ `unique(id, account_group_id)`,
+    `account_group_id NOT NULL`). Verified Quereus accepts/enforces it (rejects cross-group + orphan parents).
+  - **Import normalization:** both paths (`native.ts` restore + `import-service` merge) now topo-sort and
+    force each nested account into its parent's group via shared `normalizeAccountGroupsToParent()` — so a
+    cross-group source imports valid and nests correctly instead of orphaning.
+  - **Catalog-name-plus-balance fix:** `resolveAccounts` no longer treats a source node as a catalog group
+    if it's posted to directly (`isGroupNode = matchesCatalog && !usedInTxns`). This was the "Vehicles"
+    duplicate: a used node matching catalog group "Vehicles" became BOTH the group (children diverted into
+    `grp-vehicles`) AND a same-named sibling account in `grp-fixed-assets`. Now it becomes one account with
+    its sub-accounts nested + a `(direct)` row. Verified end-to-end (Vehicles $93,360 = (direct) $3,180 +
+    Acura + Eagle Cap). Spec: `import.md` (§ Account Mapping).
+  - **Unified render:** `reportRowsByType` collapsed the group vs account render into one parallel
+    `emitGroup`/`emitAccount` pair (per user's "single path" framing; chose a JS unification over a DB view —
+    the report needs date-filtered rolled subtotals + interactive collapse a static path view can't carry).
+  - **Account-level expand/collapse:** parent *accounts* are now collapsible like groups (toggle extends down
+    the account path); Expand-All covers parent accounts. Verified: cross-group fixture imports, renders one
+    seamless path (Boats → (direct) + Sailboat), Boats collapses independently, balanced.
+  - Specs: `schema.md` (§ Hierarchy — one logical path), `schema.qsql` ×2, `accounts-view.md` (§ Hierarchy,
+    § Expand/Collapse). **Old data must be re-imported** (constraint + version bump).
 - ✅ **CORRECTNESS: balance sheet not balancing (Imbalance −$460,087.04) — FIXED.** Not an import
   problem (data summed to 0). `getBalanceSheet` presented credit-normal totals with `Math.abs(...)`,
   which is only right when a total has its usual sign; Kyle's equity is net-**debit**, so abs kept it

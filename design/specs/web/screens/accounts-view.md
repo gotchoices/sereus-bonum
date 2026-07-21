@@ -88,10 +88,13 @@ Date range required. Income/Expense accounts only show transactions within this 
 
 ## Account Display
 
-**Hierarchy:** Type → Account Group (nested to any depth) → Account (nested by parent account to any
-depth). Accounts appear under their real parent, beside their siblings; a parent's amount is the rolled-up
-subtotal of itself and its descendants. Applies to **every report mode** (Balance Sheet, Trial Balance,
-Income Statement, …) — they share one presentation.
+**Hierarchy — one logical path:** Type → Account Group (nested to any depth) → Account (nested by parent
+account to any depth). The group-path and the account-path concatenate into a **single seamless path** to
+each leaf; groups and accounts are just two flavours of node on that path and differ only by colour/weight
+(groups bold, accounts lighter) — the same indentation ladder, toggles, and rolled-up subtotals apply to
+both. A nested account always lives in its parent account's group (enforced by the schema — see
+[domain/schema.md](../../domain/schema.md)), so the path can never fork. A parent's amount is the rolled-up
+subtotal of itself and its descendants. Applies to **every report mode** — they share one presentation.
 
 **Dual indentation (names forward, amounts reverse):** the 5 top-level account types sit at level 0 with
 their amounts flush to the **right** column. Each level deeper indents the **name forward** by a fixed
@@ -101,9 +104,11 @@ and leaves room for additional period columns (multi-period reports). Amounts us
 convention (credit-normal balances read positive; see [rules.md](../../domain/rules.md)).
 
 **Expand/Collapse:**
-- Click type or group header to expand/collapse its contents
-- "Expand All" and "Collapse All" buttons at top
-- Expansion state persists per entity
+- Every node with children is collapsible — **account groups AND parent accounts** (the toggle extends all
+  the way down the account path, not just the group path). Collapsed → the node shows only its rolled-up
+  subtotal; expanded → its children (and, for a parent account, its `(direct)` row).
+- Click a node's toggle to expand/collapse; "Expand All" / "Collapse All" cover groups and parent accounts.
+- Expansion state persists per entity (keyed by group id or account id).
 
 **Account Names:**
 - All account names are hyperlinks
