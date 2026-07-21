@@ -83,11 +83,22 @@ Single date selector. All accounts show totals from beginning of time through th
 ```
 Date range required. Income/Expense accounts only show transactions within this range.
 
-**Fixed vs. relative dates (basis selector):** each date field has a **basis** selector beside it. The basis
-is either **Fixed date** (a literal date picker) or a **relative token**. The offered tokens depend on the
-field's role: **"as of" / "to"** dates offer *end-of* tokens (Today, End of this month/quarter/year, End of
-last year); **"from"** dates offer *start-of* tokens (Today, Start of this month/quarter/year, Start of last
-year). For anything outside those, pick a Fixed date. When a relative basis is chosen,
+**Date selector lives above its number column.** Each report column's date field(s) sit in the header row
+directly **above that column's numbers** (basis dropdown stacked over the fixed picker / resolved date). No
+separate "Column N" title — the date *is* the column header. The **[+]** to add a column is at the left of
+the header row (columns grow leftward into the past).
+
+**Fixed vs. relative dates (basis selector).** Each date field's basis is **Fixed date** (a literal picker)
+or a **relative token** from the vocabulary **Start/End · current/previous · month/quarter/year** (plus
+**Today** for the rightmost column). "as of"/"to" fields offer the *End* variants; "from" fields the *Start*
+variants.
+
+**Chained relative resolution (multi-column).** The **rightmost** column resolves against **today**. Each
+column to its **left** resolves against **its right neighbour's resolved date**, and offers only the
+**"previous"** tokens — so putting "End previous year" on each left column yields a descending sequence
+(2026, 2025, 2024 …), reaching arbitrarily far back *abstractly*. ("current" is excluded from left columns
+because it would just duplicate the neighbour.) A Fixed-date column acts as an absolute anchor for the
+columns to its left. Stored as `{ basis, fixedDate }` per field, so saved reports auto-adjust. When a relative basis is chosen,
 the date input is replaced by the **resolved date** (read-only), recomputed against the current date at
 load/render time. This is what lets a **saved report auto-adjust**: a report saved as "End of this year"
 always resolves to the current year's end, not a frozen date. The stored value is
@@ -110,9 +121,15 @@ subtotal of itself and its descendants. Applies to **every report mode** — the
 **Dual indentation (names forward, amounts reverse):** the 5 top-level account types sit at level 0 with
 their amounts flush to the **right** column. Each level deeper indents the **name forward** by a fixed
 step and the **amount in reverse** (rightward-origin) by a fixed small step (~2–3 characters) — so deeper
-detail steps left in the number column while its label steps right. This keeps deep hierarchies compact
-and leaves room for additional period columns (multi-period reports). Amounts use accounting sign
-convention (credit-normal balances read positive; see [rules.md](../../domain/rules.md)).
+detail steps left in the number column while its label steps right. The reverse-indent funnel applies **per
+column** in multi-column reports (each number column funnels independently, and the columns stay aligned).
+Amounts use accounting sign convention (credit-normal balances read positive; see
+[rules.md](../../domain/rules.md)).
+
+**Layout — one aligned grid, content-sized columns.** The report is a single grid: a name column plus one
+number column per report column. Each number column **sizes to its own content** (its widest figure + the
+funnel range); the page sizes to the columns it contains, and if the whole grid is wider than the viewport
+it **scrolls horizontally** (rather than cramming numbers together).
 
 **Expand/Collapse:**
 - Every node with children is collapsible — **account groups AND parent accounts** (the toggle extends all

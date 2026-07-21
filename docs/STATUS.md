@@ -674,6 +674,20 @@ From story 04 (Alt F):
 - ⬜ Update backend to handle multiple date ranges
 - ⬜ Update export to multi-column format
 
+#### ✅ Report grid + chained relative dates — DONE (this round)
+- ✅ **Layout rewrite → CSS grid** (subgrid rows): name column + one number column per report column; each
+  number column sizes to content (`max-content`), the whole grid scrolls horizontally if wider than the
+  viewport. **Reverse-indent funnel restored** and now applies per column (columns stay aligned).
+- ✅ **Date selector lives above its number column** (basis dropdown stacked over the fixed picker / resolved
+  date); no "Column N" title. `[+]` at the left adds columns leftward (into the past); `✕` per column removes.
+- ✅ **New date vocabulary**: Start/End · current/previous · month/quarter/year (+ Today for rightmost). Old
+  tokens (som/eom/…) migrated on load.
+- ✅ **Chained relative resolution**: rightmost resolves vs today; each left column vs its right neighbour's
+  resolved date, "previous"-only — so "End previous year" chains 2026→2025→2024. Verified: 3-col prepend →
+  2024-12-31 | 2025-12-31 | fixed-2026, per-column ✓ Balanced.
+- ⬜ Follow-ups: variance ($/%) columns; sticky name column on wide scroll; prune now-dead CSS (old
+  card/verification rules → svelte-check unused-selector warnings); page max-width bumped to 1200px.
+
 #### ✅ Multi-column reports — DONE (except variance)
 - ✅ `columns[]` model (each: name + endField/startField); `[+]` add (≤12) / ✕ remove / inline rename in the
   date bar. Per-column data (one `getBalanceSheet` per column), one amount column per row, per-column footer

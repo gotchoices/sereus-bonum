@@ -24,33 +24,38 @@
   type ReportMode = 'balance_sheet' | 'trial_balance' | 'income_statement' | 'cash_flow' | 'custom';
 
   // --- Date abstraction ---------------------------------------------------
-  // A date field carries a `basis`: 'fixed' (use fixedDate) or a relative token resolved against today.
-  // Storing the basis (not a resolved date) lets a saved report auto-adjust — "End of this year" always
-  // means the current year's end. See accounts-view.md § Date Inputs.
-  const todayIso = () => new Date().toISOString().split('T')[0];
-  // Relative tokens offered per field role: "end" dates (As of / To) get end-of-period; "start" dates
-  // (From) get start-of-period. For anything else the user picks a Fixed date.
-  const END_TOKENS = ['today', 'eom', 'eoq', 'eoy', 'eoly'] as const;
-  const START_TOKENS = ['today', 'som', 'soq', 'soy', 'soly'] as const;
-  function resolveToken(token: string): string {
-    const now = new Date();
-    const y = now.getFullYear(), m = now.getMonth(), q = Math.floor(m / 3) * 3;
-    const iso = (d: Date) => d.toISOString().split('T')[0];
+  // A date field's `basis` is 'fixed' (use fixedDate) or a relative token {c|p}{m|q|y}-{start|end}
+  // ("current/previous month/quarter/year"), or 'today'. Storing the basis (not a resolved date) lets a
+  // saved report auto-adjust. Columns resolve as a CHAIN (see resolvedColumns): the rightmost column
+  // resolves against today; each column left of it resolves against its right neighbour's resolved date
+  // and offers only "previous" tokens — so left columns reach abstractly into prior periods.
+  const isoOf = (d: Date) => d.toISOString().split('T')[0];
+  const todayIso = () => isoOf(new Date());
+  const parseISO = (s: string): Date => { const [y, m, d] = s.split('-').map(Number); return new Date(y, (m ?? 1) - 1, d ?? 1); };
+  function resolveTokenDate(token: string, ref: Date): Date {
+    const y = ref.getFullYear(), m = ref.getMonth(), q = Math.floor(m / 3) * 3;
     switch (token) {
-      case 'today': return iso(now);
-      case 'som': return iso(new Date(y, m, 1));
-      case 'eom': return iso(new Date(y, m + 1, 0));
-      case 'soq': return iso(new Date(y, q, 1));
-      case 'eoq': return iso(new Date(y, q + 3, 0));
-      case 'soy': return iso(new Date(y, 0, 1));
-      case 'eoy': return iso(new Date(y, 11, 31));
-      case 'soly': return iso(new Date(y - 1, 0, 1));
-      case 'eoly': return iso(new Date(y - 1, 11, 31));
-      default: return iso(now);
+      case 'today': return ref;
+      case 'cm-start': return new Date(y, m, 1);       case 'cm-end': return new Date(y, m + 1, 0);
+      case 'pm-start': return new Date(y, m - 1, 1);   case 'pm-end': return new Date(y, m, 0);
+      case 'cq-start': return new Date(y, q, 1);       case 'cq-end': return new Date(y, q + 3, 0);
+      case 'pq-start': return new Date(y, q - 3, 1);   case 'pq-end': return new Date(y, q, 0);
+      case 'cy-start': return new Date(y, 0, 1);       case 'cy-end': return new Date(y, 11, 31);
+      case 'py-start': return new Date(y - 1, 0, 1);   case 'py-end': return new Date(y - 1, 11, 31);
+      default: return ref;
     }
   }
-  const resolveField = (f: DateFieldValue): string => (f.basis === 'fixed' ? f.fixedDate : resolveToken(f.basis));
-  const fieldLabel = (f: DateFieldValue): string => (f.basis === 'fixed' ? f.fixedDate : $t(`accounts.basis_${f.basis}`));
+  // Token option lists by field role (end = as-of/to, start = from) and column position. Non-rightmost
+  // columns get only "previous" tokens (they chain off the column to their right).
+  const endTokens = (rightmost: boolean): string[] =>
+    rightmost ? ['today', 'cm-end', 'cq-end', 'cy-end', 'pm-end', 'pq-end', 'py-end'] : ['pm-end', 'pq-end', 'py-end'];
+  const startTokens = (rightmost: boolean): string[] =>
+    rightmost ? ['cm-start', 'cq-start', 'cy-start', 'pm-start', 'pq-start', 'py-start'] : ['pm-start', 'pq-start', 'py-start'];
+  // Migrate the previous token names (single-column era) → the current vocabulary.
+  const TOKEN_MIGRATE: Record<string, string> = { som: 'cm-start', eom: 'cm-end', soq: 'cq-start', eoq: 'cq-end', soy: 'cy-start', eoy: 'cy-end', soly: 'py-start', eoly: 'py-end' };
+  const migrateField = (f: DateFieldValue): DateFieldValue =>
+    f && f.basis !== 'fixed' && TOKEN_MIGRATE[f.basis] ? { ...f, basis: TOKEN_MIGRATE[f.basis] } : f;
+  const fieldLabel = (f: DateFieldValue): string => (f.basis === 'fixed' ? f.fixedDate : $t(`accounts.basis_${migrateField(f).basis}`));
   
   // Get entity ID from route
   let entityId = $derived($page.params.id!);
@@ -69,7 +74,7 @@
   // View state - persisted
   let expandedGroups = $state<Record<string, boolean>>({});
   let reportMode = $state<ReportMode>('balance_sheet');
-  let columns = $state<ReportColumn[]>([makeColumn('Column 1')]);
+  let columns = $state<ReportColumn[]>([makeColumn('')]);
   let retainedEarningsExpanded = $state(false);
 
   // Per-column balance data (index-aligned with `columns`).
@@ -102,15 +107,16 @@
       // Restore columns, migrating older persisted shapes: {columns} → {endField,startField} → {endDate,startDate}.
       const saved = loadViewState<any>(`accounts-dates-${entityId}`, null);
       if (saved?.columns?.length) {
-        columns = saved.columns;
+        columns = saved.columns.map((c: ReportColumn) =>
+          ({ ...c, endField: migrateField(c.endField), startField: c.startField ? migrateField(c.startField) : undefined }));
       } else if (saved?.endField) {
-        columns = [makeColumn('Column 1', saved.endField, saved.startField ?? undefined)];
+        columns = [makeColumn('', migrateField(saved.endField), saved.startField ? migrateField(saved.startField) : undefined)];
       } else if (saved?.endDate) {
-        columns = [makeColumn('Column 1',
+        columns = [makeColumn('',
           { basis: 'fixed', fixedDate: saved.endDate },
           saved.startDate ? { basis: 'fixed', fixedDate: saved.startDate } : undefined)];
       } else {
-        columns = [makeColumn('Column 1')];
+        columns = [makeColumn('')];
       }
 
       log.ui.debug('[Accounts] Loaded view state for entity:', entityId);
@@ -126,10 +132,27 @@
     }
   });
   
-  // Load balance data for every column (one getBalanceSheet per column period).
+  // Chained resolution: rightmost column resolves against today; each column to its left resolves against
+  // its right neighbour's resolved end date. Returns index-aligned { end, start? } ISO strings.
+  let resolvedColumns = $derived.by<{ end: string; start?: string }[]>(() => {
+    const res: { end: string; start?: string }[] = columns.map(() => ({ end: '' }));
+    let ref = new Date();
+    for (let i = columns.length - 1; i >= 0; i--) {
+      const c = columns[i];
+      const end = c.endField.basis === 'fixed' ? c.endField.fixedDate : isoOf(resolveTokenDate(c.endField.basis, ref));
+      const start = c.startField
+        ? (c.startField.basis === 'fixed' ? c.startField.fixedDate : isoOf(resolveTokenDate(c.startField.basis, ref)))
+        : undefined;
+      res[i] = { end, start };
+      ref = parseISO(end);
+    }
+    return res;
+  });
+
+  // Load balance data for every column (one getBalanceSheet per resolved column period).
   async function loadColumns(ds: Awaited<ReturnType<typeof getDataService>>) {
-    balanceByColumn = await Promise.all(columns.map((c) =>
-      ds.getBalanceSheet(entityId, resolveField(c.endField), c.startField ? resolveField(c.startField) : undefined)));
+    const rc = resolvedColumns;
+    balanceByColumn = await Promise.all(columns.map((_, i) => ds.getBalanceSheet(entityId, rc[i].end, rc[i].start)));
   }
 
   async function loadEntityData() {
@@ -180,21 +203,20 @@
   }
 
   // --- Column management ---------------------------------------------------
+  // Columns grow leftward into the past: the rightmost stays the today-anchor, and a new column is
+  // PREPENDED as an "End previous year" period (chains one period back from the current leftmost).
   function addColumn() {
     if (columns.length >= MAX_COLUMNS) return;
-    const prev = columns[columns.length - 1];
-    columns = [...columns, makeColumn(`Column ${columns.length + 1}`,
-      { ...prev.endField }, prev.startField ? { ...prev.startField } : (requiresDateRange ? defaultStartField() : undefined))];
+    const y = new Date().getFullYear();
+    const newCol = makeColumn('', { basis: 'py-end', fixedDate: `${y - 1}-12-31` },
+      requiresDateRange ? { basis: 'py-start', fixedDate: `${y - 1}-01-01` } : undefined);
+    columns = [newCol, ...columns];
     reloadBalance();
   }
   function removeColumn(id: string) {
     if (columns.length <= 1) return;
     columns = columns.filter((c) => c.id !== id);
     reloadBalance();
-  }
-  function renameColumn(id: string, name: string) {
-    columns = columns.map((c) => (c.id === id ? { ...c, name } : c));
-    persistViewState();
   }
 
   // Print/PDF: the browser print dialog renders the report (print CSS hides app chrome).
@@ -208,7 +230,7 @@
   let requiresDateRange = $derived(
     reportMode === 'income_statement' || reportMode === 'cash_flow'
   );
-  const defaultStartField = (): DateFieldValue => ({ basis: 'soy', fixedDate: `${new Date().getFullYear()}-01-01` });
+  const defaultStartField = (): DateFieldValue => ({ basis: 'cy-start', fixedDate: `${new Date().getFullYear()}-01-01` });
 
   // Auto-manage each column's start-date field for modes that require a range (default: start of this year).
   $effect(() => {
@@ -287,7 +309,7 @@
   }
   function applySavedReport(r: SavedReport) {
     reportMode = r.mode;
-    columns = r.columns.map((c) => makeColumn(c.name, { ...c.endField }, c.startField ? { ...c.startField } : undefined));
+    columns = r.columns.map((c) => makeColumn(c.name, migrateField(c.endField), c.startField ? migrateField(c.startField) : undefined));
     hideZeroBalance = r.hideZeroBalance;
     showClosedAccounts = r.showClosedAccounts;
     touchReport(r.id, new Date().toISOString());
@@ -598,56 +620,40 @@
         {/if}
       </div>
 
-      <!-- Spacer to push date picker right -->
-      <div class="spacer"></div>
-      
-      <!-- Date field: a basis selector (fixed vs relative token) + a date picker (fixed) or resolved date. -->
-      {#snippet dateField(id: string, label: string, field: DateFieldValue, tokens: readonly string[])}
-        <div class="date-input-row">
-          <label for={id}>{label}:</label>
-          <div class="smart-date">
-            <select class="basis-select" bind:value={field.basis} onchange={onDateFieldChange} aria-label="{label} basis">
-              <option value="fixed">{$t('accounts.basis_fixed')}</option>
-              {#each tokens as tok}
-                <option value={tok}>{$t(`accounts.basis_${tok}`)}</option>
-              {/each}
-            </select>
-            {#if field.basis === 'fixed'}
-              <input type="date" {id} bind:value={field.fixedDate} oninput={handleDateInput} onblur={handleDateBlur} />
-            {:else}
-              <span class="resolved-date" title={$t('accounts.resolves_to')}>{resolveField(field)}</span>
-            {/if}
-          </div>
-        </div>
-      {/snippet}
-
-      <!-- Date/column group (right-aligned). Each column is an independent period. -->
-      <div class="date-picker-group">
-        <div class="columns-bar">
-          {#each columns as col, ci (col.id)}
-            <div class="col-config">
-              {#if columns.length > 1}
-                <div class="col-head">
-                  <input class="col-name" bind:value={col.name} onchange={() => renameColumn(col.id, col.name)} aria-label="Column name" />
-                  <button class="col-del" onclick={() => removeColumn(col.id)} title={$t('accounts.remove_column')}>✕</button>
-                </div>
-              {/if}
-              <div class="date-stack">
-                {#if requiresDateRange}
-                  {#if col.startField}{@render dateField(`c${ci}-from`, $t('accounts.from_date'), col.startField, START_TOKENS)}{/if}
-                  {@render dateField(`c${ci}-to`, $t('accounts.to_date'), col.endField, END_TOKENS)}
-                {:else}
-                  {@render dateField(`c${ci}-asof`, $t('accounts.as_of'), col.endField, END_TOKENS)}
-                {/if}
-              </div>
-            </div>
-          {/each}
-          <button class="add-column-btn" onclick={addColumn} disabled={columns.length >= MAX_COLUMNS}
-            title={columns.length >= MAX_COLUMNS ? $t('accounts.max_columns') : $t('accounts.add_column')}>+</button>
-        </div>
-      </div>
     </div>
   </header>
+
+  <!-- A single date cell: compact vertical stack — basis selector on top, fixed picker / resolved below. -->
+  {#snippet dateCell(label: string, field: DateFieldValue, tokens: string[], resolved: string)}
+    <div class="date-cell">
+      <select class="basis-select" bind:value={field.basis} onchange={onDateFieldChange} aria-label="{label} basis">
+        <option value="fixed">{$t('accounts.basis_fixed')}</option>
+        {#each tokens as tok}<option value={tok}>{$t(`accounts.basis_${tok}`)}</option>{/each}
+      </select>
+      {#if field.basis === 'fixed'}
+        <input type="date" bind:value={field.fixedDate} oninput={handleDateInput} onblur={handleDateBlur} aria-label={label} />
+      {:else}
+        <span class="resolved-date" title="{label}: {$t('accounts.resolves_to')}">{resolved}</span>
+      {/if}
+    </div>
+  {/snippet}
+
+  <!-- A column's header: its date field(s) sit directly above its number column. -->
+  {#snippet columnHeader(col: ReportColumn, ci: number)}
+    {@const rightmost = ci === columns.length - 1}
+    {@const rc = resolvedColumns[ci]}
+    <div class="colhdr">
+      {#if columns.length > 1}
+        <button class="col-del" onclick={() => removeColumn(col.id)} title={$t('accounts.remove_column')}>✕</button>
+      {/if}
+      {#if requiresDateRange && col.startField}
+        {@render dateCell($t('accounts.from_date'), col.startField, startTokens(rightmost), rc?.start ?? '')}
+        {@render dateCell($t('accounts.to_date'), col.endField, endTokens(rightmost), rc?.end ?? '')}
+      {:else}
+        {@render dateCell($t('accounts.as_of'), col.endField, endTokens(rightmost), rc?.end ?? '')}
+      {/if}
+    </div>
+  {/snippet}
   
   <!-- Toolbar -->
   <div class="toolbar">
@@ -706,114 +712,134 @@
       <p class="text-muted">{$t('accounts.create_prompt')}</p>
     </div>
   {:else}
-    <div class="accounts-grid" style="--ncols: {columns.length}">
-      <!-- Column header row (multi-column only) — names align above their amount columns -->
-      {#if columns.length > 1}
-        <div class="column-headers">
-          <span class="ch-spacer"></span>
-          {#each columns as col (col.id)}
-            <span class="ch-name" title={col.name}>{col.name}</span>
+    <!-- Report as one aligned grid: name column + one number column per report column. Columns size to
+         content and the whole grid scrolls horizontally if it exceeds the viewport. Date selectors sit in
+         the header row directly above their number column. -->
+    <div class="report-scroll">
+      <div class="report-grid" style="grid-template-columns: minmax(max-content, 1fr) {columns.map(() => 'max-content').join(' ')};">
+        <!-- Header: [+] add (leftward = older periods) then each column's date selector -->
+        <div class="grid-row grid-header">
+          <div class="gcell gname gh-lead">
+            <button class="add-column-btn" onclick={addColumn} disabled={columns.length >= MAX_COLUMNS}
+              title={columns.length >= MAX_COLUMNS ? $t('accounts.max_columns') : $t('accounts.add_column')}>+</button>
+          </div>
+          {#each columns as col, ci (col.id)}
+            <div class="gcell gamount gh-col">{@render columnHeader(col, ci)}</div>
           {/each}
         </div>
-      {/if}
 
-      {#each visibleTypes as type}
-        {@const info = typeInfo[type]}
-        <section class="type-section">
-          <div class="type-header" style="--type-color: {info.color}">
-            <span class="type-icon">{info.icon}</span>
-            <span class="type-name">{$t(`account_types.${type}`)}</span>
-            <span class="rr-amounts" class:multi={columns.length > 1}>
-              {#each typeTotals(type) as tot}
-                <span class="type-total">{formatCurrency(tot, entity.baseUnit)}</span>
+        {#each visibleTypes as type}
+          {@const info = typeInfo[type]}
+          <div class="grid-row grid-type" style="--type-color: {info.color}; --depth: 0;">
+            <div class="gcell gname">
+              <span class="type-icon">{info.icon}</span>
+              <span class="type-name">{$t(`account_types.${type}`)}</span>
+            </div>
+            {#each typeTotals(type) as tot}
+              <div class="gcell gamount type-total">{formatCurrency(tot, entity.baseUnit)}</div>
+            {/each}
+          </div>
+          {#each reportRowsByType.get(type) ?? [] as row (row.key)}
+            <div class="grid-row grid-body {row.kind}" class:rr-direct={row.direct} style="--depth: {row.depth};">
+              <div class="gcell gname">
+                {#if row.toggleId}
+                  <button class="rr-toggle" onclick={() => toggleReportRow(row.toggleId)} aria-label="Toggle">{row.expanded ? '▼' : '▶'}</button>
+                {:else}
+                  <span class="rr-toggle rr-toggle-empty"></span>
+                {/if}
+                {#if row.code}<span class="rr-code">{row.code}</span>{/if}
+                {#if row.accountId}
+                  <a href="/ledger/{row.accountId}" class="rr-label link" title={row.label}>{row.label}</a>
+                {:else}
+                  <span class="rr-label">{row.label}</span>
+                {/if}
+              </div>
+              {#each row.amounts as amt}
+                <div class="gcell gamount">{formatCurrency(amt, entity.baseUnit)}</div>
               {/each}
-            </span>
-          </div>
+            </div>
+          {/each}
+        {/each}
 
-          <!-- Single continuous path: name indents forward; one amount cell per column. -->
-          <div class="report-rows">
-            {#each reportRowsByType.get(type) ?? [] as row (row.key)}
-              <div class="report-row {row.kind}" class:rr-direct={row.direct} style="--depth: {row.depth}">
-                <span class="rr-name">
-                  {#if row.toggleId}
-                    <button class="rr-toggle" onclick={() => toggleReportRow(row.toggleId)} aria-label="Toggle">
-                      {row.expanded ? '▼' : '▶'}
-                    </button>
-                  {:else}
-                    <span class="rr-toggle rr-toggle-empty"></span>
-                  {/if}
-                  {#if row.code}<span class="rr-code">{row.code}</span>{/if}
-                  {#if row.accountId}
-                    <a href="/ledger/{row.accountId}" class="rr-label link" title={row.label}>{row.label}</a>
-                  {:else}
-                    <span class="rr-label">{row.label}</span>
-                  {/if}
-                </span>
-                <span class="rr-amounts" class:multi={columns.length > 1}>
-                  {#each row.amounts as amt}
-                    <span class="rr-amount">{formatCurrency(amt, entity.baseUnit)}</span>
-                  {/each}
-                </span>
+        <!-- Footer: per-column verification (BS/TB) or net income (Income Statement), aligned under columns -->
+        {#if balanceByColumn.length && (reportMode === 'balance_sheet' || reportMode === 'trial_balance')}
+          <div class="grid-row grid-foot" style="--depth: 0;">
+            <div class="gcell gname foot-label">{$t('accounts.verification')}</div>
+            {#each columns as col, ci (col.id)}
+              {@const bd = balanceByColumn[ci]}
+              <div class="gcell gamount foot-cell" class:imbalanced={!isBalancedOf(bd)}>
+                {#if isBalancedOf(bd)}✓ {$t('accounts.balanced')}{:else}⚠ {formatCurrency(imbalanceOf(bd), entity.baseUnit)}{/if}
               </div>
             {/each}
           </div>
-        </section>
-      {/each}
-
-      <!-- Footer: per-column verification (BS/TB) or net income (Income Statement) -->
-      {#if balanceByColumn.length}
-        <div class="footer-section">
-          {#if reportMode === 'balance_sheet' || reportMode === 'trial_balance'}
+        {/if}
+        {#if balanceByColumn.length && reportMode === 'income_statement'}
+          <div class="grid-row grid-foot" style="--depth: 0;">
+            <div class="gcell gname foot-label">{$t('accounts.net_income')}</div>
             {#each columns as col, ci (col.id)}
               {@const bd = balanceByColumn[ci]}
-              <div class="verification-row" class:balanced={isBalancedOf(bd)} class:imbalanced={!isBalancedOf(bd)}>
-                <span class="verification-label">{columns.length > 1 ? col.name : $t('accounts.verification')}:</span>
-                <div class="verification-values">
-                  <span class="verification-item">{$t('account_types.ASSET')}: {formatCurrency(bd?.totalAssets ?? 0, entity.baseUnit)}</span>
-                  <span class="verification-equals">=</span>
-                  <span class="verification-item">{$t('accounts.liabilities_plus_equity')}: {formatCurrency(liabPlusEquityOf(bd), entity.baseUnit)}</span>
-                  {#if isBalancedOf(bd)}
-                    <span class="verification-status">✓ {$t('accounts.balanced')}</span>
-                  {:else}
-                    <span class="verification-status warning">⚠ {$t('accounts.imbalance')}: {formatCurrency(imbalanceOf(bd), entity.baseUnit)}</span>
-                  {/if}
-                </div>
-              </div>
+              <div class="gcell gamount foot-cell" class:negative={netIncomeOf(bd) < 0}>{formatCurrency(netIncomeOf(bd), entity.baseUnit)}</div>
             {/each}
-          {/if}
-
-          {#if reportMode === 'income_statement'}
-            {#each columns as col, ci (col.id)}
-              {@const bd = balanceByColumn[ci]}
-              <div class="net-income-row">
-                {#if columns.length > 1}<div class="net-income-calculation"><span class="calc-label">{col.name}</span></div>{/if}
-                <div class="net-income-calculation">
-                  <span class="calc-label">{$t('account_types.INCOME')}:</span>
-                  <span class="calc-value">{formatCurrency(typeTotalOf(bd, 'INCOME'), entity.baseUnit)}</span>
-                </div>
-                <div class="net-income-calculation">
-                  <span class="calc-label">{$t('account_types.EXPENSE')}:</span>
-                  <span class="calc-value">({formatCurrency(typeTotalOf(bd, 'EXPENSE'), entity.baseUnit)})</span>
-                </div>
-                <div class="net-income-total">
-                  <span class="total-label">{$t('accounts.net_income')}</span>
-                  <span class="total-value" class:negative={netIncomeOf(bd) < 0}>{formatCurrency(netIncomeOf(bd), entity.baseUnit)}</span>
-                </div>
-              </div>
-            {/each}
-          {/if}
-        </div>
-      {/if}
+          </div>
+        {/if}
+      </div>
     </div>
   {/if}
 </div>
 
 <style>
   .accounts-page {
-    max-width: 900px;
+    max-width: 1200px;
     margin: 0 auto;
   }
-  
+
+  /* ===== Report grid: name column + one number column per report column ===== */
+  /* Columns size to content; the whole grid scrolls horizontally when it exceeds the viewport. */
+  .report-scroll { overflow-x: auto; padding-bottom: 0.4rem; }
+  .report-grid { display: grid; }
+  .grid-row { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: center; }
+
+  .gcell { padding: 0.22rem var(--space-sm); min-width: 0; }
+  .gname {
+    display: flex; align-items: center; gap: 0.35rem; white-space: nowrap;
+    padding-left: calc(var(--depth, 0) * 1.4rem + var(--space-md));
+  }
+  .gamount { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  /* Reverse-indent funnel: deeper rows step their numbers left. */
+  .grid-body .gamount, .grid-type .gamount { padding-right: calc(var(--depth, 0) * 1.4rem + var(--space-md)); }
+
+  /* Header row: each column's date selector sits above its number column. */
+  .grid-header { align-items: end; }
+  .grid-header .gcell { padding-bottom: 0.4rem; }
+  .gh-lead { align-items: flex-end; }
+  .gh-col { display: flex; justify-content: flex-end; }
+  .colhdr { position: relative; display: flex; flex-direction: column; gap: 0.25rem; padding-right: var(--space-md); min-width: 8rem; }
+  .date-cell { display: flex; flex-direction: column; gap: 0.1rem; }
+  .date-cell .basis-select { width: 100%; max-width: none; }
+  .date-cell input[type="date"] { width: 100%; box-sizing: border-box; padding: 0.15rem 0.3rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-primary); font-size: 0.8rem; }
+  .date-cell .resolved-date { text-align: right; }
+  .colhdr .col-del { position: absolute; top: -0.4rem; right: -0.1rem; }
+
+  /* Type header rows */
+  .grid-type { background: var(--bg-secondary); border-left: 4px solid var(--type-color); font-weight: 600; margin-top: var(--space-md); }
+  .grid-type .type-icon { font-size: 1.05rem; }
+  .grid-type .type-name { flex: 1; }
+  .grid-type .gamount { padding-top: 0.4rem; padding-bottom: 0.4rem; font-size: 0.95rem; }
+
+  /* Body rows */
+  .grid-body { border-top: 1px solid var(--border-light); }
+  .grid-body.account { color: var(--text-secondary); font-weight: 400; }
+  .grid-body.group { font-weight: 600; }
+  .grid-body:hover { background: var(--bg-hover); }
+  .grid-body.rr-direct .rr-label { font-style: italic; color: var(--text-muted); }
+  .grid-body.rr-direct .gamount { color: var(--text-muted); }
+
+  /* Footer row (verification / net income per column) */
+  .grid-foot { border-top: 2px solid var(--border-color); font-weight: 600; margin-top: var(--space-sm); }
+  .grid-foot .foot-label { color: var(--text-muted); font-weight: 500; }
+  .foot-cell { padding-right: var(--space-md); color: var(--success, #22a06b); white-space: nowrap; }
+  .foot-cell.imbalanced, .foot-cell.negative { color: var(--danger, #f87171); }
+
   .page-header {
     display: flex;
     align-items: flex-start;
