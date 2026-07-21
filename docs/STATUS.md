@@ -685,8 +685,10 @@ From story 04 (Alt F):
 - ✅ **Chained relative resolution**: rightmost resolves vs today; each left column vs its right neighbour's
   resolved date, "previous"-only — so "End previous year" chains 2026→2025→2024. Verified: 3-col prepend →
   2024-12-31 | 2025-12-31 | fixed-2026, per-column ✓ Balanced.
-- ⬜ Follow-ups: variance ($/%) columns; sticky name column on wide scroll; prune now-dead CSS (old
-  card/verification rules → svelte-check unused-selector warnings); page max-width bumped to 1200px.
+- ✅ Cleanups done: pruned the now-dead card/verification/date-picker CSS (page's unused-selector warnings
+  gone, 89→84 — remainder are in other files); **sticky name column** (stays pinned while number columns
+  scroll horizontally, hairline separator). Report is now one bordered card with the grid inside.
+- ⬜ Follow-up: variance ($/%) columns (see below); page max-width bumped to 1200px.
 
 #### ✅ Multi-column reports — DONE (except variance)
 - ✅ `columns[]` model (each: name + endField/startField); `[+]` add (≤12) / ✕ remove / inline rename in the

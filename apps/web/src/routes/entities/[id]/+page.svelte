@@ -796,14 +796,19 @@
   /* ===== Report grid: name column + one number column per report column ===== */
   /* Columns size to content; the whole grid scrolls horizontally when it exceeds the viewport. */
   .report-scroll { overflow-x: auto; padding-bottom: 0.4rem; }
-  .report-grid { display: grid; }
+  .report-grid { display: grid; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); }
   .grid-row { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: center; }
 
   .gcell { padding: 0.22rem var(--space-sm); min-width: 0; }
+  /* Name column sticks to the left while the number columns scroll horizontally. */
   .gname {
     display: flex; align-items: center; gap: 0.35rem; white-space: nowrap;
     padding-left: calc(var(--depth, 0) * 1.4rem + var(--space-md));
+    position: sticky; left: 0; z-index: 2;
+    background: var(--bg-card); box-shadow: 1px 0 0 var(--border-light);
   }
+  .grid-type .gname { background: var(--bg-secondary); }
+  .grid-body:hover .gname { background: var(--bg-hover); }
   .gamount { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
   /* Reverse-indent funnel: deeper rows step their numbers left. */
   .grid-body .gamount, .grid-type .gamount { padding-right: calc(var(--depth, 0) * 1.4rem + var(--space-md)); }
@@ -884,52 +889,19 @@
     font-size: 0.875rem;
   }
   
-  .spacer {
-    flex: 1;
-    min-width: var(--space-lg);
-  }
-  
-  .date-picker-group {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-  }
-  
-  .date-picker {
-    font-size: 0.875rem;
-  }
-  
-  .date-range-stack {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-xs);
-    padding: var(--space-sm);
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-  }
-  
-  .date-input-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-  }
-  
-  .mode-selector label,
-  .date-input-row label {
+  .mode-selector label {
     color: var(--text-muted);
     min-width: 3rem;
   }
-  
-  .mode-selector select,
-  .date-input-row input {
+
+  .mode-selector select {
     padding: var(--space-xs) var(--space-sm);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     background: var(--bg-primary);
     font-size: 0.875rem;
   }
-  
+
   /* Header dropdown trigger buttons (Reports / Export) */
   .saved-reports-btn {
     padding: var(--space-xs) var(--space-md);
@@ -959,26 +931,13 @@
   }
   .add-column-btn:hover:not(:disabled) { background: var(--bg-hover); }
 
-  /* Multi-column date bar: one config box per column, side by side, then the [+] add button */
-  .columns-bar { display: flex; align-items: flex-start; gap: var(--space-sm); flex-wrap: wrap; }
-  .col-config {
-    display: flex; flex-direction: column; gap: 0.3rem;
-    padding: var(--space-xs) var(--space-sm);
-    background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-sm);
-  }
-  .col-head { display: flex; align-items: center; gap: 0.25rem; }
-  .col-name {
-    flex: 1; min-width: 6rem; width: 8rem; font-size: 0.8rem; font-weight: 600;
-    padding: 0.1rem 0.35rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);
-    background: var(--bg-primary); color: var(--text-primary);
-  }
+  /* Per-column remove (✕) button in a column header */
   .col-del {
     background: none; border: none; color: var(--text-muted); cursor: pointer;
     padding: 0 0.3rem; border-radius: var(--radius-sm); font-size: 0.8rem;
   }
   .col-del:hover { background: var(--danger, #f87171); color: #fff; }
-  .date-stack { display: flex; flex-direction: column; gap: var(--space-xs); }
-  
+
   /* Improved contrast for disabled items in dark mode */
   .saved-reports-btn:disabled,
   .add-column-btn:disabled {
@@ -1052,9 +1011,7 @@
   }
   .sr-del:hover { background: var(--danger, #f87171); color: #fff; }
 
-  /* Smart date field: basis selector + fixed picker / resolved date (kept on one compact line) */
-  .smart-date { display: flex; align-items: center; gap: 0.35rem; flex-wrap: nowrap; white-space: nowrap; }
-  .smart-date input[type="date"] { width: 9.5rem; }
+  /* Basis selector + resolved-date chip (used in the per-column date header). */
   .basis-select {
     font-size: 0.78rem; padding: 0.15rem 0.25rem;
     border: 1px solid var(--border-color); border-radius: var(--radius-sm);
@@ -1087,10 +1044,6 @@
   .btn-primary { background: var(--accent-color); color: #fff; border-color: var(--accent-color); }
   .btn-primary:disabled { opacity: 0.5; cursor: default; }
 
-  /* Synthetic "(direct)" breakdown row for a parent account's own postings */
-  .report-row.rr-direct .rr-label { font-style: italic; color: var(--text-muted); }
-  .report-row.rr-direct .rr-amount { color: var(--text-muted); }
-
   /* Print / Save-as-PDF: show only the report, drop app chrome. */
   @media print {
     :global(.global-nav), :global(.ai-assistant),
@@ -1098,8 +1051,7 @@
       display: none !important;
     }
     .accounts-page { padding: 0; }
-    .report-row { break-inside: avoid; }
-    .type-section { break-inside: avoid; }
+    .grid-row { break-inside: avoid; }
   }
   
   .loading, .empty-state {
@@ -1108,62 +1060,7 @@
     color: var(--text-muted);
   }
   
-  .accounts-grid {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-md);
-  }
-  
-  .type-section {
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-lg);
-    overflow: hidden;
-  }
-  
-  .type-header {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    padding: var(--space-md) var(--space-lg);
-    background: var(--bg-secondary);
-    border-left: 4px solid var(--type-color);
-    font-weight: 600;
-  }
-  
-  .type-icon { font-size: 1.1rem; }
-  .type-name { flex: 1; }
-  .type-total { font-family: var(--font-mono); font-size: 1rem; white-space: nowrap; }
-
-  /* Column width for multi-column mode (header names + amount cells share it). */
-  .accounts-grid { --col-w: 7.5rem; }
-
-  /* Multi-column header row — names align above their amount columns. */
-  .column-headers { display: flex; align-items: flex-end; padding: 0.15rem var(--space-lg) 0.35rem; }
-  .ch-spacer { flex: 1; }
-  .ch-name {
-    width: var(--col-w); text-align: right; padding-right: var(--space-md);
-    font-size: 0.72rem; font-weight: 700; color: var(--text-muted);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
-
-  /* Hierarchical rows: name indents forward. Single column → amount reverse-indents by --depth (funnel);
-     multi-column → fixed-width aligned amount cells (no reverse-indent). */
-  .report-rows { display: flex; flex-direction: column; }
-  .report-row {
-    display: flex;
-    align-items: center;
-    padding: 0.22rem var(--space-lg);
-    border-top: 1px solid var(--border-light);
-  }
-  .report-row.group { font-weight: 600; }
-  .report-row.account { color: var(--text-secondary); font-weight: 400; }
-  .rr-name {
-    display: flex; align-items: center; gap: 0.35rem;
-    min-width: 0; flex: 1;
-    padding-left: calc(var(--depth) * 1.4rem);
-    overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
-  }
+  /* Name-cell controls (toggle triangle, account code, label) — used inside .gname grid cells. */
   .rr-toggle {
     background: none; border: none; cursor: pointer; color: var(--text-muted);
     width: 1rem; padding: 0; font-size: 0.7rem; flex-shrink: 0;
@@ -1173,134 +1070,4 @@
   .rr-label { overflow: hidden; text-overflow: ellipsis; }
   .rr-label.link { color: inherit; text-decoration: none; }
   .rr-label.link:hover { color: var(--accent-color); text-decoration: underline; }
-  .rr-amounts { display: flex; flex-shrink: 0; }
-  .rr-amount {
-    font-family: var(--font-mono);
-    font-variant-numeric: tabular-nums;
-    text-align: right; white-space: nowrap; flex-shrink: 0;
-  }
-  /* Single column: reverse-indent funnel. */
-  .rr-amounts:not(.multi) .rr-amount { padding-right: calc(var(--depth) * 1.4rem); }
-  /* Multi column: fixed aligned cells (applies to body amounts + header type totals). */
-  .rr-amounts.multi > * { width: var(--col-w); text-align: right; padding-right: var(--space-md); flex-shrink: 0; }
-
-  /* Footer section */
-  .footer-section {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-sm);
-  }
-  
-  .net-worth-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: var(--space-lg);
-    background: var(--bg-card);
-    border: 2px solid var(--accent-color);
-    border-radius: var(--radius-lg);
-    font-size: 1.1rem;
-    font-weight: 600;
-  }
-  
-  .net-worth-value {
-    font-family: var(--font-mono);
-    color: var(--accent-color);
-  }
-  
-  .net-worth-value.negative {
-    color: var(--danger);
-  }
-  
-  .verification-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-    padding: var(--space-md) var(--space-lg);
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-lg);
-    font-size: 0.875rem;
-  }
-  
-  .verification-row.balanced {
-    border-color: var(--success, #22c55e);
-  }
-  
-  .verification-row.imbalanced {
-    border-color: var(--warning, #f59e0b);
-    background: rgba(245, 158, 11, 0.05);
-  }
-  
-  .verification-label {
-    font-weight: 500;
-    color: var(--text-muted);
-  }
-  
-  .verification-values {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    flex: 1;
-    flex-wrap: wrap;
-  }
-  
-  .verification-item {
-    font-family: var(--font-mono);
-  }
-  
-  .verification-equals {
-    color: var(--text-muted);
-  }
-  
-  .verification-status {
-    margin-left: auto;
-    font-weight: 500;
-    color: var(--success, #22c55e);
-  }
-  
-  .verification-status.warning {
-    color: var(--warning, #f59e0b);
-  }
-  
-  /* Net Income (Income Statement mode) */
-  .net-income-row {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-sm);
-    padding: var(--space-lg);
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-lg);
-  }
-  
-  .net-income-calculation {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.9rem;
-    color: var(--text-secondary);
-  }
-  
-  .calc-value {
-    font-family: var(--font-mono);
-  }
-  
-  .net-income-total {
-    display: flex;
-    justify-content: space-between;
-    padding-top: var(--space-sm);
-    margin-top: var(--space-sm);
-    border-top: 2px solid var(--border-color);
-    font-size: 1.1rem;
-    font-weight: 600;
-  }
-  
-  .total-value {
-    font-family: var(--font-mono);
-    color: var(--success, #22c55e);
-  }
-  
-  .total-value.negative {
-    color: var(--danger, #ef4444);
-  }
 </style>
