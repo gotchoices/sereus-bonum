@@ -21,12 +21,17 @@ export interface DateFieldValue {
   fixedDate: string;  // ISO date, meaningful when basis === 'fixed' (also the last resolved value)
 }
 
+export interface SavedColumn {
+  name: string;
+  endField: DateFieldValue;
+  startField?: DateFieldValue;   // only for period modes (income statement / cash flow)
+}
+
 export interface SavedReport {
   id: string;
   name: string;
   mode: ReportMode;
-  endField: DateFieldValue;
-  startField?: DateFieldValue;   // only for period modes (income statement / cash flow)
+  columns: SavedColumn[];        // one per report column (multi-period comparison)
   hideZeroBalance: boolean;
   showClosedAccounts: boolean;
   createdAt: string;

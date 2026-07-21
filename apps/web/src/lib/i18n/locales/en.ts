@@ -131,7 +131,11 @@ export default {
     save_current: 'Save current view…',
     save_report: 'Save report',
     report_name: 'Report name',
-    add_column: 'Add Column',
+    add_column: 'Add column',
+    remove_column: 'Remove column',
+    max_columns: 'Maximum 12 columns',
+    column_one: 'column',
+    column_many: 'columns',
     // View options menu (display filters)
     view_options: 'View',
     hide_zero: 'Hide zero-balance accounts',

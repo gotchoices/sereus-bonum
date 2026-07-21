@@ -51,7 +51,9 @@ The user selects a report mode from a dropdown. The selected mode determines whi
 **Accounts shown:** Pre-selected account groups categorized by cash flow type  
 **How dates work:** Changes in balances during the period (not cumulative)
 
-### Custom (Future)
+### Custom (Deferred — pending scope)
+**Status:** Removed from the mode selector for now; the model/UI for user-selected group sets isn't scoped.
+Re-add once we decide how selection + persistence work (and whether Cash Flow needs it — see below).
 **What it shows:** User-selected account groups  
 **Date input:** "As of" or "From/To" depending on selection  
 **Accounts shown:** User picks which groups to include  
@@ -82,8 +84,10 @@ Single date selector. All accounts show totals from beginning of time through th
 Date range required. Income/Expense accounts only show transactions within this range.
 
 **Fixed vs. relative dates (basis selector):** each date field has a **basis** selector beside it. The basis
-is either **Fixed date** (a literal date picker) or a **relative token** — *Today, Start/End of this month,
-Start/End of this quarter, Start/End of this year, Start/End of last year*. When a relative basis is chosen,
+is either **Fixed date** (a literal date picker) or a **relative token**. The offered tokens depend on the
+field's role: **"as of" / "to"** dates offer *end-of* tokens (Today, End of this month/quarter/year, End of
+last year); **"from"** dates offer *start-of* tokens (Today, Start of this month/quarter/year, Start of last
+year). For anything outside those, pick a Fixed date. When a relative basis is chosen,
 the date input is replaced by the **resolved date** (read-only), recomputed against the current date at
 load/render time. This is what lets a **saved report auto-adjust**: a report saved as "End of this year"
 always resolves to the current year's end, not a frozen date. The stored value is
@@ -169,7 +173,9 @@ structured PDF is the future *PDF (.pdf)* export (download, then print).
 (bases), and display filters as a named report; the saved list loads a report on click (auto-adjusting its
 relative dates) or deletes it. See [saved-reports-ux.md](./saved-reports-ux.md).
 
-**Add Column:** (stubbed, disabled) - Adds another date range column for period comparison
+**Add Column:** The **[+]** button adds a report column (up to 12) for period comparison; each column has
+its own name + date fields and renders its own amount column, with per-column verification/net-income in the
+footer. Columns persist and are saved with reports. Variance ($/%) columns are still future.
 ([saved-reports-ux.md](./saved-reports-ux.md))
 
 ## Persistence

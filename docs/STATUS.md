@@ -674,6 +674,22 @@ From story 04 (Alt F):
 - ⬜ Update backend to handle multiple date ranges
 - ⬜ Update export to multi-column format
 
+#### ✅ Multi-column reports — DONE (except variance)
+- ✅ `columns[]` model (each: name + endField/startField); `[+]` add (≤12) / ✕ remove / inline rename in the
+  date bar. Per-column data (one `getBalanceSheet` per column), one amount column per row, per-column footer
+  verification / net-income, aligned column-name header row. Single column keeps the reverse-indent funnel;
+  multi switches to fixed aligned cells.
+- ✅ Columns persist per entity and save/restore with reports (`SavedReport.columns`). Verified: 2-col save →
+  remove col → load report → back to 2 cols.
+- ✅ Feedback fixes this round: compact one-line date fields (fixed no longer wraps); `.saved-reports-btn`
+  cursor `not-allowed`→`pointer`; renamed dropdown `.report-*`→`.sr-*` (collided with body `.report-row`);
+  **Custom** dropped from the mode selector (deferred); date-basis tokens filtered by role (as-of/to = end-of,
+  from = start-of).
+- ⬜ Variance ($/%) columns; responsive horizontal scroll + sticky names; CSV/XLSX multi-column export.
+- **Persistence audit (per request):** saved reports capture mode + columns(names/date-bases) + hideZero +
+  showClosed. Expand state (groups/accounts, RE-expanded) is intentionally NOT saved per spec. Nothing else
+  applicable is missing.
+
 #### ✅ Saved Reports + abstract dates — DONE (single-column)
 From story 04 (Alt G):
 - ✅ **Abstract dates:** basis selector beside each date field (Fixed vs relative token — Today, Start/End of

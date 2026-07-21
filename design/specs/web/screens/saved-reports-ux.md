@@ -295,11 +295,13 @@ This feature will be built in phases:
 - **Abstract dates** (the basis selector beside each date field) shipped with this phase — see
   [accounts-view.md](./accounts-view.md) § Date Inputs.
 
-### Phase 3: Multi-Column Support
-- Enable "+ Add Column" button
-- Column management (add/remove/rename)
-- Responsive layout with scroll
-- Export multi-column to CSV/Excel
+### Phase 3: Multi-Column Support — DONE (except variance/export)
+- ✅ "[+] Add Column" enabled (up to 12); column management (add/remove/rename in the date bar).
+- ✅ Per-column date fields (each column its own name + endField/startField); one amount column per report
+  column; per-column verification / net-income in the footer.
+- ✅ Columns persist per entity and are stored in saved reports (`SavedReport.columns`).
+- ⬜ Responsive horizontal scroll + sticky name column at many columns (basic wrap for now).
+- ⬜ Export multi-column to CSV/Excel (export itself still stubbed).
 
 ### Phase 4: Variance & Advanced Features
 - Variance columns ($ and %)
