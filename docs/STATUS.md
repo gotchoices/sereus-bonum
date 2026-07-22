@@ -688,7 +688,15 @@ From story 04 (Alt F):
 - ✅ Cleanups done: pruned the now-dead card/verification/date-picker CSS (page's unused-selector warnings
   gone, 89→84 — remainder are in other files); **sticky name column** (stays pinned while number columns
   scroll horizontally, hairline separator). Report is now one bordered card with the grid inside.
-- ⬜ Follow-up: variance ($/%) columns (see below); page max-width bumped to 1200px.
+- ✅ **Column ☰ menu + variance columns — DONE (this round).** Each column header has a ☰ menu (left of its
+  date selector): **Insert older column** (insert-*left*: uniform, preserves the today-anchor, reaches into
+  the past — replaces the old far-left global `+`), **Show change vs. next** (per-gap variance toggle, absent
+  on rightmost), **Remove** (hidden on the last column). Variance (Δ) column shows Δ$ / Δ% / both (format in
+  the View menu), `—` when prior is $0, green up / red down; footer variance shown for net income, blank for
+  BS verification. Slot model (`columnSlots`) interleaves data + variance cells in the grid. Persists per
+  entity (`varianceRight` per column + `varianceFormat`) and saves/restores with reports. Verified end-to-end
+  (2020 vs 2026 → +$24,411.33 / +9.8%). Also pruned unused `.add-column-btn`/`.col-del` CSS.
+- ⬜ Follow-up: page max-width bumped to 1200px; variance in BS footer (net-worth Δ) if wanted later.
 
 #### ✅ Multi-column reports — DONE (except variance)
 - ✅ `columns[]` model (each: name + endField/startField); `[+]` add (≤12) / ✕ remove / inline rename in the

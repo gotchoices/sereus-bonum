@@ -136,6 +136,13 @@ export default {
     max_columns: 'Maximum 12 columns',
     column_one: 'column',
     column_many: 'columns',
+    // Column header menu (☰) + variance
+    column_menu: 'Column options',
+    insert_older: 'Insert older column',
+    show_change: 'Show change vs. next',
+    change: 'Change',
+    variance_format: 'Change columns',
+    variance_both: 'Both',
     // View options menu (display filters)
     view_options: 'View',
     hide_zero: 'Hide zero-balance accounts',

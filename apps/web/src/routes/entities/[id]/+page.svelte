@@ -63,18 +63,21 @@
   
   // Report columns: each is an independent period (name + date basis fields), rendered as its own amount
   // column. A single-column report is just columns.length === 1. Persisted + saved with reports.
-  interface ReportColumn { id: string; name: string; endField: DateFieldValue; startField?: DateFieldValue; }
-  const makeColumn = (name: string, end?: DateFieldValue, start?: DateFieldValue): ReportColumn => ({
+  // varianceRight: show a Δ (change) column in the gap to this column's right (never on the rightmost).
+  interface ReportColumn { id: string; name: string; endField: DateFieldValue; startField?: DateFieldValue; varianceRight?: boolean; }
+  const makeColumn = (name: string, end?: DateFieldValue, start?: DateFieldValue, varianceRight = false): ReportColumn => ({
     id: crypto.randomUUID(), name,
     endField: end ?? { basis: 'fixed', fixedDate: todayIso() },
-    startField: start,
+    startField: start, varianceRight,
   });
   const MAX_COLUMNS = 12;
+  type VarianceFormat = 'dollar' | 'percent' | 'both';
 
   // View state - persisted
   let expandedGroups = $state<Record<string, boolean>>({});
   let reportMode = $state<ReportMode>('balance_sheet');
   let columns = $state<ReportColumn[]>([makeColumn('')]);
+  let varianceFormat = $state<VarianceFormat>('both');
   let retainedEarningsExpanded = $state(false);
 
   // Per-column balance data (index-aligned with `columns`).
@@ -91,6 +94,7 @@
   let showReportsMenu = $state(false);
   let showSaveDialog = $state(false);
   let saveName = $state('');
+  let openColMenu = $state<string | null>(null); // id of the column whose ☰ header menu is open
   
   // Track if we need to reload data (used for onblur optimization)
   let needsReload = $state(false);
@@ -103,6 +107,7 @@
       retainedEarningsExpanded = loadViewState(`accounts-re-expanded-${entityId}`, false);
       hideZeroBalance = loadViewState(`accounts-hidezero-${entityId}`, false);
       showClosedAccounts = loadViewState(`accounts-showclosed-${entityId}`, false);
+      varianceFormat = loadViewState<VarianceFormat>(`accounts-varfmt-${entityId}`, 'both');
 
       // Restore columns, migrating older persisted shapes: {columns} → {endField,startField} → {endDate,startDate}.
       const saved = loadViewState<any>(`accounts-dates-${entityId}`, null);
@@ -205,18 +210,55 @@
   // --- Column management ---------------------------------------------------
   // Columns grow leftward into the past: the rightmost stays the today-anchor, and a new column is
   // PREPENDED as an "End previous year" period (chains one period back from the current leftmost).
-  function addColumn() {
+  // Insert a new "older" column immediately to the LEFT of `id` (defaults to End previous year, which
+  // chains one period further back). Insert-left never disturbs the today-anchor and reaches into the past.
+  function insertColumnBefore(id: string) {
     if (columns.length >= MAX_COLUMNS) return;
     const y = new Date().getFullYear();
     const newCol = makeColumn('', { basis: 'py-end', fixedDate: `${y - 1}-12-31` },
       requiresDateRange ? { basis: 'py-start', fixedDate: `${y - 1}-01-01` } : undefined);
-    columns = [newCol, ...columns];
+    const i = columns.findIndex((c) => c.id === id);
+    const at = i < 0 ? 0 : i;
+    columns = [...columns.slice(0, at), newCol, ...columns.slice(at)];
+    openColMenu = null;
     reloadBalance();
   }
   function removeColumn(id: string) {
     if (columns.length <= 1) return;
     columns = columns.filter((c) => c.id !== id);
+    openColMenu = null;
     reloadBalance();
+  }
+  function toggleColumnVariance(id: string) {
+    columns = columns.map((c) => (c.id === id ? { ...c, varianceRight: !c.varianceRight } : c));
+    openColMenu = null;
+    persistViewState();
+  }
+  function setVarianceFormat(fmt: VarianceFormat) {
+    varianceFormat = fmt;
+    saveViewState(`accounts-varfmt-${entityId}`, fmt);
+  }
+
+  // --- Column slots: interleave data columns with the variance columns their left-neighbour enables. ---
+  interface DataSlot { kind: 'data'; ci: number; }
+  interface VarSlot { kind: 'variance'; a: number; b: number; } // older=a (left), newer=b (right)
+  let columnSlots = $derived.by<(DataSlot | VarSlot)[]>(() => {
+    const slots: (DataSlot | VarSlot)[] = [];
+    for (let i = 0; i < columns.length; i++) {
+      slots.push({ kind: 'data', ci: i });
+      if (i < columns.length - 1 && columns[i].varianceRight) slots.push({ kind: 'variance', a: i, b: i + 1 });
+    }
+    return slots;
+  });
+  // Δ$ and Δ% between an older and newer value (% is null when the older value is 0).
+  const varianceOf = (older: number, newer: number) => ({ d: newer - older, p: older !== 0 ? ((newer - older) / Math.abs(older)) * 100 : null });
+  function formatVariance(older: number, newer: number, unit: string): string {
+    const { d, p } = varianceOf(older, newer);
+    const dol = (d >= 0 ? '+' : '−') + formatCurrency(Math.abs(d), unit);
+    const pct = p === null ? '—' : (p >= 0 ? '+' : '−') + Math.abs(p).toFixed(1) + '%';
+    if (varianceFormat === 'dollar') return dol;
+    if (varianceFormat === 'percent') return pct;
+    return `${dol}  ${pct}`;
   }
 
   // Print/PDF: the browser print dialog renders the report (print CSS hides app chrome).
@@ -285,6 +327,7 @@
     saveViewState(`accounts-dates-${entityId}`, { columns });
     saveViewState(`accounts-hidezero-${entityId}`, hideZeroBalance);
     saveViewState(`accounts-showclosed-${entityId}`, showClosedAccounts);
+    saveViewState(`accounts-varfmt-${entityId}`, varianceFormat);
   }
 
   // --- Saved reports ------------------------------------------------------
@@ -300,7 +343,8 @@
     const now = new Date().toISOString();
     const report: SavedReport = {
       id: crypto.randomUUID(), name, mode: reportMode,
-      columns: columns.map((c) => ({ name: c.name, endField: { ...c.endField }, startField: c.startField ? { ...c.startField } : undefined })),
+      columns: columns.map((c) => ({ name: c.name, endField: { ...c.endField }, startField: c.startField ? { ...c.startField } : undefined, varianceRight: c.varianceRight })),
+      varianceFormat,
       hideZeroBalance, showClosedAccounts,
       createdAt: now, lastUsedAt: now,
     };
@@ -309,7 +353,8 @@
   }
   function applySavedReport(r: SavedReport) {
     reportMode = r.mode;
-    columns = r.columns.map((c) => makeColumn(c.name, migrateField(c.endField), c.startField ? migrateField(c.startField) : undefined));
+    columns = r.columns.map((c) => makeColumn(c.name, migrateField(c.endField), c.startField ? migrateField(c.startField) : undefined, c.varianceRight ?? false));
+    varianceFormat = r.varianceFormat ?? 'both';
     hideZeroBalance = r.hideZeroBalance;
     showClosedAccounts = r.showClosedAccounts;
     touchReport(r.id, new Date().toISOString());
@@ -538,6 +583,9 @@
   {#if showOptionsMenu || showExportMenu || showReportsMenu}
     <div class="menu-backdrop" onclick={() => { showOptionsMenu = false; showExportMenu = false; showReportsMenu = false; }} role="presentation"></div>
   {/if}
+  {#if openColMenu}
+    <div class="menu-backdrop" onclick={() => (openColMenu = null)} role="presentation"></div>
+  {/if}
   <header class="page-header">
     <div class="header-left">
       <a href="/" class="back-link">← {$t('nav.home')}</a>
@@ -643,15 +691,33 @@
     {@const rightmost = ci === columns.length - 1}
     {@const rc = resolvedColumns[ci]}
     <div class="colhdr">
-      {#if columns.length > 1}
-        <button class="col-del" onclick={() => removeColumn(col.id)} title={$t('accounts.remove_column')}>✕</button>
-      {/if}
-      {#if requiresDateRange && col.startField}
-        {@render dateCell($t('accounts.from_date'), col.startField, startTokens(rightmost), rc?.start ?? '')}
-        {@render dateCell($t('accounts.to_date'), col.endField, endTokens(rightmost), rc?.end ?? '')}
-      {:else}
-        {@render dateCell($t('accounts.as_of'), col.endField, endTokens(rightmost), rc?.end ?? '')}
-      {/if}
+      <div class="col-ctrl">
+        <button class="col-ham" aria-label={$t('accounts.column_menu')} title={$t('accounts.column_menu')}
+          onclick={(e) => { e.stopPropagation(); openColMenu = openColMenu === col.id ? null : col.id; }}>☰</button>
+        {#if openColMenu === col.id}
+          <div class="dropdown-menu col-menu" role="menu">
+            <button class="menu-item" role="menuitem" disabled={columns.length >= MAX_COLUMNS} onclick={() => insertColumnBefore(col.id)}>
+              ➕ {$t('accounts.insert_older')}
+            </button>
+            {#if !rightmost}
+              <button class="menu-item check" role="menuitemcheckbox" aria-checked={col.varianceRight} onclick={() => toggleColumnVariance(col.id)}>
+                <span class="check-box">{col.varianceRight ? '☑' : '☐'}</span> Δ {$t('accounts.show_change')}
+              </button>
+            {/if}
+            {#if columns.length > 1}
+              <button class="menu-item danger" role="menuitem" onclick={() => removeColumn(col.id)}>✕ {$t('accounts.remove_column')}</button>
+            {/if}
+          </div>
+        {/if}
+      </div>
+      <div class="col-dates">
+        {#if requiresDateRange && col.startField}
+          {@render dateCell($t('accounts.from_date'), col.startField, startTokens(rightmost), rc?.start ?? '')}
+          {@render dateCell($t('accounts.to_date'), col.endField, endTokens(rightmost), rc?.end ?? '')}
+        {:else}
+          {@render dateCell($t('accounts.as_of'), col.endField, endTokens(rightmost), rc?.end ?? '')}
+        {/if}
+      </div>
     </div>
   {/snippet}
   
@@ -677,6 +743,13 @@
           <button class="menu-item check" role="menuitemcheckbox" aria-checked={showClosedAccounts} onclick={toggleShowClosedAccounts}>
             <span class="check-box">{showClosedAccounts ? '☑' : '☐'}</span> {$t('accounts.show_closed')}
           </button>
+          <div class="menu-divider"></div>
+          <div class="menu-label">{$t('accounts.variance_format')}</div>
+          <div class="seg-group">
+            <button class="seg" class:active={varianceFormat === 'dollar'} onclick={() => setVarianceFormat('dollar')}>$</button>
+            <button class="seg" class:active={varianceFormat === 'percent'} onclick={() => setVarianceFormat('percent')}>%</button>
+            <button class="seg" class:active={varianceFormat === 'both'} onclick={() => setVarianceFormat('both')}>{$t('accounts.variance_both')}</button>
+          </div>
         </div>
       {/if}
     </div>
@@ -716,27 +789,33 @@
          content and the whole grid scrolls horizontally if it exceeds the viewport. Date selectors sit in
          the header row directly above their number column. -->
     <div class="report-scroll">
-      <div class="report-grid" style="grid-template-columns: minmax(max-content, 1fr) {columns.map(() => 'max-content').join(' ')};">
-        <!-- Header: [+] add (leftward = older periods) then each column's date selector -->
+      <div class="report-grid" style="grid-template-columns: minmax(max-content, 1fr) {columnSlots.map(() => 'max-content').join(' ')};">
+        <!-- Header: name lead, then per-slot date selectors (data) / Δ headers (variance) -->
         <div class="grid-row grid-header">
-          <div class="gcell gname gh-lead">
-            <button class="add-column-btn" onclick={addColumn} disabled={columns.length >= MAX_COLUMNS}
-              title={columns.length >= MAX_COLUMNS ? $t('accounts.max_columns') : $t('accounts.add_column')}>+</button>
-          </div>
-          {#each columns as col, ci (col.id)}
-            <div class="gcell gamount gh-col">{@render columnHeader(col, ci)}</div>
+          <div class="gcell gname gh-lead"></div>
+          {#each columnSlots as slot (slot.kind === 'data' ? `d${slot.ci}` : `v${slot.a}`)}
+            {#if slot.kind === 'data'}
+              <div class="gcell gamount gh-col">{@render columnHeader(columns[slot.ci], slot.ci)}</div>
+            {:else}
+              <div class="gcell gamount gh-var" title={$t('accounts.change')}>Δ</div>
+            {/if}
           {/each}
         </div>
 
         {#each visibleTypes as type}
           {@const info = typeInfo[type]}
+          {@const tt = typeTotals(type)}
           <div class="grid-row grid-type" style="--type-color: {info.color}; --depth: 0;">
             <div class="gcell gname">
               <span class="type-icon">{info.icon}</span>
               <span class="type-name">{$t(`account_types.${type}`)}</span>
             </div>
-            {#each typeTotals(type) as tot}
-              <div class="gcell gamount type-total">{formatCurrency(tot, entity.baseUnit)}</div>
+            {#each columnSlots as slot (slot.kind === 'data' ? `d${slot.ci}` : `v${slot.a}`)}
+              {#if slot.kind === 'data'}
+                <div class="gcell gamount type-total">{formatCurrency(tt[slot.ci], entity.baseUnit)}</div>
+              {:else}
+                <div class="gcell gamount gv" class:up={tt[slot.b] > tt[slot.a]} class:down={tt[slot.b] < tt[slot.a]}>{formatVariance(tt[slot.a], tt[slot.b], entity.baseUnit)}</div>
+              {/if}
             {/each}
           </div>
           {#each reportRowsByType.get(type) ?? [] as row (row.key)}
@@ -754,31 +833,40 @@
                   <span class="rr-label">{row.label}</span>
                 {/if}
               </div>
-              {#each row.amounts as amt}
-                <div class="gcell gamount">{formatCurrency(amt, entity.baseUnit)}</div>
+              {#each columnSlots as slot (slot.kind === 'data' ? `d${slot.ci}` : `v${slot.a}`)}
+                {#if slot.kind === 'data'}
+                  <div class="gcell gamount">{formatCurrency(row.amounts[slot.ci], entity.baseUnit)}</div>
+                {:else}
+                  <div class="gcell gamount gv" class:up={row.amounts[slot.b] > row.amounts[slot.a]} class:down={row.amounts[slot.b] < row.amounts[slot.a]}>{formatVariance(row.amounts[slot.a], row.amounts[slot.b], entity.baseUnit)}</div>
+                {/if}
               {/each}
             </div>
           {/each}
         {/each}
 
-        <!-- Footer: per-column verification (BS/TB) or net income (Income Statement), aligned under columns -->
+        <!-- Footer: verification (BS/TB) or net income (IS); variance shown for net income only -->
         {#if balanceByColumn.length && (reportMode === 'balance_sheet' || reportMode === 'trial_balance')}
           <div class="grid-row grid-foot" style="--depth: 0;">
             <div class="gcell gname foot-label">{$t('accounts.verification')}</div>
-            {#each columns as col, ci (col.id)}
-              {@const bd = balanceByColumn[ci]}
-              <div class="gcell gamount foot-cell" class:imbalanced={!isBalancedOf(bd)}>
-                {#if isBalancedOf(bd)}✓ {$t('accounts.balanced')}{:else}⚠ {formatCurrency(imbalanceOf(bd), entity.baseUnit)}{/if}
-              </div>
+            {#each columnSlots as slot (slot.kind === 'data' ? `d${slot.ci}` : `v${slot.a}`)}
+              {#if slot.kind === 'data'}
+                {@const bd = balanceByColumn[slot.ci]}
+                <div class="gcell gamount foot-cell" class:imbalanced={!isBalancedOf(bd)}>{#if isBalancedOf(bd)}✓ {$t('accounts.balanced')}{:else}⚠ {formatCurrency(imbalanceOf(bd), entity.baseUnit)}{/if}</div>
+              {:else}
+                <div class="gcell gamount"></div>
+              {/if}
             {/each}
           </div>
         {/if}
         {#if balanceByColumn.length && reportMode === 'income_statement'}
           <div class="grid-row grid-foot" style="--depth: 0;">
             <div class="gcell gname foot-label">{$t('accounts.net_income')}</div>
-            {#each columns as col, ci (col.id)}
-              {@const bd = balanceByColumn[ci]}
-              <div class="gcell gamount foot-cell" class:negative={netIncomeOf(bd) < 0}>{formatCurrency(netIncomeOf(bd), entity.baseUnit)}</div>
+            {#each columnSlots as slot (slot.kind === 'data' ? `d${slot.ci}` : `v${slot.a}`)}
+              {#if slot.kind === 'data'}
+                <div class="gcell gamount foot-cell" class:negative={netIncomeOf(balanceByColumn[slot.ci]) < 0}>{formatCurrency(netIncomeOf(balanceByColumn[slot.ci]), entity.baseUnit)}</div>
+              {:else}
+                <div class="gcell gamount gv" class:up={netIncomeOf(balanceByColumn[slot.b]) > netIncomeOf(balanceByColumn[slot.a])} class:down={netIncomeOf(balanceByColumn[slot.b]) < netIncomeOf(balanceByColumn[slot.a])}>{formatVariance(netIncomeOf(balanceByColumn[slot.a]), netIncomeOf(balanceByColumn[slot.b]), entity.baseUnit)}</div>
+              {/if}
             {/each}
           </div>
         {/if}
@@ -818,12 +906,27 @@
   .grid-header .gcell { padding-bottom: 0.4rem; }
   .gh-lead { align-items: flex-end; }
   .gh-col { display: flex; justify-content: flex-end; }
-  .colhdr { position: relative; display: flex; flex-direction: column; gap: 0.25rem; padding-right: var(--space-md); min-width: 8rem; }
+  /* Column header: a ☰ control gutter on the left + the stacked date field(s). */
+  .colhdr { display: flex; flex-direction: row; align-items: flex-start; gap: 0.3rem; padding-right: var(--space-md); min-width: 8rem; }
+  .col-dates { display: flex; flex-direction: column; gap: 0.1rem; flex: 1; min-width: 0; }
   .date-cell { display: flex; flex-direction: column; gap: 0.1rem; }
   .date-cell .basis-select { width: 100%; max-width: none; }
   .date-cell input[type="date"] { width: 100%; box-sizing: border-box; padding: 0.15rem 0.3rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-primary); font-size: 0.8rem; }
   .date-cell .resolved-date { text-align: right; }
-  .colhdr .col-del { position: absolute; top: -0.4rem; right: -0.1rem; }
+
+  .col-ctrl { position: relative; flex-shrink: 0; }
+  .col-ham {
+    background: none; border: none; cursor: pointer; color: var(--text-muted);
+    font-size: 0.85rem; line-height: 1; padding: 0.15rem 0.15rem; border-radius: var(--radius-sm);
+  }
+  .col-ham:hover, .col-ctrl:has(.col-menu) .col-ham { color: var(--text-primary); background: var(--bg-hover); }
+  .col-menu { top: calc(100% + 2px); left: 0; min-width: 12rem; }
+
+  /* Variance (Δ) header + cells */
+  .gh-var { display: flex; justify-content: flex-end; align-items: flex-end; color: var(--text-muted); font-weight: 700; padding-right: var(--space-md); }
+  .gv { color: var(--text-secondary); }
+  .gv.up { color: var(--success, #22a06b); }
+  .gv.down { color: var(--danger, #d1493f); }
 
   /* Type header rows */
   .grid-type { background: var(--bg-secondary); border-left: 4px solid var(--type-color); font-weight: 600; margin-top: var(--space-md); }
@@ -914,42 +1017,14 @@
   }
   .saved-reports-btn:hover:not(:disabled) { background: var(--bg-hover); }
 
-  .add-column-btn {
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    background: var(--bg-secondary);
-    font-size: 1rem;
-    font-weight: bold;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    align-self: center;
-  }
-  .add-column-btn:hover:not(:disabled) { background: var(--bg-hover); }
-
-  /* Per-column remove (✕) button in a column header */
-  .col-del {
-    background: none; border: none; color: var(--text-muted); cursor: pointer;
-    padding: 0 0.3rem; border-radius: var(--radius-sm); font-size: 0.8rem;
-  }
-  .col-del:hover { background: var(--danger, #f87171); color: #fff; }
-
-  /* Improved contrast for disabled items in dark mode */
-  .saved-reports-btn:disabled,
-  .add-column-btn:disabled {
+  /* Improved contrast for disabled dropdown triggers */
+  .saved-reports-btn:disabled {
     opacity: 0.6;
     color: var(--text-muted);
     border-color: rgba(255, 255, 255, 0.2);
   }
-  
-  /* Better visibility in dark theme */
   @media (prefers-color-scheme: dark) {
-    .saved-reports-btn:disabled,
-    .add-column-btn:disabled {
+    .saved-reports-btn:disabled {
       opacity: 0.7;
       border-color: rgba(255, 255, 255, 0.25);
       background: rgba(255, 255, 255, 0.05);
@@ -999,6 +1074,14 @@
   .menu-item.check .check-box { font-size: 0.95rem; }
   .menu-divider { height: 1px; background: var(--border-light); margin: 0.25rem 0; }
   .menu-label { padding: 0.3rem 0.6rem 0.15rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+  /* Segmented control (variance format: $ / % / Both) */
+  .seg-group { display: flex; gap: 0.25rem; padding: 0.15rem 0.6rem 0.35rem; }
+  .seg {
+    flex: 1; padding: 0.2rem 0.4rem; font-size: 0.8rem; cursor: pointer;
+    border: 1px solid var(--border-color); border-radius: var(--radius-sm);
+    background: var(--bg-secondary); color: var(--text-secondary);
+  }
+  .seg.active { background: var(--accent-color); color: #fff; border-color: var(--accent-color); }
 
   /* Saved-report rows in the Reports dropdown (sr- prefix avoids colliding with the .report-row body rows) */
   .sr-row { display: flex; align-items: stretch; }

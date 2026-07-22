@@ -190,9 +190,16 @@ structured PDF is the future *PDF (.pdf)* export (download, then print).
 (bases), and display filters as a named report; the saved list loads a report on click (auto-adjusting its
 relative dates) or deletes it. See [saved-reports-ux.md](./saved-reports-ux.md).
 
-**Add Column:** The **[+]** button adds a report column (up to 12) for period comparison; each column has
-its own name + date fields and renders its own amount column, with per-column verification/net-income in the
-footer. Columns persist and are saved with reports. Variance ($/%) columns are still future.
+**Columns & variance:** Each column header has a **☰ menu** (left of its date selector) with:
+- **Insert older column** — inserts a period to the *left* (older). Insert-left is uniform: it never
+  disturbs the today-anchor rightmost column and lets you reach further into the past; you target any
+  interior gap by opening the menu on the column to its right. (Up to 12 columns.)
+- **Show change vs. next** — toggles a **variance (Δ) column** in the gap to *this* column's right (so it's
+  absent on the rightmost). Δ$ = newer − older, Δ% = (newer − older)/|older| (`—` when older is $0),
+  green up / red down. The **View menu** picks the format: **$**, **%**, or **Both**.
+- **Remove column** — (hidden on the last remaining column).
+
+Columns (dates + variance flags) and the variance format persist per entity and are saved with reports.
 ([saved-reports-ux.md](./saved-reports-ux.md))
 
 ## Persistence

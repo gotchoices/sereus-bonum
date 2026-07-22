@@ -25,6 +25,7 @@ export interface SavedColumn {
   name: string;
   endField: DateFieldValue;
   startField?: DateFieldValue;   // only for period modes (income statement / cash flow)
+  varianceRight?: boolean;       // show a change (Δ) column in the gap to this column's right
 }
 
 export interface SavedReport {
@@ -32,6 +33,7 @@ export interface SavedReport {
   name: string;
   mode: ReportMode;
   columns: SavedColumn[];        // one per report column (multi-period comparison)
+  varianceFormat?: 'dollar' | 'percent' | 'both';
   hideZeroBalance: boolean;
   showClosedAccounts: boolean;
   createdAt: string;
