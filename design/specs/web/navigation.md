@@ -9,6 +9,7 @@ App-wide navigation for the web target. A desktop-oriented, multi-window paradig
 | `/` | Home | Entity list + Visual Balance Sheet (or welcome) |
 | `/catalog` | Account Catalog | Shared account groups |
 | `/entities/[id]` | Entity Accounts | Balance-sheet/report views for one entity |
+| `/entities/[id]/accounts` | Manage Accounts | Add / edit an entity's accounts (see account-edit.md) |
 | `/ledger/[accountId]` | Ledger | Transaction entry for one account |
 | `/search` | Transaction Search | Cross-entity search |
 | `/import` | Import | Books (new entity) or transactions |
@@ -29,8 +30,10 @@ animated slide; when hidden the rest of the page expands to fill the space. The 
 
 ## Entity Context Menu
 
-From a selected entity on Home: **Edit**, **Accounts**, **Import**, **Boilerplate** (clone its
-structure into a new entity), **Delete** (with confirmation).
+From a selected entity on Home: **Edit**, **Accounts** (opens Manage Accounts — add/edit the entity's
+accounts; see [screens/account-edit.md](./screens/account-edit.md)), **Import**, **Boilerplate** (clone its
+structure into a new entity), **Delete** (with confirmation). The entity *name* link opens the Accounts View
+(reports).
 
 ## Window Model
 

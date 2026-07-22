@@ -90,6 +90,21 @@
       "depHashes": {}
     },
     {
+      "route": "ManageAccounts",
+      "dependsOn": [
+        "design/stories/web/01-firstlook.md",
+        "design/specs/web/screens/account-edit.md",
+        "design/specs/domain/schema.md",
+        "design/specs/domain/rules.md"
+      ],
+      "depHashes": {
+        "design/stories/web/01-firstlook.md": "11e9c354253b25afbcbaee117a3cc645ba53348eaf9c46a831127520807a3222",
+        "design/specs/web/screens/account-edit.md": "492010eefd2c288097f5e85ecfbd943c77ff928b5ef4f33eb171c0c7b143abf7",
+        "design/specs/domain/schema.md": "44ec79253286e31c446d1238de03d3282379e50a04969629998d59753f6a4d80",
+        "design/specs/domain/rules.md": "fb5f4acfe557b963423b354d66c89b5fcf5f37364de3b03ef2096f03d5b09244"
+      }
+    },
+    {
       "route": "Ledger",
       "dependsOn": [
         "design/specs/project.md",
