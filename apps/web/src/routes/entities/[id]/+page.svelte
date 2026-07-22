@@ -629,7 +629,7 @@
                 <div class="sr-row">
                   <button class="menu-item sr-load" role="menuitem" onclick={() => applySavedReport(r)}>
                     <span class="sr-name">{r.name}</span>
-                    <span class="sr-sub">{modeLabel(r.mode)} · {fieldLabel(r.columns[0].endField)}{r.columns.length > 1 ? ` · ${r.columns.length} cols` : ''}</span>
+                    <span class="sr-sub">{modeLabel(r.mode)}{r.columns?.[0] ? ` · ${fieldLabel(r.columns[0].endField)}` : ''}{(r.columns?.length ?? 0) > 1 ? ` · ${r.columns.length} cols` : ''}</span>
                   </button>
                   <button class="sr-del" title={$t('common.delete')} onclick={() => deleteReport(r.id)}>✕</button>
                 </div>

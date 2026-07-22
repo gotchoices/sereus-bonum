@@ -46,10 +46,22 @@ function load(): SavedReport[] {
   if (!browser) return [];
   try {
     const raw = localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as SavedReport[]) : [];
+    if (!raw) return [];
+    return (JSON.parse(raw) as any[]).map(migrate).filter(Boolean) as SavedReport[];
   } catch {
     return [];
   }
+}
+
+// Migrate reports saved before the multi-column change (they had endField/startField, not columns[]).
+function migrate(r: any): SavedReport | null {
+  if (!r || typeof r !== 'object') return null;
+  if (!Array.isArray(r.columns)) {
+    r.columns = r.endField ? [{ name: r.name ?? '', endField: r.endField, startField: r.startField }] : [];
+  }
+  if (r.columns.length === 0) r.columns = [{ name: '', endField: { basis: 'fixed', fixedDate: new Date().toISOString().split('T')[0] } }];
+  if (!r.varianceFormat) r.varianceFormat = 'both';
+  return r as SavedReport;
 }
 
 export const savedReports = writable<SavedReport[]>(load());
