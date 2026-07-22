@@ -14,7 +14,8 @@ One pane contains a welcome message including some advice for basic usage and an
 3. There is also an icon associated with the list which is clearly for adding new entities.
 4. He sees that each entity name is a hyperlink (clicking it navigates to the Accounts View).  He can also click elsewhere on the row to highlight/select the entity.  When he does, the Visual Balance Sheet updates to display that entity's financial position.  He is able to access a context menu which includes these options:
   - Edit: add/update basic information about the entity
-  - Accounts: view accounts for the entity
+  - Accounts: open the entity's account list to add / edit / retire accounts (Alt Path E). (The entity
+    *name* link opens the Accounts View — its balance sheet / statements.)
   - Import: load transactions from a file
   - Boilerplate: use the account structure from this entity to create a new one
   - Delete entity: remove the selected entity permanently
@@ -54,6 +55,19 @@ Alternative Path D: Exploring Settings
   - Sereus: managing cadre and partner nodes
   - Selecting his preferred language
 
+Alternative Path E: Managing an Entity's Accounts
+6.1. Sam selects an entity and picks **Accounts** from its context menu.  This opens a **flat list of that
+entity's accounts** — each showing its code, name, and the group path it belongs to.
+6.2. He clicks an **Add account** control; a blank entry appears where he sets the name, code, group, and
+(optionally) a parent account.
+6.3. Clicking an existing account expands an **inline pane** with all its editable properties — name, code,
+description, group, parent account, unit, and status (active / retired).
+6.4. When he changes an account's **parent**, Bonum notes the account (and any sub-accounts) will move into
+the parent's group and asks him to confirm — a nested account always shares its parent's group.
+6.5. Deleting an account that has transactions is refused (reassign first); *retiring* an account (making it
+inactive) requires a zero balance.
+6.6. A link lets him jump to the entity's **Accounts View** (balance sheet / statements) and back.
+
 ## Acceptance Criteria
 - [ ] Home lists entities, pre-seeded with "Home Finance Template" and "Small Business Template", plus a clear way to add new ones.
 - [ ] Selecting an entity shows its Visual Balance Sheet; clicking the entity name opens its Accounts View.
@@ -61,6 +75,7 @@ Alternative Path D: Exploring Settings
 - [ ] The global menu offers Home, Account Catalog, Import Books, and Settings.
 - [ ] Creating an entity captures at least a name, plus optional tax id, accounting method, and unit of account.
 - [ ] The Account Catalog shows the five account types with hierarchical groups that can be added, edited, reordered, and deleted.
+- [ ] An entity's **Accounts** list lets the user add accounts and edit their properties (name, code, group, parent, unit, status) inline; re-parenting moves the account's subtree into the new parent's group, and delete/retire are guarded (transactions / non-zero balance).
 - [ ] The welcome message can be dismissed permanently ("don't show again").
 
 ## Variants
