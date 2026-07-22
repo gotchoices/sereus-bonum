@@ -68,20 +68,6 @@
     margin: 0;
   }
   
-  .btn-close {
-    background: none;
-    border: none;
-    font-size: 1.25rem;
-    color: var(--text-muted);
-    cursor: pointer;
-    padding: 0.25rem;
-    line-height: 1;
-  }
-  
-  .btn-close:hover {
-    color: var(--text-primary);
-  }
-  
   .welcome-content {
     padding: var(--space-lg);
   }

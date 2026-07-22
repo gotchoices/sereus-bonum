@@ -62,12 +62,25 @@ See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
 - 🔮 **Import Transactions mode** (CSV / QIF / OFX bank downloads).
 
 ### D. Screen gaps (from the generated-consolidation audit)
+- ⬜ **NO account-management UI (create / edit / delete / re-parent / rename an entity's accounts).** The data
+  layer has `createAccount` / `updateAccount` / `deleteAccount`, but **nothing wires them**: the entity
+  context-menu "Accounts" → the *read-only* balance-sheet/report view (links to ledgers only); the **Catalog**
+  screen manages the shared **account-group** catalog, not per-entity accounts; the ledger edits *transactions*,
+  not the account's own properties (name/parent/code). Accounts today are created **only via import**. Need an
+  account editor (modal or `/entities/[id]/accounts/[accountId]`), reachable from the accounts view + ledger,
+  honoring the single-path invariant (re-parenting moves the whole subtree's group). **No story yet.**
 - ⬜ Ledger: keyboard shortcuts (Esc/Enter/Ctrl+Enter); real-time running balance (recomputes on reload); no closed-date control.
-- ⬜ Entity view: Cash Flow / Custom modes are selectable but unimplemented; no load-error + Retry UI; no account-name hover tooltip.
+- ⬜ Entity view: **Cash Flow mode** selectable but unimplemented (build on a convention group→activity map — no
+  Custom needed); **Custom** now removed from the selector (deferred); no load-error + Retry UI; account rows'
+  hover tooltip is the name only (want full group→account path); BS-footer variance (net-worth Δ) left blank.
 - ⬜ Search: query builder / saved searches (Phase 2); pagination for "show all" (loads everything).
 - ⬜ Catalog: reorder child groups; delete has no usage gate.
 - ⬜ Settings: API key not actually validated on blur; Sereus Nodes UI is a stub.
 - ⬜ Adopt unified notifications (`stores/notifications`) in remaining screens (entity, ledger, catalog).
+- ✅ Dead-CSS cleanup (this pass): pruned orphaned `.edit-*`/`.split-*`/`.btn-*` (ledger old inline-edit),
+  `.node-*`/`.btn-remove` (settings), `.error-message` (search), `.btn-close` (WelcomePanel),
+  `.group-row.child` (catalog). `svelte-check` unused-CSS warnings 51→0 (remaining 33 are a11y / Svelte-4→5
+  deprecation — a separate pass).
 
 ### H. Reporting: hierarchy display + two correctness bugs (from GnuCash comparison, Kyle data)
 - ✅ **Account hierarchy in reports — DONE.** The entity view now renders the full tree (account-group

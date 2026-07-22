@@ -224,17 +224,5 @@
     border-radius: 0 0 var(--radius-md) var(--radius-md);
   }
   
-  .error-message {
-    padding: var(--space-md);
-    background: var(--danger-bg);
-    border: 1px solid var(--danger);
-    border-radius: var(--radius-md);
-    color: var(--danger);
-    margin-bottom: var(--space-md);
-  }
-  
-  .error-message p {
-    margin: 0;
-  }
 </style>
 

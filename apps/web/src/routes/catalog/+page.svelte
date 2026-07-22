@@ -529,8 +529,7 @@
   }
   
   .group-row.parent:hover,
-  .group-row.leaf:hover,
-  .group-row.child:hover {
+  .group-row.leaf:hover {
     background: var(--bg-hover);
   }
   

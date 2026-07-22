@@ -428,48 +428,6 @@
     background: var(--bg-secondary);
   }
   
-  .node-card {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: var(--space-md);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    background: var(--bg-secondary);
-    margin-bottom: var(--space-sm);
-  }
-  
-  .node-info {
-    flex: 1;
-  }
-  
-  .node-url {
-    font-family: var(--font-mono);
-    font-size: 0.875rem;
-    color: var(--text-primary);
-  }
-  
-  .node-status {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    margin-top: var(--space-xs);
-  }
-  
-  .btn-remove {
-    padding: var(--space-xs) var(--space-sm);
-    border: 1px solid var(--danger);
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--danger);
-    font-size: 0.875rem;
-    cursor: pointer;
-  }
-  
-  .btn-remove:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-  
   .network-section {
     opacity: 0.7;
   }
