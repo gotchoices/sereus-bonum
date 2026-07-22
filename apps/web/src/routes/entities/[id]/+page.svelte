@@ -63,12 +63,13 @@
   
   // Report columns: each is an independent period (name + date basis fields), rendered as its own amount
   // column. A single-column report is just columns.length === 1. Persisted + saved with reports.
-  // varianceRight: show a Δ (change) column in the gap to this column's right (never on the rightmost).
-  interface ReportColumn { id: string; name: string; endField: DateFieldValue; startField?: DateFieldValue; varianceRight?: boolean; }
-  const makeColumn = (name: string, end?: DateFieldValue, start?: DateFieldValue, varianceRight = false): ReportColumn => ({
+  // varianceLeft: show a Δ (change) column in the gap to this column's LEFT — i.e. the change INTO this
+  // (newer) column from its older/left neighbour. Never on the leftmost column (nothing before it).
+  interface ReportColumn { id: string; name: string; endField: DateFieldValue; startField?: DateFieldValue; varianceLeft?: boolean; }
+  const makeColumn = (name: string, end?: DateFieldValue, start?: DateFieldValue, varianceLeft = false): ReportColumn => ({
     id: crypto.randomUUID(), name,
     endField: end ?? { basis: 'fixed', fixedDate: todayIso() },
-    startField: start, varianceRight,
+    startField: start, varianceLeft,
   });
   const MAX_COLUMNS = 12;
   type VarianceFormat = 'dollar' | 'percent' | 'both';
@@ -230,7 +231,7 @@
     reloadBalance();
   }
   function toggleColumnVariance(id: string) {
-    columns = columns.map((c) => (c.id === id ? { ...c, varianceRight: !c.varianceRight } : c));
+    columns = columns.map((c) => (c.id === id ? { ...c, varianceLeft: !c.varianceLeft } : c));
     openColMenu = null;
     persistViewState();
   }
@@ -245,8 +246,9 @@
   let columnSlots = $derived.by<(DataSlot | VarSlot)[]>(() => {
     const slots: (DataSlot | VarSlot)[] = [];
     for (let i = 0; i < columns.length; i++) {
+      // A Δ column sits to the LEFT of a column that has varianceLeft: older=i-1, newer=i.
+      if (i > 0 && columns[i].varianceLeft) slots.push({ kind: 'variance', a: i - 1, b: i });
       slots.push({ kind: 'data', ci: i });
-      if (i < columns.length - 1 && columns[i].varianceRight) slots.push({ kind: 'variance', a: i, b: i + 1 });
     }
     return slots;
   });
@@ -343,7 +345,7 @@
     const now = new Date().toISOString();
     const report: SavedReport = {
       id: crypto.randomUUID(), name, mode: reportMode,
-      columns: columns.map((c) => ({ name: c.name, endField: { ...c.endField }, startField: c.startField ? { ...c.startField } : undefined, varianceRight: c.varianceRight })),
+      columns: columns.map((c) => ({ name: c.name, endField: { ...c.endField }, startField: c.startField ? { ...c.startField } : undefined, varianceLeft: c.varianceLeft })),
       varianceFormat,
       hideZeroBalance, showClosedAccounts,
       createdAt: now, lastUsedAt: now,
@@ -353,7 +355,7 @@
   }
   function applySavedReport(r: SavedReport) {
     reportMode = r.mode;
-    columns = r.columns.map((c) => makeColumn(c.name, migrateField(c.endField), c.startField ? migrateField(c.startField) : undefined, c.varianceRight ?? false));
+    columns = r.columns.map((c) => makeColumn(c.name, migrateField(c.endField), c.startField ? migrateField(c.startField) : undefined, c.varianceLeft ?? false));
     varianceFormat = r.varianceFormat ?? 'both';
     hideZeroBalance = r.hideZeroBalance;
     showClosedAccounts = r.showClosedAccounts;
@@ -699,9 +701,9 @@
             <button class="menu-item" role="menuitem" disabled={columns.length >= MAX_COLUMNS} onclick={() => insertColumnBefore(col.id)}>
               ➕ {$t('accounts.insert_older')}
             </button>
-            {#if !rightmost}
-              <button class="menu-item check" role="menuitemcheckbox" aria-checked={col.varianceRight} onclick={() => toggleColumnVariance(col.id)}>
-                <span class="check-box">{col.varianceRight ? '☑' : '☐'}</span> Δ {$t('accounts.show_change')}
+            {#if ci > 0}
+              <button class="menu-item check" role="menuitemcheckbox" aria-checked={col.varianceLeft} onclick={() => toggleColumnVariance(col.id)}>
+                <span class="check-box">{col.varianceLeft ? '☑' : '☐'}</span> Δ {$t('accounts.show_change')}
               </button>
             {/if}
             {#if columns.length > 1}

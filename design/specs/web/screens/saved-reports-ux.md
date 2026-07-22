@@ -216,11 +216,12 @@ Below the column headers, account balances appear in columns:
 ### Variance Columns — DONE (per-gap, refined from the global-checkbox design below)
 
 **Implemented as a per-gap toggle**, not a single global checkbox: each column's **☰ menu → "Show change vs.
-next"** inserts a variance (Δ) column in the gap to *that* column's right (absent on the rightmost). This is
-strictly more flexible — show the change between 2024→2025 but not 2025→2026. The **View menu** selects the
-format globally: **$**, **%**, or **Both** (`+$5,000  +10.0%`). Δ$ = newer − older; Δ% =
-(newer − older)/|older|, shown as `—` when the older value is $0; green up / red down. Per-gap flags +
-format persist and save with the report (`SavedColumn.varianceRight`, `SavedReport.varianceFormat`).
+prior"** inserts a variance (Δ) column in the gap to *that* column's **left** (the change into the newer
+column; absent on the leftmost). This is strictly more flexible — show the change into 2025 but not into
+2026. The **View menu** selects the format globally: **$**, **%**, or **Both** (`+$5,000  +10.0%`). Δ$ =
+newer − older; Δ% = (newer − older)/|older|, shown as `—` when the older value is $0; green up / red down.
+Per-gap flags + format persist and save with the report (`SavedColumn.varianceLeft`,
+`SavedReport.varianceFormat`).
 
 _Original single-checkbox design (superseded, kept for reference):_
 

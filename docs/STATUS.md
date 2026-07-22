@@ -690,8 +690,9 @@ From story 04 (Alt F):
   scroll horizontally, hairline separator). Report is now one bordered card with the grid inside.
 - ✅ **Column ☰ menu + variance columns — DONE (this round).** Each column header has a ☰ menu (left of its
   date selector): **Insert older column** (insert-*left*: uniform, preserves the today-anchor, reaches into
-  the past — replaces the old far-left global `+`), **Show change vs. next** (per-gap variance toggle, absent
-  on rightmost), **Remove** (hidden on the last column). Variance (Δ) column shows Δ$ / Δ% / both (format in
+  the past — replaces the old far-left global `+`), **Show change vs. prior** (per-gap variance toggle; the Δ
+  column opens to the *left* of the selected newer column — the change into it — absent on the leftmost),
+  **Remove** (hidden on the last column). Variance (Δ) column shows Δ$ / Δ% / both (format in
   the View menu), `—` when prior is $0, green up / red down; footer variance shown for net income, blank for
   BS verification. Slot model (`columnSlots`) interleaves data + variance cells in the grid. Persists per
   entity (`varianceRight` per column + `varianceFormat`) and saves/restores with reports. Verified end-to-end

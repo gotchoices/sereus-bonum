@@ -139,7 +139,7 @@ export default {
     // Column header menu (☰) + variance
     column_menu: 'Column options',
     insert_older: 'Insert older column',
-    show_change: 'Show change vs. next',
+    show_change: 'Show change vs. prior',
     change: 'Change',
     variance_format: 'Change columns',
     variance_both: 'Both',
