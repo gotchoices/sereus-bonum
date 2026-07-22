@@ -95,7 +95,7 @@
     <button class="menu-item" on:click={() => { /* TODO: edit modal */ closeContextMenu(); }}>
       <span>📝</span> {$t('entities.edit')}
     </button>
-    <a href="/entities/{contextMenuEntityId}" class="menu-item" on:click={closeContextMenu}>
+    <a href="/entities/{contextMenuEntityId}/accounts" class="menu-item" on:click={closeContextMenu}>
       <span>📊</span> {$t('accounts.title')}
     </a>
     <button class="menu-item" on:click={() => { /* TODO: import transactions */ closeContextMenu(); }}>

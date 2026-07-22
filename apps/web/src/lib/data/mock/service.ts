@@ -256,6 +256,26 @@ class SqliteDataService implements DataService {
     this.getDb().run('DELETE FROM account WHERE id = ?', [id]);
     this.save();
   }
+
+  // Move an account + its subtree to a new group / parent (single-path invariant). sql.js runs with FK
+  // enforcement off, so a plain sequence of updates is fine here.
+  async moveAccountSubtree(rootId: string, newGroupId: string, newParentId: string | null): Promise<void> {
+    const root = await this.getAccount(rootId);
+    if (!root) return;
+    const all = await this.getAccounts(root.entityId);
+    const kids = new Map<string, string[]>();
+    for (const a of all) if (a.parentId) (kids.get(a.parentId) ?? kids.set(a.parentId, []).get(a.parentId)!).push(a.id);
+    const subtree: string[] = [];
+    const stack = [rootId];
+    while (stack.length) { const x = stack.pop()!; subtree.push(x); for (const c of kids.get(x) ?? []) stack.push(c); }
+    const ts = now();
+    this.getDb().run('UPDATE account SET account_group_id = ?, parent_id = ?, updated_at = ? WHERE id = ?', [newGroupId, newParentId, ts, rootId]);
+    for (const id of subtree) {
+      if (id === rootId) continue;
+      this.getDb().run('UPDATE account SET account_group_id = ?, updated_at = ? WHERE id = ?', [newGroupId, ts, id]);
+    }
+    this.save();
+  }
   
   private rowToAccount(row: unknown[]): Account {
     return {

@@ -346,6 +346,42 @@ class QuereusDataService implements DataService {
     await run(this.getDb(), 'DELETE FROM account WHERE id = ?', [id]);
   }
 
+  // Move an account (and its subtree) to a new group / parent. The composite FK (child.group must equal
+  // parent.group) makes any per-row order invalid mid-move, so — like the manual cascade in deleteEntity —
+  // we disable FK enforcement for the batch (all descendants get the new group; the root also gets the new
+  // parent). See tmp/quereus-fk-delete-perf.md for the FK-on-the-store rationale.
+  async moveAccountSubtree(rootId: string, newGroupId: string, newParentId: string | null): Promise<void> {
+    const db = this.getDb();
+    const root = await this.getAccount(rootId);
+    if (!root) return;
+    const rows = await all<{ id: string; parent_id: string | null }>(db,
+      'SELECT id, parent_id FROM account WHERE entity_id = ?', [root.entityId]);
+    const kids = new Map<string, string[]>();
+    for (const a of rows) if (a.parent_id) (kids.get(a.parent_id) ?? kids.set(a.parent_id, []).get(a.parent_id)!).push(a.id);
+    const subtree: string[] = [];
+    const stack = [rootId];
+    while (stack.length) { const x = stack.pop()!; subtree.push(x); for (const c of kids.get(x) ?? []) stack.push(c); }
+    const descendants = subtree.filter((x) => x !== rootId);
+    const ts = nowIso();
+    await run(db, 'PRAGMA foreign_keys = off');
+    await run(db, 'BEGIN');
+    try {
+      await run(db, 'UPDATE account SET account_group_id = ?, parent_id = ?, updated_at = ? WHERE id = ?',
+        [newGroupId, newParentId, ts, rootId]);
+      for (let i = 0; i < descendants.length; i += 200) {
+        const chunk = descendants.slice(i, i + 200);
+        await run(db, `UPDATE account SET account_group_id = ?, updated_at = ? WHERE id IN (${chunk.map(() => '?').join(',')})`,
+          [newGroupId, ts, ...chunk]);
+      }
+      await run(db, 'COMMIT');
+    } catch (e) {
+      try { await run(db, 'ROLLBACK'); } catch { /* ignore */ }
+      throw e;
+    } finally {
+      try { await run(db, 'PRAGMA foreign_keys = on'); } catch { /* ignore */ }
+    }
+  }
+
   // ===========================================================================
   // Transactions & Entries
   // ===========================================================================

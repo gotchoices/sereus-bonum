@@ -231,6 +231,12 @@ export interface DataService {
   createAccount(data: AccountInput): Promise<Account>;
   updateAccount(id: string, data: Partial<AccountInput>): Promise<Account>;
   deleteAccount(id: string): Promise<void>;
+  /**
+   * Move an account to a new group and/or parent, carrying its whole descendant subtree into the new
+   * group (the single-path invariant: a nested account shares its parent's group). Handles the FK-order
+   * problem internally. `newParentId` null → the account sits directly in `newGroupId`.
+   */
+  moveAccountSubtree(rootId: string, newGroupId: string, newParentId: string | null): Promise<void>;
   
   // Transactions
   getTransactions(entityId: string, options?: { 

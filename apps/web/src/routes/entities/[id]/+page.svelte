@@ -592,6 +592,7 @@
     <div class="header-left">
       <a href="/" class="back-link">← {$t('nav.home')}</a>
       <h1>{entity?.name ?? $t('common.loading')}</h1>
+      <a href="/entities/{entityId}/accounts" class="back-link manage-link">⚙ {$t('manage_accounts.title')}</a>
     </div>
     
     <div class="header-controls">

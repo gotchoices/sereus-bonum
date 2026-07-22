@@ -7,7 +7,7 @@ Route names are PascalCase (used by tooling); Path is the actual SvelteKit route
 | Home | Home | `/` | — | implemented |
 | Account Catalog | Catalog | `/catalog` | catalog.md | implemented |
 | Entity Accounts | EntityAccounts | `/entities/[id]` | accounts-view.md | implemented |
-| Manage Accounts | ManageAccounts | `/entities/[id]/accounts` | account-edit.md | planned |
+| Manage Accounts | ManageAccounts | `/entities/[id]/accounts` | account-edit.md | implemented |
 | Ledger | Ledger | `/ledger/[accountId]` | ledger.md | implemented |
 | Transaction Search | Search | `/search` | search.md | implemented |
 | Import | Import | `/import` | import.md | draft |

@@ -62,13 +62,16 @@ See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
 - 🔮 **Import Transactions mode** (CSV / QIF / OFX bank downloads).
 
 ### D. Screen gaps (from the generated-consolidation audit)
-- ⬜ **NO account-management UI (create / edit / delete / re-parent / rename an entity's accounts).** The data
-  layer has `createAccount` / `updateAccount` / `deleteAccount`, but **nothing wires them**: the entity
-  context-menu "Accounts" → the *read-only* balance-sheet/report view (links to ledgers only); the **Catalog**
-  screen manages the shared **account-group** catalog, not per-entity accounts; the ledger edits *transactions*,
-  not the account's own properties (name/parent/code). Accounts today are created **only via import**. Need an
-  account editor (modal or `/entities/[id]/accounts/[accountId]`), reachable from the accounts view + ledger,
-  honoring the single-path invariant (re-parenting moves the whole subtree's group). **No story yet.**
+- ✅ **Account-management UI — DONE.** New screen `/entities/[id]/accounts` (`ManageAccounts`): flat list
+  (code · name · group path · balance), **Add**, and an inline edit pane over the Account fields. Enforces the
+  invariants — re-parent moves the whole subtree into the parent's group via new
+  `DataService.moveAccountSubtree` (FK-off batch, mock + production); **retire** guarded by zero balance (read
+  from the loaded balances, not the slow `getAccountBalance` JOIN); **delete** guarded (child check in JS +
+  the `entry.account_id` FK rejects accounts with transactions — avoids the slow `getTransactions` JOIN).
+  Wired from the entity context-menu "Accounts"; the entity-name link still opens the Accounts View (reports),
+  cross-linked both ways. Story: `01-firstlook.md` Alt Path E; spec: `account-edit.md`; consolidation
+  generated. Verified end-to-end (add / rename / delete-guard / delete / re-parent). Deferred: partner /
+  linked-account fields, bulk actions, merge, tree/drag view, `closedThrough`.
 - ⬜ Ledger: keyboard shortcuts (Esc/Enter/Ctrl+Enter); real-time running balance (recomputes on reload); no closed-date control.
 - ⬜ Entity view: **Cash Flow mode** selectable but unimplemented (build on a convention group→activity map — no
   Custom needed); **Custom** now removed from the selector (deferred); no load-error + Retry UI; account rows'
@@ -149,7 +152,16 @@ See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
 - ⬜ On building period-close, sync app code to the domain contract: `closed_date`→`closed_through` in
   `types.ts` + both schemas + service mappers (+ `SCHEMA_VERSION` bump). Contract is updated; code lags
   intentionally to avoid a data-wipe rebuild for a rename alone.
-- ⬜ Regenerate `design/generated/` consolidations after the M3 import rebuild + perf/close changes land.
+- 🔄 **Consolidation staleness + refresh policy.** `design/generated/web/status.json` currently flags **8 of
+  9 screens stale** (only **ManageAccounts** is fresh — generated 2026‑07‑21). Stale: **Home, Catalog,
+  EntityAccounts, Ledger, Search, Import, Settings, SavedReports** (heavy spec churn since their last gen).
+  Refresh **judiciously, per screen** — review each and decide whether the spec or the code is authoritative
+  before regenerating, rather than a blanket regen:
+  - **EntityAccounts (the reports screen) — regenerate _from the implementation_.** The built screen is the
+    desired state; reconcile its consolidation (and `accounts-view.md` where they diverge) to match what's
+    coded, not the reverse. Do **not** treat the older spec as a to-do list against the current UI.
+  - **All other stale screens** — review individually and refresh only where it adds value; some may just need
+    a hash-refresh, others a genuine reconcile. No mechanical mass regen.
 
 ---
 
