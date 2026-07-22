@@ -210,7 +210,7 @@
   }
   
   async function handleDeleteGroup(group: AccountGroup) {
-    if (confirm($t('catalog.delete_confirm'))) {
+    if (confirm($t('catalog.delete_confirm', { name: group.name }))) {
       await deleteAccountGroup(group.id);
     }
     closeContextMenu();
@@ -365,7 +365,7 @@
               onchange={(e) => handleParentChange(e.currentTarget.value || null)}
             >
               <option value="">{$t('catalog.none_top_level')}</option>
-              {#each $accountGroups as group}
+              {#each getParentOptions(formType) as group}
                 <option value={group.id}>{group.name} ({typeInfo[group.accountType].label})</option>
               {/each}
             </select>

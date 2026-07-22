@@ -245,7 +245,7 @@ export class ImportService {
   /**
    * Write the merge: create needed accounts (with source identity), then write the given
    * transactions (New + user-completed, not excluded), each stamped with its source id.
-   * NOTE: writes are sequential — true atomicity needs a DataService batch/transaction API (TODO).
+   * Writes go through a single atomic `DataService.bulkImport` (one BEGIN…COMMIT).
    */
   async executeMerge(plan: MergePlan, transactionsToWrite: PreviewTransaction[]): Promise<ImportResult> {
     const ds = await getDataService();

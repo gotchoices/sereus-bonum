@@ -151,8 +151,9 @@ accounts and a non-zero own balance.
 
 ## Display Filters (⚙ View menu)
 
-A **⚙ View** menu on the toolbar holds display filters and relative-date presets. Filter state persists per
-entity (local storage).
+A **⚙ View** menu on the toolbar holds display filters and the variance-column format. State persists per
+entity (local storage). (Relative dates live on each date field's basis selector — see § Date Inputs — not
+here.)
 
 **Hide zero-balance accounts:** when on, accounts and groups whose rolled-up total is $0 are suppressed
 (a group is kept if any descendant survives). Account-type sections (Assets/Liabilities/…) always remain as
@@ -164,15 +165,15 @@ distinct from two other concepts the UI must not conflate:
 - **Zero-balance** — an active account that happens to total $0 (governed by "Hide zero-balance" above).
 - **Closed-out period** — a per-account `closedThrough` date (a posting lock), unrelated to visibility.
 
-**Relative date presets:** Today, This month, Last month, This quarter, This year, Last year, All time.
-Selecting one sets the report date(s) — the end date for "as of" modes, both bounds for period modes — and
-reloads. Manual date entry (above) still works alongside presets.
+**Change (Δ) columns format:** picks how variance columns display — **$**, **%**, or **Both** (see § User
+Actions → Columns & variance).
 
 ## User Actions
 
 **Change Report Mode:** Dropdown at top-left
 
-**Change Dates:** Date picker(s) at top-right, vertically stacked
+**Change Dates:** Each report column's date field(s) sit in the header row directly above that column — a
+basis selector stacked over the fixed picker / resolved date (see § Date Inputs).
 
 **Expand/Collapse:** Click any group/type header, or use "Expand All"/"Collapse All" buttons
 

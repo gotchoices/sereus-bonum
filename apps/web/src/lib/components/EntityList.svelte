@@ -30,7 +30,8 @@
   }
   
   async function handleDelete(id: string) {
-    if (confirm($t('entities.delete_confirm'))) {
+    const name = $entities.find((e) => e.id === id)?.name ?? '';
+    if (confirm($t('entities.delete_confirm', { name }))) {
       await deleteEntity(id);
     }
     closeContextMenu();

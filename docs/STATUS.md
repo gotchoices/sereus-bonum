@@ -72,13 +72,38 @@ See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
   cross-linked both ways. Story: `01-firstlook.md` Alt Path E; spec: `account-edit.md`; consolidation
   generated. Verified end-to-end (add / rename / delete-guard / delete / re-parent). Deferred: partner /
   linked-account fields, bulk actions, merge, tree/drag view, `closedThrough`.
-- ⬜ Ledger: keyboard shortcuts (Esc/Enter/Ctrl+Enter); real-time running balance (recomputes on reload); no closed-date control.
+- ⬜ **Home** (story 01 write flows are stubs): **create-entity form** (Alt A — no name/tax-id/method/unit
+  form nor duplicate-name validation; `addEntity` exists, the ➕ button is unwired), **edit entity**
+  (context-menu handler is `TODO`; `updateEntity` exists, UI-unused), **import transactions** (context-menu
+  `TODO`, not wired to `/import`), **boilerplate/clone** (Alt B — `TODO`). ✅ This pass: the Delete confirm
+  now names the entity.
+- ⬜ Ledger: **editor keyboard workflow** (Enter-save, Esc-cancel, Ctrl+Enter split toggle, Tab-from-Credit
+  saves — story 03 AC#3 "save by keyboard alone"; the *autocomplete* keyboard path is done, the surrounding
+  `TransactionEditor` form has no keydown handlers); **split Tab auto-create** (tab off the last unbalanced
+  split → spawn the next pre-filled split); **imbalance routing** (offer routing the remainder to the
+  Imbalance account instead of an `alert`-reject); **real-time balances** during editing (today refresh on
+  reload/navigation); **real closed-period lock** (drive from the account's `closedThrough`, not local view
+  state; add an in-screen close/reopen). Minor: locked-txn "period closed" tooltip; individual-expansion
+  persistence currently *exceeds* spec (spec says only expand-all persists) — keep the nicety or relax the spec.
 - ⬜ Entity view: **Cash Flow mode** selectable but unimplemented (build on a convention group→activity map — no
   Custom needed); **Custom** now removed from the selector (deferred); no load-error + Retry UI; account rows'
   hover tooltip is the name only (want full group→account path); BS-footer variance (net-worth Δ) left blank.
-- ⬜ Search: query builder / saved searches (Phase 2); pagination for "show all" (loads everything).
-- ⬜ Catalog: reorder child groups; delete has no usage gate.
-- ⬜ Settings: API key not actually validated on blur; Sereus Nodes UI is a stub.
+- ⬜ Search: query builder / saved searches (Phase 2); pagination / virtual scroll for "show all" (loads +
+  renders everything, no LIMIT); retry-on-error control (failures toast only). Minor: entry-count in the
+  totals footer, "Loading transactions…" indicator, date formatting via user pref, a loaded-but-empty message
+  distinct from the initial-empty one.
+- ⬜ Catalog: **delete safety gate** (block when entities use the group or a descendant; show "N entities…"
+  count + a reassignment gate — currently deletes unconditionally); **reorder child groups** (story 6.5–6.6
+  "move Special Inventory to last"); **Edit re-parent guard** (Edit modal exposes no parent field, so the
+  "can't re-parent to an incompatible type when children exist" rule is unenforced). Import/Export +
+  Search/Filter deferred (spec Future). ✅ This pass: the Add-modal parent dropdown now filters to the selected
+  type (`getParentOptions`), and Delete confirm names the group.
+- ⬜ Settings: **Sereus network nodes** (add/remove/connect — fully stubbed: disabled Add, commented-out
+  cards); **multi-language** (only English; the language selector is left disabled until locales exist);
+  API key is validated only via Test Connection, not on blur.
+- ⬜ Import (see § C for the substantive items): **entity-scoped "Import Transactions…" entry point** (only
+  the global `/import` route today). ✅ This pass: fixed a stale `executeMerge` JSDoc that claimed sequential
+  non-atomic writes (it uses one atomic `bulkImport`).
 - ⬜ Adopt unified notifications (`stores/notifications`) in remaining screens (entity, ledger, catalog).
 - ✅ Dead-CSS cleanup (this pass): pruned orphaned `.edit-*`/`.split-*`/`.btn-*` (ledger old inline-edit),
   `.node-*`/`.btn-remove` (settings), `.error-message` (search), `.btn-close` (WelcomePanel),
@@ -152,16 +177,17 @@ See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
 - ⬜ On building period-close, sync app code to the domain contract: `closed_date`→`closed_through` in
   `types.ts` + both schemas + service mappers (+ `SCHEMA_VERSION` bump). Contract is updated; code lags
   intentionally to avoid a data-wipe rebuild for a rename alone.
-- 🔄 **Consolidation staleness + refresh policy.** `design/generated/web/status.json` currently flags **8 of
-  9 screens stale** (only **ManageAccounts** is fresh — generated 2026‑07‑21). Stale: **Home, Catalog,
-  EntityAccounts, Ledger, Search, Import, Settings, SavedReports** (heavy spec churn since their last gen).
-  Refresh **judiciously, per screen** — review each and decide whether the spec or the code is authoritative
-  before regenerating, rather than a blanket regen:
-  - **EntityAccounts (the reports screen) — regenerate _from the implementation_.** The built screen is the
-    desired state; reconcile its consolidation (and `accounts-view.md` where they diverge) to match what's
-    coded, not the reverse. Do **not** treat the older spec as a to-do list against the current UI.
-  - **All other stale screens** — review individually and refresh only where it adds value; some may just need
-    a hash-refresh, others a genuine reconcile. No mechanical mass regen.
+- ✅ **Consolidation staleness + refresh policy — DONE (this pass).** All **9 screens are now fresh**
+  (`status.json` staleCount 0; `outputs.json` deps/hashes rewritten from each consolidation's front-matter,
+  dropping the old over-broad + phantom-`PascalCase.md` dep lists). Each screen was reviewed per-screen
+  (implementation authoritative for what exists; unbuilt spec/story items recorded as ⛔ Deferred):
+  - **EntityAccounts** regenerated _from the implementation_ (+ reconciled `accounts-view.md`).
+  - **Home** consolidation created (was missing); **Ledger/Search/Import/Settings/Catalog** refreshed.
+    **SavedReports** is covered within the EntityAccounts consolidation (no separate screen file).
+  - Under-implementation gaps found in the review were folded into **§ D** above (Home write-flow stubs,
+    Ledger editor keyboard workflow, Catalog delete-safety/reorder, Settings nodes/i18n, Search Phase-2), and
+    a handful of minor/easy fixes were applied inline (delete-confirm now names the entity/group, Catalog
+    parent-dropdown type filter, import-service stale JSDoc). `yarn check`: 0 errors.
 
 ---
 
