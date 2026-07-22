@@ -11,12 +11,9 @@
     topLevelGroupsByType,
     loadAccounts
   } from '$lib/stores/accounts';
-  import { getDataService, NORMAL_BALANCE, type AccountType, type BalanceSheetData } from '$lib/data';
-
-  // Present a raw signed balance for display: credit-normal types (Liability/Equity/Income) read
-  // positive when they carry a (normal) credit balance, so signs match balance-sheet convention.
-  const presentBalance = (raw: number, type: AccountType): number =>
-    NORMAL_BALANCE[type] === 'credit' ? -raw : raw;
+  import { getDataService, type AccountType, type BalanceSheetData } from '$lib/data';
+  import { presentBalance, formatVariance } from '$lib/report/present';
+  import { isoOf, endTokens, startTokens, migrateField, resolveColumnChain } from '$lib/report/dates';
   import { loadViewState, saveViewState } from '$lib/stores/viewState';
   import { savedReports, upsertReport, deleteReport, touchReport, type SavedReport, type DateFieldValue } from '$lib/stores/savedReports';
 
@@ -29,32 +26,7 @@
   // saved report auto-adjust. Columns resolve as a CHAIN (see resolvedColumns): the rightmost column
   // resolves against today; each column left of it resolves against its right neighbour's resolved date
   // and offers only "previous" tokens — so left columns reach abstractly into prior periods.
-  const isoOf = (d: Date) => d.toISOString().split('T')[0];
   const todayIso = () => isoOf(new Date());
-  const parseISO = (s: string): Date => { const [y, m, d] = s.split('-').map(Number); return new Date(y, (m ?? 1) - 1, d ?? 1); };
-  function resolveTokenDate(token: string, ref: Date): Date {
-    const y = ref.getFullYear(), m = ref.getMonth(), q = Math.floor(m / 3) * 3;
-    switch (token) {
-      case 'today': return ref;
-      case 'cm-start': return new Date(y, m, 1);       case 'cm-end': return new Date(y, m + 1, 0);
-      case 'pm-start': return new Date(y, m - 1, 1);   case 'pm-end': return new Date(y, m, 0);
-      case 'cq-start': return new Date(y, q, 1);       case 'cq-end': return new Date(y, q + 3, 0);
-      case 'pq-start': return new Date(y, q - 3, 1);   case 'pq-end': return new Date(y, q, 0);
-      case 'cy-start': return new Date(y, 0, 1);       case 'cy-end': return new Date(y, 11, 31);
-      case 'py-start': return new Date(y - 1, 0, 1);   case 'py-end': return new Date(y - 1, 11, 31);
-      default: return ref;
-    }
-  }
-  // Token option lists by field role (end = as-of/to, start = from) and column position. Non-rightmost
-  // columns get only "previous" tokens (they chain off the column to their right).
-  const endTokens = (rightmost: boolean): string[] =>
-    rightmost ? ['today', 'cm-end', 'cq-end', 'cy-end', 'pm-end', 'pq-end', 'py-end'] : ['pm-end', 'pq-end', 'py-end'];
-  const startTokens = (rightmost: boolean): string[] =>
-    rightmost ? ['cm-start', 'cq-start', 'cy-start', 'pm-start', 'pq-start', 'py-start'] : ['pm-start', 'pq-start', 'py-start'];
-  // Migrate the previous token names (single-column era) → the current vocabulary.
-  const TOKEN_MIGRATE: Record<string, string> = { som: 'cm-start', eom: 'cm-end', soq: 'cq-start', eoq: 'cq-end', soy: 'cy-start', eoy: 'cy-end', soly: 'py-start', eoly: 'py-end' };
-  const migrateField = (f: DateFieldValue): DateFieldValue =>
-    f && f.basis !== 'fixed' && TOKEN_MIGRATE[f.basis] ? { ...f, basis: TOKEN_MIGRATE[f.basis] } : f;
   const fieldLabel = (f: DateFieldValue): string => (f.basis === 'fixed' ? f.fixedDate : $t(`accounts.basis_${migrateField(f).basis}`));
   
   // Get entity ID from route
@@ -140,20 +112,7 @@
   
   // Chained resolution: rightmost column resolves against today; each column to its left resolves against
   // its right neighbour's resolved end date. Returns index-aligned { end, start? } ISO strings.
-  let resolvedColumns = $derived.by<{ end: string; start?: string }[]>(() => {
-    const res: { end: string; start?: string }[] = columns.map(() => ({ end: '' }));
-    let ref = new Date();
-    for (let i = columns.length - 1; i >= 0; i--) {
-      const c = columns[i];
-      const end = c.endField.basis === 'fixed' ? c.endField.fixedDate : isoOf(resolveTokenDate(c.endField.basis, ref));
-      const start = c.startField
-        ? (c.startField.basis === 'fixed' ? c.startField.fixedDate : isoOf(resolveTokenDate(c.startField.basis, ref)))
-        : undefined;
-      res[i] = { end, start };
-      ref = parseISO(end);
-    }
-    return res;
-  });
+  let resolvedColumns = $derived.by<{ end: string; start?: string }[]>(() => resolveColumnChain(columns, new Date()));
 
   // Load balance data for every column (one getBalanceSheet per resolved column period).
   async function loadColumns(ds: Awaited<ReturnType<typeof getDataService>>) {
@@ -252,16 +211,8 @@
     }
     return slots;
   });
-  // Δ$ and Δ% between an older and newer value (% is null when the older value is 0).
-  const varianceOf = (older: number, newer: number) => ({ d: newer - older, p: older !== 0 ? ((newer - older) / Math.abs(older)) * 100 : null });
-  function formatVariance(older: number, newer: number, unit: string): string {
-    const { d, p } = varianceOf(older, newer);
-    const dol = (d >= 0 ? '+' : '−') + formatCurrency(Math.abs(d), unit);
-    const pct = p === null ? '—' : (p >= 0 ? '+' : '−') + Math.abs(p).toFixed(1) + '%';
-    if (varianceFormat === 'dollar') return dol;
-    if (varianceFormat === 'percent') return pct;
-    return `${dol}  ${pct}`;
-  }
+  // Variance rendering lives in $lib/report/present (formatVariance); the format + currency fn are
+  // injected from component state below at each call site.
 
   // Print/PDF: the browser print dialog renders the report (print CSS hides app chrome).
   // "Save as PDF" in that dialog produces the PDF — no separate structured-PDF pipeline yet.
@@ -817,7 +768,7 @@
               {#if slot.kind === 'data'}
                 <div class="gcell gamount type-total">{formatCurrency(tt[slot.ci], entity.baseUnit)}</div>
               {:else}
-                <div class="gcell gamount gv" class:up={tt[slot.b] > tt[slot.a]} class:down={tt[slot.b] < tt[slot.a]}>{formatVariance(tt[slot.a], tt[slot.b], entity.baseUnit)}</div>
+                <div class="gcell gamount gv" class:up={tt[slot.b] > tt[slot.a]} class:down={tt[slot.b] < tt[slot.a]}>{formatVariance(tt[slot.a], tt[slot.b], entity.baseUnit, varianceFormat, formatCurrency)}</div>
               {/if}
             {/each}
           </div>
@@ -840,7 +791,7 @@
                 {#if slot.kind === 'data'}
                   <div class="gcell gamount">{formatCurrency(row.amounts[slot.ci], entity.baseUnit)}</div>
                 {:else}
-                  <div class="gcell gamount gv" class:up={row.amounts[slot.b] > row.amounts[slot.a]} class:down={row.amounts[slot.b] < row.amounts[slot.a]}>{formatVariance(row.amounts[slot.a], row.amounts[slot.b], entity.baseUnit)}</div>
+                  <div class="gcell gamount gv" class:up={row.amounts[slot.b] > row.amounts[slot.a]} class:down={row.amounts[slot.b] < row.amounts[slot.a]}>{formatVariance(row.amounts[slot.a], row.amounts[slot.b], entity.baseUnit, varianceFormat, formatCurrency)}</div>
                 {/if}
               {/each}
             </div>
@@ -868,7 +819,7 @@
               {#if slot.kind === 'data'}
                 <div class="gcell gamount foot-cell" class:negative={netIncomeOf(balanceByColumn[slot.ci]) < 0}>{formatCurrency(netIncomeOf(balanceByColumn[slot.ci]), entity.baseUnit)}</div>
               {:else}
-                <div class="gcell gamount gv" class:up={netIncomeOf(balanceByColumn[slot.b]) > netIncomeOf(balanceByColumn[slot.a])} class:down={netIncomeOf(balanceByColumn[slot.b]) < netIncomeOf(balanceByColumn[slot.a])}>{formatVariance(netIncomeOf(balanceByColumn[slot.a]), netIncomeOf(balanceByColumn[slot.b]), entity.baseUnit)}</div>
+                <div class="gcell gamount gv" class:up={netIncomeOf(balanceByColumn[slot.b]) > netIncomeOf(balanceByColumn[slot.a])} class:down={netIncomeOf(balanceByColumn[slot.b]) < netIncomeOf(balanceByColumn[slot.a])}>{formatVariance(netIncomeOf(balanceByColumn[slot.a]), netIncomeOf(balanceByColumn[slot.b]), entity.baseUnit, varianceFormat, formatCurrency)}</div>
               {/if}
             {/each}
           </div>
