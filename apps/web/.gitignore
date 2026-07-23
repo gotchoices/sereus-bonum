@@ -1,2 +1,8 @@
 # perf harness results log (grows per run; baseline.json is tracked)
 perf/perf-results.jsonl
+
+# playwright e2e artifacts
+test-results/
+playwright-report/
+blob-report/
+.playwright/

@@ -201,18 +201,26 @@ See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
     parent-dropdown type filter, import-service stale JSDoc). `yarn check`: 0 errors.
 
 ### I. Testing & regression infrastructure (new — spec: `design/specs/web/global/testing.md`)
-Layered per the spec. **Commands:** `yarn test` (full automated suite) · `yarn test:unit` (vitest) · `yarn
-perf` (performance, separate) · `yarn test:e2e` (pending, chunk 3).
+Layered per the spec. **Commands:** `yarn test` (full automated suite = unit + e2e) · `yarn test:unit`
+(vitest) · `yarn test:e2e` (Playwright, mock backend) · `yarn perf` (performance, separate).
 - ✅ **Tier-1 unit tests (`vitest`, `yarn test:unit`) — DONE.** Extracted the pure report math out of the
   1,159-line report screen into `lib/report/{dates,present}.ts` (chained relative-date resolution, token
   migration, sign convention, variance) and covered it with **30 tests** (clock pinned via `TZ=UTC`). The
   report screen was re-verified live (mock) after extraction — renders + balances unchanged.
 - ✅ **Tier-B DB perf harness (`yarn perf`) — DONE.** See § B. (`window.__bonum` probe in
   `lib/dev/probe.ts`, installed dev-only from the root layout.)
-- ⬜ **Tier-2 E2E (`@playwright/test`, `yarn test:e2e`) — NEXT.** Adopt the runner (raw `playwright` is
-  present), seed via the probe, and lock the stake-our-ground screens (report invariants, ledger, manage
-  accounts, catalog, import round-trip/idempotence, search) on `mock` + a `quereus-local` smoke. Then
-  `yarn test` = unit + e2e (full UI/UX regression suite), separate from `yarn perf`.
+- ✅ **Tier-2 E2E (`@playwright/test`, `yarn test:e2e`) — DONE (initial suite).** Auto-starts `vite dev` on
+  the **mock** backend (`playwright.config.ts`); each test gets a fresh context and seeds its own entity from
+  `books-100.json` via the probe (`e2e/helpers.ts` — with a `gotoReady` hydration gate: `page.goto` resolves
+  before Svelte attaches handlers, so navigations wait on `window.__bonum`). **4 specs green in ~10s:**
+  - `report.spec` — Balance Sheet / Trial Balance / Income Statement render + reconcile (mode switching).
+  - `search.spec` — "Show All Transactions" → totals balanced.
+  - `manage-accounts.spec` — lists seeded accounts + Add creates one that appears.
+  - `integrity.spec` — programmatic (probe): balance-sheet identity holds + every account balance == ledger
+    sum, with non-empty guards (entries > 0, balances ≠ 0) so it can't pass on an empty entity.
+  - ⬜ **Expand:** ledger entry/edit + zero-sum reject, catalog CRUD/type-filter, import round-trip +
+    merge-idempotence, saved-report round-trip; a `quereus-local` smoke project; the `From > To` / load-error
+    states once built. A couple of stable visual snapshots (report grid, VBS).
 - **Manual tools kept:** the ad-hoc `apps/web/scripts/{shot,test-*}.mjs` remain as hands-on drivers
   (screenshots / one-off scale probes), alongside the automated suites.
 

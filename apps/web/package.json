@@ -14,7 +14,8 @@
     "postinstall": "cp node_modules/sql.js/dist/sql-wasm.wasm static/",
     "test:unit": "TZ=UTC vitest run",
     "perf": "node perf/run.mjs",
-    "test": "yarn test:unit"
+    "test": "yarn test:unit && yarn test:e2e",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.56",
@@ -45,6 +46,7 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
+    "@playwright/test": "1.61.1",
     "@sveltejs/adapter-auto": "^3.0.0",
     "@sveltejs/kit": "^2.0.0",
     "@sveltejs/vite-plugin-svelte": "^4.0.0",
