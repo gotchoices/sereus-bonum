@@ -12,7 +12,9 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "postinstall": "cp node_modules/sql.js/dist/sql-wasm.wasm static/",
-    "test:unit": "TZ=UTC vitest run"
+    "test:unit": "TZ=UTC vitest run",
+    "perf": "node perf/run.mjs",
+    "test": "yarn test:unit"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.56",

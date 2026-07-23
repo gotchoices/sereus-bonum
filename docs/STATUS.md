@@ -50,6 +50,17 @@ See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
   read the MVs; bulk import uses drop→load→rebuild; period-close writes the immutable `closing_balance`.
 - ⬜ **Quick wins (low-risk):** JS-join `getBalanceSheet`'s `account⋈account_group`; add composite index
   `txn(entity_id, date)`.
+- ✅ **`getAccountBalance` store-JOIN removed — found via the new perf harness.** It ran `entry ⋈ txn` on the
+  store purely to date-filter; now skips the join when unbounded and JS-joins the date-bounded path (both
+  backends). Measured **43.2s → 17ms at 2k entries (~2500×)**; correctness cross-checked against the ledger
+  sum. The method had **no live UI callers** (screens already routed around it), so zero UI risk.
+- ✅ **DB perf harness — DONE (`apps/web/perf/run.mjs`, `yarn perf`).** Drives the real DataService (+ raw
+  in-engine SQL) against a backend at graduated sizes via a dev-only `window.__bonum` probe — timing the
+  exact shipped query shapes (write / BS / IS / ledger / all-txns / search / account-balance) with p50/p95,
+  version-stamped to `perf/perf-results.jsonl`, a ratio `baseline.json` (⚠REG / ⬇IMP flags), and correctness
+  asserts (balanced, balance=ledger). Includes the **naive in-engine JOIN variant** (single-shot,
+  `--naive-max`) so the filed store-JOIN gap stays measured — **13–486× shipped across 100→1k** (the living
+  form of `tmp/quereus-join-index-perf.md`). Re-run on each Quereus/Optimystic bump. See § I + `web/global/testing.md`.
 - 🔮 **Upstream (filed, pending maintainer):** `tmp/quereus-join-index-perf.md` (store JOINs don't push
   join keys), `tmp/quereus-mv-maintenance-perf.md` (per-row MV maintenance ~50–120× a one-shot rebuild).
 
@@ -188,6 +199,22 @@ See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
     Ledger editor keyboard workflow, Catalog delete-safety/reorder, Settings nodes/i18n, Search Phase-2), and
     a handful of minor/easy fixes were applied inline (delete-confirm now names the entity/group, Catalog
     parent-dropdown type filter, import-service stale JSDoc). `yarn check`: 0 errors.
+
+### I. Testing & regression infrastructure (new — spec: `design/specs/web/global/testing.md`)
+Layered per the spec. **Commands:** `yarn test` (full automated suite) · `yarn test:unit` (vitest) · `yarn
+perf` (performance, separate) · `yarn test:e2e` (pending, chunk 3).
+- ✅ **Tier-1 unit tests (`vitest`, `yarn test:unit`) — DONE.** Extracted the pure report math out of the
+  1,159-line report screen into `lib/report/{dates,present}.ts` (chained relative-date resolution, token
+  migration, sign convention, variance) and covered it with **30 tests** (clock pinned via `TZ=UTC`). The
+  report screen was re-verified live (mock) after extraction — renders + balances unchanged.
+- ✅ **Tier-B DB perf harness (`yarn perf`) — DONE.** See § B. (`window.__bonum` probe in
+  `lib/dev/probe.ts`, installed dev-only from the root layout.)
+- ⬜ **Tier-2 E2E (`@playwright/test`, `yarn test:e2e`) — NEXT.** Adopt the runner (raw `playwright` is
+  present), seed via the probe, and lock the stake-our-ground screens (report invariants, ledger, manage
+  accounts, catalog, import round-trip/idempotence, search) on `mock` + a `quereus-local` smoke. Then
+  `yarn test` = unit + e2e (full UI/UX regression suite), separate from `yarn perf`.
+- **Manual tools kept:** the ad-hoc `apps/web/scripts/{shot,test-*}.mjs` remain as hands-on drivers
+  (screenshots / one-off scale probes), alongside the automated suites.
 
 ---
 

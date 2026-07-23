@@ -1,0 +1,2 @@
+# perf harness results log (grows per run; baseline.json is tracked)
+perf/perf-results.jsonl

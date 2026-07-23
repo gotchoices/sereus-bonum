@@ -9,6 +9,7 @@
   import AIAssistant from '$lib/components/AIAssistant.svelte';
   import Notifications from '$lib/components/Notifications.svelte';
   import { notifyError } from '$lib/stores/notifications';
+  import { installProbe } from '$lib/dev/probe';
   import '../app.css';
   
   console.log('[Layout] Script executing, browser:', browser);
@@ -21,6 +22,7 @@
   
   // Load nav visibility from localStorage
   if (browser) {
+    installProbe(); // dev/test-only window.__bonum seam (no-op in prod builds)
     const savedNavState = localStorage.getItem('bonum-nav-visible');
     if (savedNavState !== null) {
       navVisible = savedNavState === 'true';

@@ -556,19 +556,13 @@ class SqliteDataService implements DataService {
   // ===========================================================================
   
   async getAccountBalance(accountId: string, asOf?: string): Promise<number> {
-    let sql = `
-      SELECT COALESCE(SUM(e.amount), 0) as balance
-      FROM entry e
-      JOIN txn t ON t.id = e.txn_id
-      WHERE e.account_id = ?
-    `;
-    const params: string[] = [accountId];
-    
-    if (asOf) {
-      sql += ' AND t.date <= ?';
-      params.push(asOf);
-    }
-    
+    // The txn join exists only to date-filter; skip it when unbounded (also matches the production
+    // backend, where the store-side JOIN is pathologically slow — see production/service.ts).
+    const sql = asOf
+      ? 'SELECT COALESCE(SUM(e.amount), 0) as balance FROM entry e JOIN txn t ON t.id = e.txn_id WHERE e.account_id = ? AND t.date <= ?'
+      : 'SELECT COALESCE(SUM(amount), 0) as balance FROM entry WHERE account_id = ?';
+    const params: string[] = asOf ? [accountId, asOf] : [accountId];
+
     const rows = this.getDb().exec(sql, params);
     if (!rows.length || !rows[0].values.length) return 0;
     return rows[0].values[0][0] as number;

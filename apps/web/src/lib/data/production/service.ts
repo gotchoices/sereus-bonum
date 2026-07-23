@@ -485,11 +485,27 @@ class QuereusDataService implements DataService {
   // ===========================================================================
 
   async getAccountBalance(accountId: string, asOf?: string): Promise<number> {
-    let sql = 'SELECT COALESCE(SUM(e.amount), 0) as balance FROM entry e JOIN txn t ON t.id = e.txn_id WHERE e.account_id = ?';
-    const params: SqlValue[] = [accountId];
-    if (asOf) { sql += ' AND t.date <= ?'; params.push(asOf); }
-    const row = await get<Row>(this.getDb(), sql, params);
-    return row ? Number(row.balance) : 0;
+    // No date bound → a plain single-table sum. The txn join exists ONLY to date-filter, and a
+    // store-side JOIN degrades to a per-row nested loop (see tmp/quereus-join-index-perf.md): this
+    // path measured ~43s at 2k entries with the join vs a few ms without (found via perf/run.mjs).
+    if (!asOf) {
+      const row = await get<Row>(this.getDb(), 'SELECT COALESCE(SUM(amount), 0) as balance FROM entry WHERE account_id = ?', [accountId]);
+      return row ? Number(row.balance) : 0;
+    }
+    // Date-bounded → join entry→txn dates in JS over single-table indexed reads (not a store JOIN).
+    const acct = await get<{ entity_id: string }>(this.getDb(), 'SELECT entity_id FROM account WHERE id = ?', [accountId]);
+    if (!acct) return 0;
+    const [entries, txns] = await Promise.all([
+      all<{ amount: number; txn_id: string }>(this.getDb(), 'SELECT amount, txn_id FROM entry WHERE account_id = ?', [accountId]),
+      all<{ id: string; date: string }>(this.getDb(), 'SELECT id, date FROM txn WHERE entity_id = ?', [acct.entity_id]),
+    ]);
+    const dateById = new Map(txns.map((t) => [t.id, t.date]));
+    let sum = 0;
+    for (const e of entries) {
+      const d = dateById.get(e.txn_id);
+      if (d !== undefined && d <= asOf) sum += Number(e.amount);
+    }
+    return sum;
   }
 
   // Aggregation done in JS (avoids Quereus GROUP BY quirks).
