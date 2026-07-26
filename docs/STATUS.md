@@ -61,8 +61,18 @@ See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
   asserts (balanced, balance=ledger). Includes the **naive in-engine JOIN variant** (single-shot,
   `--naive-max`) so the filed store-JOIN gap stays measured — **13–486× shipped across 100→1k** (the living
   form of `tmp/quereus-join-index-perf.md`). Re-run on each Quereus/Optimystic bump. See § I + `web/global/testing.md`.
+- ✅ **Quereus 4.4.0 upgrade (from 4.3.2, 2026-07-23) — perf re-measured via `yarn perf`.** quereus-local
+  functionally intact (balanced ✓, balance==ledger ✓, `yarn check` clean). Shipped reads got **~4× faster at
+  100 / ~1.5× at 1k** (balance sheet + income statement). **Biggest win: store-side JOINs** — the naive 4-way
+  balance-sheet JOIN at 2k entries dropped **49.3s → 2.3s (~21×)**, the ledger 2-way **43.2s → 2.0s**, and the
+  naive-vs-JS-join ratio at 1k fell from **~280–486× to ~20×**. So the filed store-JOIN issue is
+  *substantially improved* in 4.4.0 (still ~20× at 1k → keep the JS-join workarounds, but re-evaluate
+  simplifying some back to SQL at larger scale). Baseline re-recorded to 4.4.0. Optimystic unchanged
+  (0.16.2 still latest). All four `@quereus/*` (quereus / plugin-indexeddb / isolation / store) bumped in
+  lockstep (`dependencies` + `resolutions`).
 - 🔮 **Upstream (filed, pending maintainer):** `tmp/quereus-join-index-perf.md` (store JOINs don't push
-  join keys), `tmp/quereus-mv-maintenance-perf.md` (per-row MV maintenance ~50–120× a one-shot rebuild).
+  join keys) — **largely resolved in 4.4.0 per the measurement above**; `tmp/quereus-mv-maintenance-perf.md`
+  (per-row MV maintenance ~50–120× a one-shot rebuild).
 
 ### C. Import
 - ⬜ **Stock / multi-unit base-unit fix** — `pickBaseUnit` grabs the first 3-letter commodity (a stock,
