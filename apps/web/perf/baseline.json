@@ -1,32 +1,47 @@
 {
   "quereus-local:100": {
-    "write": 292.10000002384186,
+    "write": 230.60000002384186,
     "ops": {
-      "balanceSheet": 22.799999952316284,
-      "incomeStatement": 22.100000023841858,
-      "ledger": 15.800000071525574,
-      "allTransactions": 16.399999976158142,
-      "searchAccounts": 5.299999952316284,
-      "accountBalance": 4.5
+      "balanceSheet": 17.5,
+      "incomeStatement": 17.19999998807907,
+      "ledger": 16,
+      "allTransactions": 13.300000011920929,
+      "searchAccounts": 4,
+      "accountBalance": 2.800000011920929
     },
     "naive": {
-      "balanceSheet": 96.29999995231628,
-      "ledger": 37
+      "balanceSheet": 54,
+      "ledger": 8
     }
   },
   "quereus-local:1000": {
-    "write": 2797.399999976158,
+    "write": 2406.199999988079,
     "ops": {
-      "balanceSheet": 115.30000007152557,
-      "incomeStatement": 108.09999990463257,
-      "ledger": 99.19999992847443,
-      "allTransactions": 97.5,
-      "searchAccounts": 5,
-      "accountBalance": 21
+      "balanceSheet": 114.10000002384186,
+      "incomeStatement": 123.30000001192093,
+      "ledger": 86,
+      "allTransactions": 78.19999998807907,
+      "searchAccounts": 3.199999988079071,
+      "accountBalance": 19.599999964237213
     },
     "naive": {
-      "balanceSheet": 2316,
-      "ledger": 1995.3999999761581
+      "balanceSheet": 179.69999998807907,
+      "ledger": 48.89999997615814
+    }
+  },
+  "quereus-local:5000": {
+    "write": 21934,
+    "ops": {
+      "balanceSheet": 1168.6000000238419,
+      "incomeStatement": 1163.5,
+      "ledger": 1013.2999999523163,
+      "allTransactions": 460.19999998807907,
+      "searchAccounts": 3.5,
+      "accountBalance": 397.80000001192093
+    },
+    "naive": {
+      "balanceSheet": 885.3000000119209,
+      "ledger": 489.30000001192093
     }
   }
 }

@@ -512,41 +512,43 @@ class QuereusDataService implements DataService {
   async getBalanceSheet(entityId: string, endDate?: string, startDate?: string): Promise<BalanceSheetData> {
     const end = endDate || new Date().toISOString().split('T')[0];
     const db = this.getDb();
-    const tA = performance.now();
     const accts = await all<Row>(db,
       `SELECT a.id, a.name, a.code, a.unit, g.id as group_id, g.name as group_name,
               g.account_type, g.display_order
        FROM account a JOIN account_group g ON g.id = a.account_group_id
        WHERE a.entity_id = ? AND a.is_active = 1
        ORDER BY g.display_order, a.code`, [entityId]);
-    const tB = performance.now();
-    // Two single-table reads (each index-eligible), joined in JS — avoids the
-    // per-row async nested-loop that a SQL JOIN incurs on the IndexedDB store
-    // (a 3-way JOIN here measured ~140x slower than this at 1k txns).
-    const txns = await all<Row>(db,
-      `SELECT id, date FROM txn WHERE entity_id = ? AND date <= ?`, [entityId, end]);
-    const tB2 = performance.now();
-    const dateByTxn = new Map<string, string>(txns.map((r) => [r.id, r.date]));
-    const acctIds = accts.map((a) => a.id);
-    const placeholders = acctIds.map(() => '?').join(',');
-    const rawEntries = acctIds.length
-      ? await all<Row>(db,
-          `SELECT account_id, amount, txn_id FROM entry WHERE account_id IN (${placeholders})`,
-          acctIds)
-      : [];
-    const tC = performance.now();
-    const entries = rawEntries
-      .filter((e) => dateByTxn.has(e.txn_id))
-      .map((e) => ({ account_id: e.account_id, amount: e.amount, date: dateByTxn.get(e.txn_id)! }));
-    log.data.debug(`[BalanceSheet] accts=${accts.length} (${(tB - tA).toFixed(0)}ms) txns=${txns.length} (${(tB2 - tB).toFixed(0)}ms) rawEntries=${rawEntries.length} (${(tC - tB2).toFixed(0)}ms) → entries=${entries.length}`);
 
-    const typeByAccount = new Map<string, string>(accts.map((a) => [a.id, a.account_type]));
+    // Per-account balances via in-engine grouped joins. Quereus ≥4.7 executes joins efficiently and
+    // correctly (the 4.6.0 grouped-join bug is fixed — see docs/STATUS.md § B), so we let the engine do
+    // the entry⋈txn join + SUM instead of loading every entry and joining in JS. Two 2-table grouped
+    // joins keyed by account type: A/L/E cumulative through `end`; I/E over [start,end] when a start is
+    // given, else cumulative. (2-table joins were never affected by the 4.6.0 bug.)
+    // Per-account balances via one fast 2-table grouped join (no `account_id IN (...)` — that clause
+    // tripled the time; driving from `txn.entity_id` is fastest on the store). Accounts with no matching
+    // entries are absent → treated as 0.
+    //   - Balance sheet (no start): SUM through `end`, all accounts cumulative.
+    //   - Income statement (start given): A/L/E stay cumulative while Income/Expense window to [start,end].
+    //     One pass computes BOTH via conditional aggregation, then JS picks cumulative-or-period by type
+    //     (cheaper than a second query or a 4-table conditional join).
     const balByAccount = new Map<string, number>();
-    for (const e of entries) {
-      const t = typeByAccount.get(e.account_id);
-      // A/L/E: cumulative through end. I/E: whole period through end, or [start,end] if start given.
-      if ((t === 'INCOME' || t === 'EXPENSE') && startDate && !(e.date >= startDate && e.date <= end)) continue;
-      balByAccount.set(e.account_id, (balByAccount.get(e.account_id) ?? 0) + Number(e.amount));
+    if (startDate) {
+      const rows = await all<Row>(db,
+        `SELECT e.account_id,
+                SUM(e.amount) AS cumulative,
+                SUM(CASE WHEN t.date >= ? THEN e.amount ELSE 0 END) AS period
+         FROM entry e JOIN txn t ON t.id = e.txn_id
+         WHERE t.entity_id = ? AND t.date <= ?
+         GROUP BY e.account_id`, [startDate, entityId, end]);
+      const ieIds = new Set(accts.filter((a) => a.account_type === 'INCOME' || a.account_type === 'EXPENSE').map((a) => a.id));
+      for (const r of rows) balByAccount.set(r.account_id, Number(ieIds.has(r.account_id) ? r.period : r.cumulative));
+    } else {
+      const rows = await all<Row>(db,
+        `SELECT e.account_id, SUM(e.amount) AS balance
+         FROM entry e JOIN txn t ON t.id = e.txn_id
+         WHERE t.entity_id = ? AND t.date <= ?
+         GROUP BY e.account_id`, [entityId, end]);
+      for (const r of rows) balByAccount.set(r.account_id, Number(r.balance));
     }
 
     const accountBalances: AccountBalance[] = [];

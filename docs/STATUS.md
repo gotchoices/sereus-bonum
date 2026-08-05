@@ -70,6 +70,64 @@ See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
   simplifying some back to SQL at larger scale). Baseline re-recorded to 4.4.0. Optimystic unchanged
   (0.16.2 still latest). All four `@quereus/*` (quereus / plugin-indexeddb / isolation / store) bumped in
   lockstep (`dependencies` + `resolutions`).
+- ✅ **Quereus 4.4.1 (from 4.4.0, 2026-07-27) — re-measured.** Broad **~10–20% throughput gain** across reads
+  + writes (BS 114→96 ms @1k; restore 2.8→2.5 s @1k), no regressions, balanced ✓. **The join planner is
+  unchanged** — the naive in-engine join is still ~20× the JS-join at 1k and **did not finish in 8 min at 5k
+  (10k entries)**; the filed store-JOIN issue is *not* addressed in 4.4.1 (the 4.4.0 jump was a one-time
+  constant-factor drop). Our now-dominant cost is **per-row store I/O**: restore **~2.3 ms/row (22.8 s / 10k
+  entries)** and a **~1 s balance sheet at 5k txns** even with JS-joins — the ceiling the MV balance cache
+  targets. Baseline re-recorded to 4.4.1 (adds size 5000). `tmp/quereus-join-index-perf.md` annotated.
+- 🔄 **Quereus 4.5.0 (from 4.4.1, 2026-07-29) — evaluated; NET REGRESSION for us; staying on 4.5.0, awaiting
+  an upstream follow-up.** **The JOIN planner is FIXED** — the super-linear equi-join is now linear + fast
+  (4-way report join **1,924 ms → 288 ms @2k entries**; **>8 min hang → 1.39 s @10k**), and in-engine joins
+  are now *faster* than our JS-join workaround. **But** every single-table read regressed **~1.6–1.9×** (incl.
+  a 2-row point seek 1.2→2.3 ms) and bulk writes ~1.5× → our report paths (which *avoid* joins per the old
+  advice) regressed **3–6×** (balance sheet 96→607 ms @1k, 1.02→3.56 s @5k). A cold-start "backend not
+  initialized" race also surfaced (4.5.0 init is slower; perf harness hardened with a readiness pre-warm).
+  **Net: 4.5.0 is slower than 4.4.1 for our current code**, so we are **not** re-baselining or reverting the
+  JS-join workarounds yet (baseline stays 4.4.1). Fresh contrast report filed: `tmp/quereus-4.5-vs-4.4-perf.md`
+  (to submit). Optimystic 0.17.0 / cadre-core 0.9.0 are available but **not pulled** (entangled with the
+  db-p2p `.unref()` patch; don't affect this quereus-local eval). When the base-read regression is reclaimed
+  upstream, 4.5.x + reverting to in-engine SQL joins becomes the clear win (linear joins, simpler code).
+- 🔄 **Quereus 4.6.0 (from 4.5.0, 2026-08-02) — evaluated; found a CORRECTNESS regression + still a perf
+  regression vs 4.4.1.** **Correctness (high):** `GROUP BY` + aggregate over a **4+ table join with a WHERE
+  clause** silently returns ONE bogus row (group key = integer `1`, aggregate = `null`) instead of the
+  correct groups — deterministic, **new in 4.6.0** (4.5.0 was correct). 3-table joins, and WHERE-less
+  4-table joins, are fine. **Our app is UNAFFECTED** (it reads single tables + groups in JS, never SQL
+  GROUP-BY-over-join; the perf run is still balanced ✓ + balance==ledger ✓), but it blocks ever moving
+  reporting back to in-engine grouped joins. **Perf:** 4.5.0's broad read/write regression is *mostly
+  reclaimed* (restore back to ~4.4.1; simple reads ~1.1×), but balance sheet / income statement are still
+  **~2.4–3.7×** vs 4.4.1 (down from 4.5.0's 3–6×). **Decision: staying on 4.6.0** for evaluation continuity —
+  the app is verified correct on it (JS-side grouping dodges the bug; perf run balanced ✓ + balance==ledger
+  ✓) — while noting **4.4.1 remains the fastest / cleanest version for us** and the **baseline stays 4.4.1**.
+  Do NOT introduce SQL GROUP-BY-over-a-4+-table-join while on 4.6.0 (it returns silent wrong results). Fresh
+  report filed: `tmp/quereus-4.6-groupby-join-bug.md` (to submit).
+- ✅ **Quereus 4.7.0 (from 4.6.0, 2026-08-02) — evaluated; the 4.6.0 correctness bug is FIXED and it's now a
+  real adoption candidate.** Re-ran the exact 4.6.0 repro: `GROUP BY` + aggregate over a 4+ table join with a
+  WHERE now returns the **correct 5 groups** (was 1 bogus row). Perf vs 4.4.1: **write, ledger, cross-entity
+  list, account-balance, search all back to ~parity (~1.0–1.1×)**, and **in-engine grouped JOINs are now
+  fast + linear + correct** (naive balance-sheet type-rollup 167 ms @2k / 894 ms @10k entries — ~0.4× our
+  JS-join, i.e. FASTER than the workaround). **Remaining:** our JS-join balance sheet / income statement are
+  still **~2.3–4×** vs 4.4.1 (BS 96→386 ms @1k, 1.02→2.38 s @5k) — was *self-inflicted* (single-table reads,
+  the old workaround). **ADOPTED 4.7.0 + reverted `getBalanceSheet` to in-engine SQL joins.**
+  - **`production/service.ts getBalanceSheet` rewrite:** replaced the load-all-entries + JS-join with **one
+    2-table grouped join** (`entry ⋈ txn … GROUP BY e.account_id`). Balance sheet = cumulative through
+    `end`; income statement = the same join with **conditional aggregation**
+    (`SUM(CASE WHEN date>=start …)`) computing cumulative + period in one pass, then JS picks
+    cumulative-or-period by account type. Key perf lessons (measured): **no `account_id IN (...)`** (that
+    clause *tripled* the time), drive from `txn.entity_id`, and a 2-table join beats the 4-table
+    conditional. Now **at parity with 4.4.1** (BS 1.15–1.18×, income statement 1.02–1.38×), correct
+    (balanced ✓, balance==ledger ✓, income-statement all-time==cumulative + future-only==0 verified), and
+    ~half the code. Our shipped `getBalanceSheet` (114 ms @1k) is now even faster than the naive 4-way
+    (180 ms). **Baseline re-recorded to 4.7.0 + SQL-join.** mock backend left as-is (sql.js joins are fast;
+    e2e integrity runs there).
+- 🔄 **Rest of the Sereus stack — pulled to latest (2026-08-02), install/build verified only.** Optimystic
+  **0.16.2 → 0.20.0** (all 5 pkgs) + **cadre-core 0.8.1 → 0.9.0** (deps + resolutions; `p2p-fret` unchanged
+  at 0.6.0). `yarn install`, `yarn check` (0 errors), and `yarn build` all clean; quereus-local is
+  independent of Optimystic and unaffected. **The `db-p2p` `.unref()` patch was dropped** (bumping 4 minors)
+  — but **8 unguarded `.unref()` calls remain in db-p2p 0.20.0**, so **quereus-p2p would still crash at
+  runtime**; the patch must be re-created (or the issue re-filed upstream) before p2p is reactivated.
+  **quereus-p2p runtime was NOT re-verified** (deferred, per scope) — it's still single-node/experimental.
 - 🔮 **Upstream (filed, pending maintainer):** `tmp/quereus-join-index-perf.md` (store JOINs don't push
   join keys) — **largely resolved in 4.4.0 per the measurement above**; `tmp/quereus-mv-maintenance-perf.md`
   (per-row MV maintenance ~50–120× a one-shot rebuild).

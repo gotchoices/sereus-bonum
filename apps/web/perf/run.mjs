@@ -94,6 +94,15 @@ async function benchInPage({ fixture, N, useQuereus, runNaive, endDate, startDat
   // Single-shot (no warmup/repeat) — the naive store JOINs are far too slow to run N+1 times.
   const timeOnce = async (fn) => { const s = now(); const last = await fn(); const d = now() - s; return { p50: d, p95: d, min: d, once: true, _last: last }; };
 
+  // Pre-warm: window.__bonum is set on layout mount, but the DataService initializes lazily/async.
+  // Quereus 4.5.0's slower init can leave the singleton half-ready right after mount (getDataService
+  // returns before initialize() resolves → "not initialized"). Wait for a real query to succeed first,
+  // so the write timing below excludes one-time init.
+  for (let i = 0; i < 40; i++) {
+    try { const ds0 = await api.getDataService(); await ds0.getUnits(); break; }
+    catch { await new Promise((r) => setTimeout(r, 300)); }
+  }
+
   const w0 = now();
   const entityId = await api.importNativeBooks(fixture); // seed == write benchmark
   const write = now() - w0;
