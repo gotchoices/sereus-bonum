@@ -121,6 +121,10 @@ See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
     ~half the code. Our shipped `getBalanceSheet` (114 ms @1k) is now even faster than the naive 4-way
     (180 ms). **Baseline re-recorded to 4.7.0 + SQL-join.** mock backend left as-is (sql.js joins are fast;
     e2e integrity runs there).
+- ✅ **Quereus 4.8.0 (from 4.7.0, 2026-08-06) — adopted; clean.** Perf **at parity with 4.7.0** across all
+  ops/sizes (0.8–1.2×, noise; balanced ✓ + balance==ledger ✓), **no regressions**. Grouped-join correctness
+  (the 4.6.0 bug shape: 4-way join + WHERE + GROUP BY) re-checked — **still correct** (5 groups). Full suite
+  green (30 unit + 4 e2e). Baseline re-recorded to 4.8.0. Nothing to report upstream.
 - ✅ **Rest of the Sereus stack pulled to latest + quereus-p2p RUNTIME re-verified (2026-08-02).** Optimystic
   **0.16.2 → 0.20.0** (all 5 pkgs) + **cadre-core 0.8.1 → 0.9.0** (deps + resolutions; `p2p-fret` unchanged
   at 0.6.0). `yarn install` / `check` / `build` clean.

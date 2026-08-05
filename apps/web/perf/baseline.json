@@ -1,47 +1,44 @@
 {
   "quereus-local:100": {
-    "write": 230.60000002384186,
+    "write": 243.69999998807907,
     "ops": {
-      "balanceSheet": 17.5,
-      "incomeStatement": 17.19999998807907,
-      "ledger": 16,
-      "allTransactions": 13.300000011920929,
-      "searchAccounts": 4,
-      "accountBalance": 2.800000011920929
+      "balanceSheet": 20.30000001192093,
+      "incomeStatement": 20.80000001192093,
+      "ledger": 14.100000023841858,
+      "allTransactions": 15.099999964237213,
+      "searchAccounts": 4.100000023841858,
+      "accountBalance": 3.299999952316284
     },
     "naive": {
-      "balanceSheet": 54,
-      "ledger": 8
+      "balanceSheet": 33,
+      "ledger": 8.5
     }
   },
   "quereus-local:1000": {
-    "write": 2406.199999988079,
+    "write": 2570.399999976158,
     "ops": {
-      "balanceSheet": 114.10000002384186,
-      "incomeStatement": 123.30000001192093,
-      "ledger": 86,
-      "allTransactions": 78.19999998807907,
-      "searchAccounts": 3.199999988079071,
-      "accountBalance": 19.599999964237213
+      "balanceSheet": 113.5,
+      "incomeStatement": 136.39999997615814,
+      "ledger": 82.89999997615814,
+      "allTransactions": 89.5,
+      "searchAccounts": 3.899999976158142,
+      "accountBalance": 19.30000001192093
     },
     "naive": {
-      "balanceSheet": 179.69999998807907,
-      "ledger": 48.89999997615814
+      "balanceSheet": 192.19999998807907,
+      "ledger": 44.5
     }
   },
   "quereus-local:5000": {
-    "write": 21934,
+    "write": 22455.100000023842,
     "ops": {
-      "balanceSheet": 1168.6000000238419,
-      "incomeStatement": 1163.5,
-      "ledger": 1013.2999999523163,
-      "allTransactions": 460.19999998807907,
-      "searchAccounts": 3.5,
-      "accountBalance": 397.80000001192093
+      "balanceSheet": 1136.5,
+      "incomeStatement": 1167.1000000238419,
+      "ledger": 977.1999999880791,
+      "allTransactions": 402.89999997615814,
+      "searchAccounts": 3.700000047683716,
+      "accountBalance": 395
     },
-    "naive": {
-      "balanceSheet": 885.3000000119209,
-      "ledger": 489.30000001192093
-    }
+    "naive": {}
   }
 }
