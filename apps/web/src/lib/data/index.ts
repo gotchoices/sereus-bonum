@@ -11,36 +11,34 @@ export * from './types';
 
 // Lazy-load the appropriate service to avoid importing unused code
 let _dataService: DataService | null = null;
+let _initPromise: Promise<DataService> | null = null;
 
 /**
  * Get the data service instance
  * Must call initialize() before using other methods
  */
 export async function getDataService(): Promise<DataService> {
-  if (_dataService) {
-    log.data.debug('Returning existing DataService');
-    return _dataService;
-  }
-  
-  log.data.info(`Initializing ${BACKEND} backend...`);
+  if (_dataService) return _dataService;
+  // Concurrent callers (app boot + probe + a screen's first query) must await the SAME init — and the
+  // singleton must only be published AFTER initialize() resolves, or an early caller gets a half-ready
+  // service ("... not initialized"). Guard with a shared in-flight promise.
+  if (_initPromise) return _initPromise;
+
+  _initPromise = (async () => {
+    log.data.info(`Initializing ${BACKEND} backend...`);
+    const service: DataService = USE_QUEREUS
+      ? (await import('./production/service')).quereusService
+      : (await import('./mock/service')).sqliteService;
+    await service.initialize();
+    _dataService = service; // publish only once fully initialized
+    log.data.info(`${BACKEND} backend initialized`);
+    return service;
+  })();
 
   try {
-    if (USE_QUEREUS) {
-      log.data.debug('Loading Quereus service...');
-      const { quereusService } = await import('./production/service');
-      _dataService = quereusService;
-    } else {
-      log.data.debug('Loading SQLite service...');
-      const { sqliteService } = await import('./mock/service');
-      _dataService = sqliteService;
-    }
-
-    log.data.debug('Calling service.initialize()...');
-    await _dataService.initialize();
-    log.data.info(`${BACKEND} backend initialized`);
-    
-    return _dataService;
+    return await _initPromise;
   } catch (e) {
+    _initPromise = null; // allow a retry after a failed init
     log.data.error('Failed to initialize DataService', e);
     throw e;
   }
@@ -60,6 +58,7 @@ export async function resetDataService(): Promise<void> {
   if (_dataService) {
     await _dataService.close();
     _dataService = null;
+    _initPromise = null;
     log.data.info('DataService reset');
   }
 }

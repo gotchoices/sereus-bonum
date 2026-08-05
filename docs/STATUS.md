@@ -121,13 +121,28 @@ See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
     ~half the code. Our shipped `getBalanceSheet` (114 ms @1k) is now even faster than the naive 4-way
     (180 ms). **Baseline re-recorded to 4.7.0 + SQL-join.** mock backend left as-is (sql.js joins are fast;
     e2e integrity runs there).
-- 🔄 **Rest of the Sereus stack — pulled to latest (2026-08-02), install/build verified only.** Optimystic
+- ✅ **Rest of the Sereus stack pulled to latest + quereus-p2p RUNTIME re-verified (2026-08-02).** Optimystic
   **0.16.2 → 0.20.0** (all 5 pkgs) + **cadre-core 0.8.1 → 0.9.0** (deps + resolutions; `p2p-fret` unchanged
-  at 0.6.0). `yarn install`, `yarn check` (0 errors), and `yarn build` all clean; quereus-local is
-  independent of Optimystic and unaffected. **The `db-p2p` `.unref()` patch was dropped** (bumping 4 minors)
-  — but **8 unguarded `.unref()` calls remain in db-p2p 0.20.0**, so **quereus-p2p would still crash at
-  runtime**; the patch must be re-created (or the issue re-filed upstream) before p2p is reactivated.
-  **quereus-p2p runtime was NOT re-verified** (deferred, per scope) — it's still single-node/experimental.
+  at 0.6.0). `yarn install` / `check` / `build` clean.
+  - **`.unref()` fixed the Sereus-prescribed way — NOT a p2p-fret bug.** The `.unref()` calls are legitimate
+    cross-runtime code (`fret` source has **zero**; they live in db-p2p/optimystic and are the *app's* to
+    polyfill — browsers return numeric timer ids, not Node `Timeout` objects). Replaced the old db-p2p
+    `.unref()` patch with the reference-app polyfill: **`apps/web/src/polyfills.ts`** (Buffer global + no-op
+    timer `.ref()/.unref()`, ported from `@serfab/reference-app-web`), loaded first via
+    **`src/hooks.client.ts`**. Aligned `vite.config.ts` to the reference (node-builtin aliases
+    os/net/tls→empty, stream→readable-stream, buffer→buffer; `define global`; buffer optimizeDeps); added
+    `buffer` + `readable-stream`; deleted the orphaned patch file.
+  - **Verified:** `VITE_BACKEND=quereus-p2p` boots single-node — CadreNode starts (peer id, strand ready),
+    seeds the optimystic strand, Home renders both entities, **zero `.unref()` / console errors** (Playwright
+    smoke). Reference: `@serfab/reference-app-web` README §"Vite config notes".
+  - **Deferred:** `dedupe: ['@multiformats/multiaddr']` (the reference's gossipsub/dialability fix) breaks
+    bonum's build ("Missing ./convert" — our transitive multiaddr layout differs) and single-node p2p doesn't
+    dial peers — revisit (with multiaddr version pinning) when multi-node p2p is tackled.
+- ✅ **Fixed a latent `getDataService` init race (root cause)** surfaced here (and earlier by 4.5.0's slower
+  init): the singleton published `_dataService` **before** `initialize()` resolved, so a concurrent caller
+  (app boot + probe + a screen's first query) could get a half-ready service ("… not initialized"). Now it
+  awaits a shared in-flight promise and publishes only after init completes; `resetDataService` clears it.
+  E2e (which seeds via the probe at boot) is stable again.
 - 🔮 **Upstream (filed, pending maintainer):** `tmp/quereus-join-index-perf.md` (store JOINs don't push
   join keys) — **largely resolved in 4.4.0 per the measurement above**; `tmp/quereus-mv-maintenance-perf.md`
   (per-row MV maintenance ~50–120× a one-shot rebuild).
