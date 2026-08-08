@@ -133,9 +133,12 @@ See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
   4.8.0-now within noise. **Baseline kept at 4.8.0** (not re-recorded under noisy conditions). Nothing to
   report upstream. *(Reminder: perf ratios are only valid when baseline + run share machine conditions;
   re-baseline on a quiet machine when convenient.)*
-- ✅ **Rest of the Sereus stack pulled to latest + quereus-p2p RUNTIME re-verified (2026-08-02).** Optimystic
-  **0.16.2 → 0.20.0** (all 5 pkgs) + **cadre-core 0.8.1 → 0.9.0** (deps + resolutions; `p2p-fret` unchanged
-  at 0.6.0). `yarn install` / `check` / `build` clean.
+- ✅ **Rest of the Sereus stack pulled to latest + quereus-p2p RUNTIME re-verified.** Optimystic
+  **0.16.2 → 0.20.0 → 0.21.0** (all 5 pkgs; 0.20→0.21 on 2026-08-08) + **cadre-core 0.8.1 → 0.9.0** (deps +
+  resolutions; `p2p-fret` unchanged at 0.6.0). `yarn install` / `check` / `build` clean at each step. The
+  0.21.0 bump re-verified: `install`/`check`/`build` clean and the quereus-p2p smoke boot still starts
+  CadreNode (peer id, strand ready), seeds, renders entities, **zero `.unref()`/console errors** (the timers
+  polyfill keeps working across the bump).
   - **`.unref()` fixed the Sereus-prescribed way — NOT a p2p-fret bug.** The `.unref()` calls are legitimate
     cross-runtime code (`fret` source has **zero**; they live in db-p2p/optimystic and are the *app's* to
     polyfill — browsers return numeric timer ids, not Node `Timeout` objects). Replaced the old db-p2p
