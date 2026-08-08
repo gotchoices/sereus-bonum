@@ -125,6 +125,14 @@ See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
   ops/sizes (0.8–1.2×, noise; balanced ✓ + balance==ledger ✓), **no regressions**. Grouped-join correctness
   (the 4.6.0 bug shape: 4-way join + WHERE + GROUP BY) re-checked — **still correct** (5 groups). Full suite
   green (30 unit + 4 e2e). Baseline re-recorded to 4.8.0. Nothing to report upstream.
+- ✅ **Quereus 4.9.0 (from 4.8.0, 2026-08-08) — adopted; clean.** Perf **at parity with 4.8.0**, grouped-join
+  correctness intact (4-way+WHERE+GROUP BY → 5 correct groups), full suite green (30 unit + 4 e2e). Note: this
+  session's machine ran **~1.5× slower** than when the baseline was recorded (uniform across even a 6 ms
+  `searchAccounts` and a 34 s restore → clearly machine, not engine), which flagged spurious ⚠REG. **Isolated
+  via a same-session A/B:** 4.8.0 *now* showed the identical ~1.5× vs its own baseline, and 4.9.0-now ==
+  4.8.0-now within noise. **Baseline kept at 4.8.0** (not re-recorded under noisy conditions). Nothing to
+  report upstream. *(Reminder: perf ratios are only valid when baseline + run share machine conditions;
+  re-baseline on a quiet machine when convenient.)*
 - ✅ **Rest of the Sereus stack pulled to latest + quereus-p2p RUNTIME re-verified (2026-08-02).** Optimystic
   **0.16.2 → 0.20.0** (all 5 pkgs) + **cadre-core 0.8.1 → 0.9.0** (deps + resolutions; `p2p-fret` unchanged
   at 0.6.0). `yarn install` / `check` / `build` clean.
