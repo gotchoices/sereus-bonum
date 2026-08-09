@@ -45,9 +45,30 @@ None of the four are implemented yet; story/spec status noted per item.
 
 ### B. Performance (real-data scale — Home ~10 s, balance sheet ~18 s today; both are `getBalanceSheet`)
 See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
-- ⬜ **Adopt MV-based balance caching** — `account_balance` + bucketed `entry_by_period` materialized
-  views (schema change + version bump); read paths (balance sheet / income statement / account balance)
-  read the MVs; bulk import uses drop→load→rebuild; period-close writes the immutable `closing_balance`.
+- 🔬 **Read-perf investigation + upstream report (2026-08-08).** At real scale (Kyle ≈ 17.7k txns / ~35k
+  entries) reports take ~10–14 s — the blocker to shipping on the Quereus backend. Root-caused (decomposition
+  + a Quereus source dive): cost is **touching every row**, not the SQL shape — (P0) IndexedDB `openCursor`
+  per-row reads (no `getAll`), (P1) per-row `TextDecoder`+`JSON.parse(reviver)`, (P2) the store vtab never
+  uses indexes/PK-ranges → every predicate is a full scan. **SQL-side vs JS-side collation measured equal** →
+  pushing more into the DB doesn't help; scanning is the cost. **Cross-backend finding:** reads are
+  *identical* on quereus-local vs quereus-p2p/Optimystic (311 vs 298 ms @2k) — Optimystic's local store is
+  also IndexedDB (`IndexedDBRawStorage`), and its cost is all on **writes** (~12× slower). So the read fix
+  belongs upstream in Quereus (engine + plugin), and helps the distributed path too. **Detailed maintainer
+  report drafted: `tmp/quereus-read-perf-report.md`** (P0/P1/P2/P4 with file:line + repro + built-in debug
+  knobs: `runtime_stats`, `query_plan()`, `execution_trace()`, `InMemoryKVStore` A/B).
+- ⬜ **MV-based balance caching — ENGINE-NATIVE PATH FOUND + PROVEN; build decision pending.** Update
+  (2026-08-08, on 4.10/0.22): **the primitive already exists** — Quereus ships incrementally-maintained
+  materialized views (`CREATE MATERIALIZED VIEW … USING store`, persisted to IndexedDB) + a `db.watch`
+  change-subscription. **Empirically verified:** a single-source `SUM … GROUP BY account_id` MV reads in
+  **2–3 ms vs 213 ms brute-force @2k** (and `O(#accounts)`, so it stays ~ms as history grows) and
+  **maintains itself O(1) on write** (a `+100000` insert updated the balance by exactly 100000). So the
+  earlier "deferred until a primitive exists" framing is void. **Two constraints** shape the build: (1) our
+  balance is aggregate-**over-a-join** which is *not* incremental → must **denormalize `entity_id`/`date`
+  onto `entry`** (schema change) to make it single-source; (2) no `?`/as-of-date in an MV body → the MV gives
+  **current** balances (balance-sheet-as-of-today, the hot path); period/historical/income-statement reports
+  stay brute-force (so P0–P2 still matter for those). Full design + build triggers:
+  **`docs/materialized-balances-design.md`**; upstream feedback in `tmp/quereus-read-perf-report.md`
+  (re-verified on 4.10 — P0/P1/P2 unaddressed, brute-force perf unchanged).
 - ⬜ **Quick wins (low-risk):** JS-join `getBalanceSheet`'s `account⋈account_group`; add composite index
   `txn(entity_id, date)`.
 - ✅ **`getAccountBalance` store-JOIN removed — found via the new perf harness.** It ran `entry ⋈ txn` on the
