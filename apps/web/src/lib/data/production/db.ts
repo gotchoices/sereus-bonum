@@ -32,17 +32,38 @@ export async function getQuereusDb(): Promise<Database> {
 
 async function initLocal(): Promise<Database> {
   log.data.info('[Quereus] Initializing local (IndexedDB) backend...');
-  const { Database: DatabaseCtor, registerPlugin } = await import('@quereus/quereus');
+  const { Database: DatabaseCtor } = await import('@quereus/quereus');
   const { default: indexeddbPlugin } = await import('@quereus/plugin-indexeddb/plugin');
 
   const database: Database = new DatabaseCtor();
-  await registerPlugin(database, indexeddbPlugin, {
-    databaseName: 'bonum',
-    moduleName: 'store',
-  });
-
+  // Register the store vtab module directly (rather than registerPlugin, which returns nothing) so we can
+  // capture the module handle and rehydrate the persisted catalog below.
+  const registrations = await (indexeddbPlugin as unknown as (db: Database, cfg: unknown) => Promise<{
+    vtables: { name: string; module: unknown; auxData?: unknown }[];
+  }>)(database, { databaseName: 'bonum', moduleName: 'store' });
+  const storeVtab = registrations.vtables[0];
+  (database as unknown as { registerModule: (n: string, m: unknown, a?: unknown) => void })
+    .registerModule(storeVtab.name, storeVtab.module, storeVtab.auxData);
   // Tables bind to the registered store module.
   await database.exec("pragma default_vtab_module = 'store'");
+
+  // Rehydrate the persisted schema from the store's __catalog__ (tables + indexes ADOPTED, not rebuilt) —
+  // the recommended reopen pattern (quereus docs/store.md § Schema Discovery). Without this we re-ran the
+  // full DDL on every open, which rebuilt every secondary index over the persisted rows (~4-5s each →
+  // 20-30s at real scale). On a fresh DB the catalog is empty and the DDL is applied once below.
+  // rehydrateCatalog lives on the plain StoreModule; the plugin wraps it in an IsolationModule, so it may
+  // be on `.underlying`.
+  type Rehydratable = { rehydrateCatalog?: (db: Database) => Promise<unknown>; underlying?: Rehydratable };
+  const sm = storeVtab.module as Rehydratable;
+  const rehydrator: Rehydratable | undefined =
+    typeof sm.rehydrateCatalog === 'function' ? sm
+      : typeof sm.underlying?.rehydrateCatalog === 'function' ? sm.underlying : undefined;
+  try {
+    if (rehydrator) { await rehydrator.rehydrateCatalog!(database); log.data.info('[Quereus] Rehydrated persisted catalog'); }
+    else log.data.warn('[Quereus] rehydrateCatalog not found on store module — will re-apply schema');
+  } catch (e) {
+    log.data.warn('[Quereus] rehydrateCatalog failed; falling back to re-applying schema', e);
+  }
 
   const exists = await schemaExists(database);
   const version = exists ? await readSchemaVersion(database) : 0;
@@ -62,6 +83,9 @@ async function initLocal(): Promise<Database> {
     await seedQuereus(database);
     log.data.info('[Quereus] Seeded base units + account groups');
   }
+
+  // Prototype: current-balance materialized view (idempotent; always ensured). See getBalanceSheet fast path.
+  await ensureBalanceMV(database);
 
   log.data.info('[Quereus] Local backend ready');
   return database;
@@ -145,6 +169,7 @@ async function dropAllTables(database: Database): Promise<void> {
 }
 
 async function schemaExists(database: Database): Promise<boolean> {
+  // After rehydrateCatalog() the persisted tables are back in the in-memory catalog, so schema() sees them.
   try {
     const row = await database.get(
       "SELECT name FROM schema() WHERE type = 'table' AND name = 'entity'",
@@ -200,4 +225,23 @@ export function uuid(): string {
 
 export function nowIso(): string {
   return new Date().toISOString();
+}
+
+// --- Balance materialized view (prototype) -------------------------------------------------------------
+// A single-source, incrementally-maintained MV of current per-account balances, persisted to the store
+// (IndexedDB). Makes the *current* balance sheet read O(#accounts) instead of scanning every entry — see
+// docs/materialized-balances-design.md. Single-source (`SUM … GROUP BY` over `entry`) qualifies for
+// Quereus's O(1)-per-write delta-aggregate maintenance. `account_id` uniquely determines its entity, so no
+// denormalized `entity_id` is needed; the balance-sheet reader filters to the entity's own accounts.
+export const BALANCE_MV = 'account_balance';
+
+export async function ensureBalanceMV(database: Database): Promise<void> {
+  await database.exec(
+    `CREATE MATERIALIZED VIEW IF NOT EXISTS ${BALANCE_MV} USING store AS
+       SELECT account_id, SUM(amount) AS balance FROM entry GROUP BY account_id`,
+  );
+}
+
+export async function dropBalanceMV(database: Database): Promise<void> {
+  await database.exec(`DROP MATERIALIZED VIEW IF EXISTS ${BALANCE_MV}`);
 }

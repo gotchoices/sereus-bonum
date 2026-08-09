@@ -21,7 +21,7 @@ import type {
   LedgerEntry, SplitEntry, BulkImportData
 } from '../types';
 import type { Database, SqlValue } from '@quereus/quereus';
-import { getQuereusDb, closeQuereusDb, all, get, run, uuid, nowIso } from './db';
+import { getQuereusDb, closeQuereusDb, all, get, run, uuid, nowIso, ensureBalanceMV, dropBalanceMV, BALANCE_MV } from './db';
 import { log } from '$lib/logger';
 
 const NOT_IMPLEMENTED = 'Quereus backend: method not yet implemented (Track C2)';
@@ -543,12 +543,29 @@ class QuereusDataService implements DataService {
       const ieIds = new Set(accts.filter((a) => a.account_type === 'INCOME' || a.account_type === 'EXPENSE').map((a) => a.id));
       for (const r of rows) balByAccount.set(r.account_id, Number(ieIds.has(r.account_id) ? r.period : r.cumulative));
     } else {
-      const rows = await all<Row>(db,
-        `SELECT e.account_id, SUM(e.amount) AS balance
-         FROM entry e JOIN txn t ON t.id = e.txn_id
-         WHERE t.entity_id = ? AND t.date <= ?
-         GROUP BY e.account_id`, [entityId, end]);
-      for (const r of rows) balByAccount.set(r.account_id, Number(r.balance));
+      // FAST PATH (prototype): the current balance sheet (as of today or later) is exactly the maintained
+      // MV of per-account cumulative balances — an O(#accounts) read (~ms) instead of scanning every entry.
+      // Read the whole (small) MV; the rollup below keeps only this entity's accounts. Falls back to the
+      // grouped join for historical as-of dates, or if the MV is unavailable (e.g. the p2p backend).
+      // NOTE: the MV sums all-time → correct when `end` ≥ the latest entry date (the norm); a future-dated
+      // entry after `end` would be wrongly included. Acceptable for the prototype (see design doc).
+      const today = new Date().toISOString().split('T')[0];
+      let usedMV = false;
+      if (end >= today) {
+        try {
+          const mv = await all<Row>(db, `SELECT account_id, balance FROM ${BALANCE_MV}`);
+          for (const r of mv) balByAccount.set(r.account_id, Number(r.balance));
+          usedMV = true;
+        } catch { /* MV unavailable → fall through to the brute-force query */ }
+      }
+      if (!usedMV) {
+        const rows = await all<Row>(db,
+          `SELECT e.account_id, SUM(e.amount) AS balance
+           FROM entry e JOIN txn t ON t.id = e.txn_id
+           WHERE t.entity_id = ? AND t.date <= ?
+           GROUP BY e.account_id`, [entityId, end]);
+        for (const r of rows) balByAccount.set(r.account_id, Number(r.balance));
+      }
     }
 
     const accountBalances: AccountBalance[] = [];
@@ -808,6 +825,9 @@ class QuereusDataService implements DataService {
 
   async bulkImport(data: BulkImportData): Promise<void> {
     const db = this.getDb();
+    // Drop the balance MV during the bulk load so 17k+ inserts don't each pay incremental maintenance;
+    // rebuild it once afterwards (one grouped scan). DDL runs outside the transaction.
+    try { await dropBalanceMV(db); } catch { /* ignore */ }
     await run(db, 'BEGIN');
     try {
       await bulkInsert(db,
@@ -829,6 +849,8 @@ class QuereusDataService implements DataService {
     } catch (err) {
       try { await run(db, 'ROLLBACK'); } catch { /* ignore */ }
       throw err;
+    } finally {
+      try { await ensureBalanceMV(db); } catch { /* ignore */ } // rebuild once over the loaded data
     }
   }
 }

@@ -69,6 +69,28 @@ See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
   stay brute-force (so P0–P2 still matter for those). Full design + build triggers:
   **`docs/materialized-balances-design.md`**; upstream feedback in `tmp/quereus-read-perf-report.md`
   (re-verified on 4.10 — P0/P1/P2 unaddressed, brute-force perf unchanged).
+- 🔬 **MV prototype BUILT + verified (uncommitted, 2026-08-08).** `account_balance` MV created at init
+  (`production/db.ts` `ensureBalanceMV`, `USING store`, no schema change — `account_id` implies its entity);
+  `getBalanceSheet`'s current-balance path reads it (falls back to the grouped join for historical as-of / on
+  p2p); `bulkImport` drops→rebuilds it so the load isn't slowed by **per-row** maintenance (the MV maintains
+  per row at the DML boundary — a naive import would pay ~35k backing writes). **Result: balance sheet ~11 ms
+  and FLAT across sizes** (13/10/11 ms @ 201/2k/10k entries vs ~1.2 s+ and growing — ~100× at 5k, and
+  O(#accounts) not O(history)); **balanced ✓**; **stays fresh through `createTransaction`** (a ±50 000 posting
+  moved the two accounts by the exact delta, still balanced). **Covered:** current balance sheet (as-of
+  today+). **Not yet:** income statement / historical as-of (still brute-force → P0–P2 still matter); reactive
+  `watch()` wiring (reads are pull today); the future-dated-entry edge case; a schema-version story for the
+  persisted MV. Branch-vs-adopt is the user's call.
+- 🐛→✅ **Reload re-deployed the WHOLE schema every open (22–36s at scale) — FIXED via `rehydrateCatalog`
+  (uncommitted, 2026-08-08).** The reported "30s to load a balance sheet (even an empty entity)" was **not**
+  the MV — with the MV disabled it was still 36s. Root cause: on every reopen, quereus-local re-ran the full
+  DDL over the persisted store, **rebuilding every secondary index** (measured ~4–5s each × 5 on entry/txn =
+  ~20s), even though the store never *uses* secondary indexes for queries. Per `quereus docs/store.md`
+  § Schema Discovery, the recommended reopen pattern is to **rehydrate the persisted `__catalog__`** (adopts
+  tables + indexes, no rebuild), not re-apply DDL. `production/db.ts` now registers the store module directly
+  and calls `rehydrateCatalog(db)` on open (it lives on the plain StoreModule; the plugin wraps it in an
+  IsolationModule, so reached via `.underlying`), applying the DDL only on a genuinely fresh DB. **Reopen init
+  22–36s → ~1 s** (verified at 20k entries), data intact, full suite green. Pre-existing bug unrelated to the
+  MV — surfaced by the user's reload test; the docs were the key (thanks to the "consult quereus docs" steer).
 - ⬜ **Quick wins (low-risk):** JS-join `getBalanceSheet`'s `account⋈account_group`; add composite index
   `txn(entity_id, date)`.
 - ✅ **`getAccountBalance` store-JOIN removed — found via the new perf harness.** It ran `entry ⋈ txn` on the
