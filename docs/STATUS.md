@@ -80,6 +80,16 @@ See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
   today+). **Not yet:** income statement / historical as-of (still brute-force → P0–P2 still matter); reactive
   `watch()` wiring (reads are pull today); the future-dated-entry edge case; a schema-version story for the
   persisted MV. Branch-vs-adopt is the user's call.
+- ✅ **Quereus 4.11.0 (from 4.10, 2026-08-09) — shipped our P0 + P1 in response to the feedback report;
+  adopted.** Confirmed in code: **P0 `getAll`** (plugin-indexeddb batches reads via `getAllKeys`/`getAll`,
+  2 requests/page vs one cursor/row) and **P1** (module-level `TextDecoder` + `reviver` only when
+  `needsReviver`). Same-session A/B @20k entries: **raw entry scan 804→398 ms (2.0×)**; brute-force reports
+  improved only **~1.2–1.4×** (historical balance sheet 3180→2270 ms, income statement 3512→2847 ms) —
+  because the join still reads/decodes *every* entry (the **INL / join-filter-pushdown** the maintainer
+  ticketed is still pending; that's the structural win for our date-ranged reports). App correct on 4.11 (30
+  unit + 4 e2e green). Also bumped **cadre-core 0.9→0.10** (p2p-only). Baseline not re-recorded (machine
+  running ~1.5× slow this session — the A/B is the trustworthy signal). Report `tmp/quereus-read-perf-report.md`
+  already updated with the P2-confirmed / P4-done / A/B-methodology corrections.
 - 🐛→✅ **Reload re-deployed the WHOLE schema every open (22–36s at scale) — FIXED via `rehydrateCatalog`
   (uncommitted, 2026-08-08).** The reported "30s to load a balance sheet (even an empty entity)" was **not**
   the MV — with the MV disabled it was still 36s. Root cause: on every reopen, quereus-local re-ran the full
