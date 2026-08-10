@@ -78,6 +78,32 @@ Kyle scale — it's no longer gated on an external primitive (it exists), only o
 change. Suggest prototyping on a branch (denormalized `entry` + `account_balance` MV + `getBalanceSheet`
 reads the MV for the no-date-range case) and measuring at 20k–40k entries before committing.
 
+## Update: monthly MV generalizes the hot path to ALL date ranges (verified @ 20k, Quereus 4.11)
+
+The current-balance MV (`account_balance = SUM(amount) GROUP BY account_id`) only fast-paths the
+as-of-*today* balance sheet. A **monthly** MV generalizes it to any date range with *uniform* performance:
+
+- **MV:** `account_balance_monthly = SUM(amount) GROUP BY entity_id, account_id, period` (`period='YYYY-MM'`),
+  still single-source over `entry` → **incremental O(1)-per-write** (needs the denormalized `entity_id`/`period`).
+  Indexed `(entity_id, period)` — confirmed **IndexSeek**.
+- **`balanceAsOf(D)`** (exact at any D): sum whole months from the MV (`WHERE entity_id=? AND period < D-month`,
+  ~27ms) **+** the partial current month from `entry`. Balance sheet = `balanceAsOf(end)`; income statement
+  I/E = `balanceAsOf(end) − balanceAsOf(start−1day)`. No even/odd-boundary special-casing — one code path.
+- **The partial-month seek is subtle (planner index choice).** `WHERE period = ?` **alone** is a selective
+  IndexSeek on `idx_entry_period` (~1 month of rows, ~7ms). Adding `entity_id`/`date` to the WHERE makes the
+  planner pick `idx_entry_entity_date` instead, which equality-seeks the **non-selective** `entity_id` and
+  scans the whole table (~4s at 20k — *slower than brute-force*). Fix: keep the SQL predicate to `period`
+  alone and restrict to entity + `date <= D` **in JS** over the handful of month rows.
+
+**Measured @ 20k entries (`books-10000`), Quereus 4.11:** monthly path **~28ms flat** for early-2020 /
+mid-2025 / current-2035 (85–110× vs 2.4–3.0s brute-force), `maxDiff 0` at every date. Wired `getBalanceSheet`:
+balance-sheet as-of 40ms (balanced, A−(L+E+I−E)=0), income statement 69ms — both exact vs brute-force.
+
+**Implication:** the monthly MV **subsumes** the current-balance MV (as-of-today = `balanceAsOf(today)`). If
+adopted as the default, `account_balance` becomes redundant and can be dropped (one MV to maintain, one read
+path). Code is wired behind `MV_APPROACH = 'monthly'` in `service.ts` for A/B; schema is v5 (denormalized
+`entity_id`/`date`/`period` on `entry` + `idx_entry_period`). Uncommitted pending adopt/branch decision.
+
 ## References
 - `tmp/quereus-read-perf-report.md` — brute-force read-path findings (still needed for non-MV paths).
 - Quereus (installed 4.10.0): `CREATE/REFRESH/DROP MATERIALIZED VIEW`, `USING store` backing host,

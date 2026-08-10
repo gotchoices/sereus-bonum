@@ -21,8 +21,15 @@ import type {
   LedgerEntry, SplitEntry, BulkImportData
 } from '../types';
 import type { Database, SqlValue } from '@quereus/quereus';
-import { getQuereusDb, closeQuereusDb, all, get, run, uuid, nowIso, ensureBalanceMV, dropBalanceMV, BALANCE_MV } from './db';
+import { getQuereusDb, closeQuereusDb, all, get, run, uuid, nowIso, ensureBalanceMV, dropBalanceMV, BALANCE_MV, ensureMonthlyMV, dropMonthlyMV, MONTHLY_MV } from './db';
 import { log } from '$lib/logger';
+
+// EXPERIMENT: which per-account-balance strategy getBalanceSheet uses.
+//   'monthly' — uniform monthly-MV path: whole months from account_balance_monthly + a partial-month base
+//               read; fast for ANY date range (balance sheet as-of any date, income statement periods).
+//   'current' — the committed path: current-balance MV for as-of-today, grouped join otherwise.
+// Flip to A/B. See docs/materialized-balances-design.md.
+const MV_APPROACH: 'monthly' | 'current' = 'monthly';
 
 const NOT_IMPLEMENTED = 'Quereus backend: method not yet implemented (Track C2)';
 
@@ -415,8 +422,8 @@ class QuereusDataService implements DataService {
     await run(db, 'INSERT INTO txn (id, entity_id, date, memo, reference, source_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [id, data.entityId, data.date, data.memo ?? null, data.reference ?? null, data.sourceId ?? null, ts, ts]);
     for (const e of entries) {
-      await run(db, 'INSERT INTO entry (id, txn_id, account_id, amount, note, tag_id, reconciliation_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [uuid(), id, e.accountId, e.amount, e.note ?? null, e.tagId ?? null, e.reconciliationId ?? null]);
+      await run(db, 'INSERT INTO entry (id, txn_id, account_id, amount, entity_id, date, period, note, tag_id, reconciliation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [uuid(), id, e.accountId, e.amount, data.entityId, data.date, data.date.slice(0, 7), e.note ?? null, e.tagId ?? null, e.reconciliationId ?? null]);
     }
     return (await this.getTransaction(id))!;
   }
@@ -442,9 +449,11 @@ class QuereusDataService implements DataService {
       if (entries) {
         // Replace the transaction's entries wholesale (simplest correct edit).
         await run(db, 'DELETE FROM entry WHERE txn_id = ?', [id]);
+        const txnRow = await get<{ entity_id: string; date: string }>(db, 'SELECT entity_id, date FROM txn WHERE id = ?', [id]);
+        const ed = txnRow?.entity_id ?? null, dt = txnRow?.date ?? null;
         for (const e of entries) {
-          await run(db, 'INSERT INTO entry (id, txn_id, account_id, amount, note, tag_id, reconciliation_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [uuid(), id, e.accountId, e.amount, e.note ?? null, e.tagId ?? null, e.reconciliationId ?? null]);
+          await run(db, 'INSERT INTO entry (id, txn_id, account_id, amount, entity_id, date, period, note, tag_id, reconciliation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [uuid(), id, e.accountId, e.amount, ed, dt, dt ? dt.slice(0, 7) : null, e.note ?? null, e.tagId ?? null, e.reconciliationId ?? null]);
         }
       }
       await run(db, 'COMMIT');
@@ -532,39 +541,80 @@ class QuereusDataService implements DataService {
     //     One pass computes BOTH via conditional aggregation, then JS picks cumulative-or-period by type
     //     (cheaper than a second query or a 4-table conditional join).
     const balByAccount = new Map<string, number>();
-    if (startDate) {
-      const rows = await all<Row>(db,
-        `SELECT e.account_id,
-                SUM(e.amount) AS cumulative,
-                SUM(CASE WHEN t.date >= ? THEN e.amount ELSE 0 END) AS period
-         FROM entry e JOIN txn t ON t.id = e.txn_id
-         WHERE t.entity_id = ? AND t.date <= ?
-         GROUP BY e.account_id`, [startDate, entityId, end]);
-      const ieIds = new Set(accts.filter((a) => a.account_type === 'INCOME' || a.account_type === 'EXPENSE').map((a) => a.id));
-      for (const r of rows) balByAccount.set(r.account_id, Number(ieIds.has(r.account_id) ? r.period : r.cumulative));
-    } else {
-      // FAST PATH (prototype): the current balance sheet (as of today or later) is exactly the maintained
-      // MV of per-account cumulative balances — an O(#accounts) read (~ms) instead of scanning every entry.
-      // Read the whole (small) MV; the rollup below keeps only this entity's accounts. Falls back to the
-      // grouped join for historical as-of dates, or if the MV is unavailable (e.g. the p2p backend).
-      // NOTE: the MV sums all-time → correct when `end` ≥ the latest entry date (the norm); a future-dated
-      // entry after `end` would be wrongly included. Acceptable for the prototype (see design doc).
-      const today = new Date().toISOString().split('T')[0];
-      let usedMV = false;
-      if (end >= today) {
-        try {
-          const mv = await all<Row>(db, `SELECT account_id, balance FROM ${BALANCE_MV}`);
-          for (const r of mv) balByAccount.set(r.account_id, Number(r.balance));
-          usedMV = true;
-        } catch { /* MV unavailable → fall through to the brute-force query */ }
+
+    const dayBefore = (d: string): string => {
+      const dt = new Date(`${d}T00:00:00Z`); dt.setUTCDate(dt.getUTCDate() - 1); return dt.toISOString().slice(0, 10);
+    };
+    // balanceAsOf(D): whole months from the monthly MV (period < D's month) + the partial month
+    // [monthStart(D), D] from the base table. Both single-source + index-eligible → uniform cost for ANY
+    // date. Balance sheet (no start) = balanceAsOf(end); income statement I/E = balanceAsOf(end) −
+    // balanceAsOf(day-before-start), A/L/E stay cumulative = balanceAsOf(end).
+    const balanceAsOf = async (d: string): Promise<Map<string, number>> => {
+      const period = d.slice(0, 7);
+      const bal = new Map<string, number>();
+      // whole months before D's month, from the monthly MV (IndexSeek on entity_id).
+      for (const r of await all<Row>(db,
+        `SELECT account_id, SUM(balance) AS balance FROM ${MONTHLY_MV} WHERE entity_id = ? AND period < ? GROUP BY account_id`,
+        [entityId, period])) bal.set(r.account_id, Number(r.balance));
+      // the partial current month [monthStart, D] from the base table. Fetch the whole month with the
+      // `period = ?` predicate ALONE — a selective IndexSeek on idx_entry_period (~1 month of rows, ~7ms) —
+      // and restrict to this entity + date <= D in JS. Adding entity_id/date to the WHERE makes the planner
+      // switch to idx_entry_entity_date, which equality-seeks the non-selective entity_id and scans the whole
+      // table (~4s at 20k). One month is a handful of rows, so the JS filter/rollup is free.
+      for (const r of await all<{ account_id: string; amount: number; entity_id: string; date: string }>(db,
+        `SELECT account_id, amount, entity_id, date FROM entry WHERE period = ?`, [period])) {
+        if (r.entity_id === entityId && r.date <= d)
+          bal.set(r.account_id, (bal.get(r.account_id) ?? 0) + Number(r.amount));
       }
-      if (!usedMV) {
+      return bal;
+    };
+
+    let usedMonthly = false;
+    if (MV_APPROACH === 'monthly') {
+      try {
+        const balEnd = await balanceAsOf(end);
+        if (startDate) {
+          const balBefore = await balanceAsOf(dayBefore(startDate));
+          const ieIds = new Set(accts.filter((a) => a.account_type === 'INCOME' || a.account_type === 'EXPENSE').map((a) => a.id));
+          for (const a of accts) balByAccount.set(a.id, ieIds.has(a.id) ? (balEnd.get(a.id) ?? 0) - (balBefore.get(a.id) ?? 0) : (balEnd.get(a.id) ?? 0));
+        } else {
+          for (const [k, v] of balEnd) balByAccount.set(k, v);
+        }
+        usedMonthly = true;
+      } catch (e) {
+        log.data.warn('[BalanceSheet] monthly-MV path failed; falling back to current approach', e);
+      }
+    }
+
+    if (!usedMonthly) {
+      if (startDate) {
         const rows = await all<Row>(db,
-          `SELECT e.account_id, SUM(e.amount) AS balance
+          `SELECT e.account_id,
+                  SUM(e.amount) AS cumulative,
+                  SUM(CASE WHEN t.date >= ? THEN e.amount ELSE 0 END) AS period
            FROM entry e JOIN txn t ON t.id = e.txn_id
            WHERE t.entity_id = ? AND t.date <= ?
-           GROUP BY e.account_id`, [entityId, end]);
-        for (const r of rows) balByAccount.set(r.account_id, Number(r.balance));
+           GROUP BY e.account_id`, [startDate, entityId, end]);
+        const ieIds = new Set(accts.filter((a) => a.account_type === 'INCOME' || a.account_type === 'EXPENSE').map((a) => a.id));
+        for (const r of rows) balByAccount.set(r.account_id, Number(ieIds.has(r.account_id) ? r.period : r.cumulative));
+      } else {
+        const today = new Date().toISOString().split('T')[0];
+        let usedMV = false;
+        if (end >= today) {
+          try {
+            const mv = await all<Row>(db, `SELECT account_id, balance FROM ${BALANCE_MV}`);
+            for (const r of mv) balByAccount.set(r.account_id, Number(r.balance));
+            usedMV = true;
+          } catch { /* MV unavailable → fall through to the brute-force query */ }
+        }
+        if (!usedMV) {
+          const rows = await all<Row>(db,
+            `SELECT e.account_id, SUM(e.amount) AS balance
+             FROM entry e JOIN txn t ON t.id = e.txn_id
+             WHERE t.entity_id = ? AND t.date <= ?
+             GROUP BY e.account_id`, [entityId, end]);
+          for (const r of rows) balByAccount.set(r.account_id, Number(r.balance));
+        }
       }
     }
 
@@ -828,6 +878,7 @@ class QuereusDataService implements DataService {
     // Drop the balance MV during the bulk load so 17k+ inserts don't each pay incremental maintenance;
     // rebuild it once afterwards (one grouped scan). DDL runs outside the transaction.
     try { await dropBalanceMV(db); } catch { /* ignore */ }
+    try { await dropMonthlyMV(db); } catch { /* ignore */ }
     await run(db, 'BEGIN');
     try {
       await bulkInsert(db,
@@ -841,16 +892,21 @@ class QuereusDataService implements DataService {
         'INSERT INTO txn (id, entity_id, date, memo, reference, source_id, created_at, updated_at)',
         8, data.transactions, (t) => [t.id, t.entityId, t.date, t.memo ?? null, t.reference ?? null,
           t.sourceId ?? null, t.createdAt, t.updatedAt]);
+      const txnById = new Map(data.transactions.map((t) => [t.id, t]));
       await bulkInsert(db,
-        'INSERT INTO entry (id, txn_id, account_id, amount, note, tag_id, reconciliation_id)',
-        7, data.entries, (e) => [e.id, e.transactionId, e.accountId, e.amount, e.note ?? null,
-          e.tagId ?? null, e.reconciliationId ?? null]);
+        'INSERT INTO entry (id, txn_id, account_id, amount, entity_id, date, period, note, tag_id, reconciliation_id)',
+        10, data.entries, (e) => {
+          const t = txnById.get(e.transactionId);
+          return [e.id, e.transactionId, e.accountId, e.amount, t?.entityId ?? null, t?.date ?? null,
+            t?.date ? t.date.slice(0, 7) : null, e.note ?? null, e.tagId ?? null, e.reconciliationId ?? null];
+        });
       await run(db, 'COMMIT');
     } catch (err) {
       try { await run(db, 'ROLLBACK'); } catch { /* ignore */ }
       throw err;
     } finally {
       try { await ensureBalanceMV(db); } catch { /* ignore */ } // rebuild once over the loaded data
+      try { await ensureMonthlyMV(db); } catch { /* ignore */ }
     }
   }
 }

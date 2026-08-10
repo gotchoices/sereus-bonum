@@ -86,6 +86,7 @@ async function initLocal(): Promise<Database> {
 
   // Prototype: current-balance materialized view (idempotent; always ensured). See getBalanceSheet fast path.
   await ensureBalanceMV(database);
+  try { await ensureMonthlyMV(database); } catch (e) { log.data.warn('[Quereus] ensureMonthlyMV failed (experiment)', e); }
 
   log.data.info('[Quereus] Local backend ready');
   return database;
@@ -126,7 +127,7 @@ function splitStatements(sql: string): string[] {
 
 // Bump when schema.qsql changes. A persisted store stamped with a different version is dropped and
 // rebuilt from the authoritative DDL (no in-place migration). Kept as its own infra table.
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 async function readSchemaVersion(database: Database): Promise<number> {
   try {
@@ -244,4 +245,24 @@ export async function ensureBalanceMV(database: Database): Promise<void> {
 
 export async function dropBalanceMV(database: Database): Promise<void> {
   await database.exec(`DROP MATERIALIZED VIEW IF EXISTS ${BALANCE_MV}`);
+}
+
+// --- Monthly balance materialized view (EXPERIMENT) ----------------------------------------------------
+// Per-(entity, account, month) balances. Single-source over `entry` (needs the denormalized entity_id /
+// period columns) so it qualifies for incremental delta-aggregate maintenance. Enables uniform-performance
+// reads for ANY date range: sum whole months from here (`period < D`) + one partial-month base query.
+// Indexed on (entity_id, period) so the range read is an IndexSeek. See docs/materialized-balances-design.md.
+export const MONTHLY_MV = 'account_balance_monthly';
+
+export async function ensureMonthlyMV(database: Database): Promise<void> {
+  await database.exec(
+    `CREATE MATERIALIZED VIEW IF NOT EXISTS ${MONTHLY_MV} USING store AS
+       SELECT entity_id, account_id, period, SUM(amount) AS balance
+       FROM entry GROUP BY entity_id, account_id, period`,
+  );
+  await database.exec(`CREATE INDEX IF NOT EXISTS idx_${MONTHLY_MV}_ent_period ON ${MONTHLY_MV}(entity_id, period)`);
+}
+
+export async function dropMonthlyMV(database: Database): Promise<void> {
+  await database.exec(`DROP MATERIALIZED VIEW IF EXISTS ${MONTHLY_MV}`);
 }

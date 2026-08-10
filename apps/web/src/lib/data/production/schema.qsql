@@ -114,6 +114,9 @@ create table entry (
   txn_id text,
   account_id text,
   amount integer,
+  entity_id text null,   -- denormalized from txn: enables single-source period MVs + entity-scoped reads
+  date text null,        -- denormalized from txn: partial-month base reads (day precision)
+  period text null,      -- denormalized 'YYYY-MM' bucket: bare GROUP BY key for the monthly MV (incremental)
   note text null,
   tag_id text null,
   reconciliation_id text null,
@@ -145,6 +148,8 @@ create index idx_account_entity on account(entity_id);
 create index idx_account_group on account(account_group_id);
 create index idx_entry_txn on entry(txn_id);
 create index idx_entry_account on entry(account_id);
+create index idx_entry_entity_date on entry(entity_id, date);
+create index idx_entry_period on entry(period);
 
 -- txn is always queried entity-first: getBalanceSheet (entity_id = ? and date <= ?), getTransactions
 -- (entity_id = ? [and date range] order by date), getLedger (entity_id = ?). No query filters date alone.
