@@ -127,7 +127,7 @@ function splitStatements(sql: string): string[] {
 
 // Bump when schema.qsql changes. A persisted store stamped with a different version is dropped and
 // rebuilt from the authoritative DDL (no in-place migration). Kept as its own infra table.
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 async function readSchemaVersion(database: Database): Promise<number> {
   try {

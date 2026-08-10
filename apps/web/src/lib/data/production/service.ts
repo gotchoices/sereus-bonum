@@ -545,22 +545,41 @@ class QuereusDataService implements DataService {
     const dayBefore = (d: string): string => {
       const dt = new Date(`${d}T00:00:00Z`); dt.setUTCDate(dt.getUTCDate() - 1); return dt.toISOString().slice(0, 10);
     };
-    // balanceAsOf(D): whole months from the monthly MV (period < D's month) + the partial month
-    // [monthStart(D), D] from the base table. Both single-source + index-eligible → uniform cost for ANY
-    // date. Balance sheet (no start) = balanceAsOf(end); income statement I/E = balanceAsOf(end) −
-    // balanceAsOf(day-before-start), A/L/E stay cumulative = balanceAsOf(end).
+    // balanceAsOf(D): per-account cumulative balance through date D. Balance sheet (no start) =
+    // balanceAsOf(end); income statement I/E = balanceAsOf(end) − balanceAsOf(day-before-start), A/L/E stay
+    // cumulative = balanceAsOf(end). Two regimes, both O(rows read) with getAll-batched full scans:
+    //   • d ≥ today → the O(accounts) current-balance MV (~2ms). (Sums ALL entries, so it also counts any
+    //     future-dated entry — matching the committed as-of-today fast path.)
+    //   • d < today → whole months < D's month from the monthly MV + the partial current month from `entry`.
+    // IMPORTANT: read the monthly MV by FULL SCAN (filter in JS), NOT the `entity_id` IndexSeek. On the store
+    // an index seek returns its rows via per-row cursors (~0.18ms/row → 2.4s for a 13k-row MV at Kyle scale),
+    // whereas a full scan is one batched getAll (~0.017ms/row → ~230ms for the same rows). The seek's cost is
+    // O(accounts × months) and grows with history; the scan reads the same set 10× cheaper. See
+    // tmp/quereus-read-perf-report.md (index-seek reads aren't getAll-batched).
+    const today = new Date().toISOString().slice(0, 10);
+    const diag = { regime: [] as string[], mvScanned: 0 };
     const balanceAsOf = async (d: string): Promise<Map<string, number>> => {
-      const period = d.slice(0, 7);
       const bal = new Map<string, number>();
-      // whole months before D's month, from the monthly MV (IndexSeek on entity_id).
-      for (const r of await all<Row>(db,
-        `SELECT account_id, SUM(balance) AS balance FROM ${MONTHLY_MV} WHERE entity_id = ? AND period < ? GROUP BY account_id`,
-        [entityId, period])) bal.set(r.account_id, Number(r.balance));
+      if (d >= today) {
+        diag.regime.push('curMV');
+        for (const r of await all<Row>(db, `SELECT account_id, balance FROM ${BALANCE_MV}`))
+          bal.set(r.account_id, Number(r.balance));
+        return bal;
+      }
+      diag.regime.push('monthlyScan');
+      const period = d.slice(0, 7);
+      // whole months before D's month — FULL SCAN the monthly MV, filter/sum in JS (see note above).
+      for (const r of await all<{ account_id: string; period: string; balance: number; entity_id: string }>(db,
+        `SELECT account_id, period, balance, entity_id FROM ${MONTHLY_MV}`)) {
+        diag.mvScanned++;
+        if (r.entity_id === entityId && r.period < period)
+          bal.set(r.account_id, (bal.get(r.account_id) ?? 0) + Number(r.balance));
+      }
       // the partial current month [monthStart, D] from the base table. Fetch the whole month with the
-      // `period = ?` predicate ALONE — a selective IndexSeek on idx_entry_period (~1 month of rows, ~7ms) —
-      // and restrict to this entity + date <= D in JS. Adding entity_id/date to the WHERE makes the planner
+      // `period = ?` predicate ALONE — a selective IndexSeek on idx_entry_period (~1 month of rows, ~3ms) —
+      // and restrict to this entity + date <= D in JS. (Adding entity_id/date to the WHERE makes the planner
       // switch to idx_entry_entity_date, which equality-seeks the non-selective entity_id and scans the whole
-      // table (~4s at 20k). One month is a handful of rows, so the JS filter/rollup is free.
+      // table.) One month is a handful of rows, so the JS filter/rollup is free.
       for (const r of await all<{ account_id: string; amount: number; entity_id: string; date: string }>(db,
         `SELECT account_id, amount, entity_id, date FROM entry WHERE period = ?`, [period])) {
         if (r.entity_id === entityId && r.date <= d)
@@ -569,6 +588,7 @@ class QuereusDataService implements DataService {
       return bal;
     };
 
+    const t0 = performance.now();
     let usedMonthly = false;
     if (MV_APPROACH === 'monthly') {
       try {
@@ -617,6 +637,8 @@ class QuereusDataService implements DataService {
         }
       }
     }
+
+    log.data.info(`[BalanceSheet] ${startDate ? 'income-stmt' : 'balance-sheet'} end=${end} today=${today} regime=${usedMonthly ? diag.regime.join('+') : 'brute-force'} mvScanned=${diag.mvScanned} ${Math.round(performance.now() - t0)}ms`);
 
     const accountBalances: AccountBalance[] = [];
     const groupTotals = new Map<string, GroupBalance>();

@@ -95,14 +95,33 @@ as-of-*today* balance sheet. A **monthly** MV generalizes it to any date range w
   scans the whole table (~4s at 20k — *slower than brute-force*). Fix: keep the SQL predicate to `period`
   alone and restrict to entity + `date <= D` **in JS** over the handful of month rows.
 
-**Measured @ 20k entries (`books-10000`), Quereus 4.11:** monthly path **~28ms flat** for early-2020 /
-mid-2025 / current-2035 (85–110× vs 2.4–3.0s brute-force), `maxDiff 0` at every date. Wired `getBalanceSheet`:
-balance-sheet as-of 40ms (balanced, A−(L+E+I−E)=0), income statement 69ms — both exact vs brute-force.
+### The read strategy matters more than the MV shape — measured at TWO scales
 
-**Implication:** the monthly MV **subsumes** the current-balance MV (as-of-today = `balanceAsOf(today)`). If
-adopted as the default, `account_balance` becomes redundant and can be dropped (one MV to maintain, one read
-path). Code is wired behind `MV_APPROACH = 'monthly'` in `service.ts` for A/B; schema is v5 (denormalized
-`entity_id`/`date`/`period` on `entry` + `idx_entry_period`). Uncommitted pending adopt/branch decision.
+A 9-account fixture (940-row MV) hid the real cost. Re-measured at **Kyle scale** (36k entries, **100
+accounts, 248 months** → **13,271-row MV**) the naïve read is *slow*, and the fix is about HOW we read:
+
+| read strategy (as-of a mid date) | 9 accts / 940-row MV | 100 accts / 13k-row MV |
+|---|---|---|
+| monthly MV **index-seek** `WHERE entity_id=? AND period<?` + GROUP BY | 27ms | **2375ms** |
+| monthly MV **full-scan** + JS filter/sum (getAll-batched) | ~25ms | **227ms** |
+| current-balance MV `account_balance` (O(accounts)) | 2ms | **2ms** |
+| raw `entry` full-scan + JS | 600ms | 638ms |
+
+- **Index-seek reads are ~10× slower than full scans** on the store: a seek returns rows via per-row cursors
+  (~0.18ms/row), a full scan is one batched `getAll` (~0.017ms/row). So `balanceAsOf` must **full-scan** the
+  monthly MV and filter in JS — never the `entity_id` IndexSeek. (Maintainer feedback item — extend the 4.11
+  `getAll` batching to index-seek reads.)
+- **The monthly MV read is O(accounts × months)** and grows with history — it does NOT give O(1) reads. So it
+  does **not** subsume the current-balance MV; keep both.
+
+**Final hybrid (wired, `MV_APPROACH='monthly'`):** `balanceAsOf(d)` = current-balance MV when `d ≥ today`
+(O(accounts), ~2ms); else full-scan monthly MV (`period < d-month`, ~230ms) + partial current month
+(`period = ?` IndexSeek, selective, ~3ms). Balance sheet = `balanceAsOf(end)`; income statement I/E =
+`balanceAsOf(end) − balanceAsOf(start−1)`.
+
+**Measured wired @ Kyle scale, Quereus 4.11 (all `maxDiff 0` vs brute-force):** balance sheet as-of-today
+**15ms**, as-of past date **200ms**, income statement **397ms** — vs ~4–5.5s brute-force. Schema v6
+(denormalized `entity_id`/`date`/`period` on `entry` + `idx_entry_period`). Uncommitted pending adopt/branch.
 
 ## References
 - `tmp/quereus-read-perf-report.md` — brute-force read-path findings (still needed for non-MV paths).
