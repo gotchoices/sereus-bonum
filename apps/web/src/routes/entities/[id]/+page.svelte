@@ -26,7 +26,6 @@
   // saved report auto-adjust. Columns resolve as a CHAIN (see resolvedColumns): the rightmost column
   // resolves against today; each column left of it resolves against its right neighbour's resolved date
   // and offers only "previous" tokens — so left columns reach abstractly into prior periods.
-  const todayIso = () => isoOf(new Date());
   const fieldLabel = (f: DateFieldValue): string => (f.basis === 'fixed' ? f.fixedDate : $t(`accounts.basis_${migrateField(f).basis}`));
   
   // Get entity ID from route
@@ -38,9 +37,12 @@
   // varianceLeft: show a Δ (change) column in the gap to this column's LEFT — i.e. the change INTO this
   // (newer) column from its older/left neighbour. Never on the leftmost column (nothing before it).
   interface ReportColumn { id: string; name: string; endField: DateFieldValue; startField?: DateFieldValue; varianceLeft?: boolean; }
+  // Default as-of / period-end is the end of the PRIOR month (last closed month) rather than mid-month today —
+  // the usual thing to report on, and it keeps the default period (beginning-of-year → prior-month-end) valid.
+  const priorMonthEndIso = () => { const n = new Date(); return isoOf(new Date(n.getFullYear(), n.getMonth(), 0)); };
   const makeColumn = (name: string, end?: DateFieldValue, start?: DateFieldValue, varianceLeft = false): ReportColumn => ({
     id: crypto.randomUUID(), name,
-    endField: end ?? { basis: 'fixed', fixedDate: todayIso() },
+    endField: end ?? { basis: 'pm-end', fixedDate: priorMonthEndIso() },
     startField: start, varianceLeft,
   });
   const MAX_COLUMNS = 12;
@@ -114,10 +116,15 @@
   // its right neighbour's resolved end date. Returns index-aligned { end, start? } ISO strings.
   let resolvedColumns = $derived.by<{ end: string; start?: string }[]>(() => resolveColumnChain(columns, new Date()));
 
-  // Load balance data for every column (one getBalanceSheet per resolved column period).
+  // Load balance data for every column (one getBalanceSheet per resolved column period). Guard against a
+  // start later than the end (e.g. beginning-of-year vs prior-month-end in January): drop the start so the
+  // column degrades to an as-of report rather than a nonsensical negative range.
   async function loadColumns(ds: Awaited<ReturnType<typeof getDataService>>) {
     const rc = resolvedColumns;
-    balanceByColumn = await Promise.all(columns.map((_, i) => ds.getBalanceSheet(entityId, rc[i].end, rc[i].start)));
+    balanceByColumn = await Promise.all(columns.map((_, i) => {
+      const start = rc[i].start && rc[i].start! <= rc[i].end ? rc[i].start : undefined;
+      return ds.getBalanceSheet(entityId, rc[i].end, start);
+    }));
   }
 
   async function loadEntityData() {

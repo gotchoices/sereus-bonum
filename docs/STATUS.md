@@ -80,6 +80,24 @@ See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
   today+). **Not yet:** income statement / historical as-of (still brute-force → P0–P2 still matter); reactive
   `watch()` wiring (reads are pull today); the future-dated-entry edge case; a schema-version story for the
   persisted MV. Branch-vs-adopt is the user's call.
+- ✅ **Balance reads + ledger reads made fast (committed / uncommitted, 2026-08-10).** `getBalanceSheet` is now
+  a nearest-anchor prefix reader (current-balance MV for as-of-today ~2ms; backward-from-current for the last
+  year ~10–30ms; forward monthly-MV full scan older ~150–220ms; income statement ~380ms) — all exact vs
+  brute-force at Kyle scale (36k entries / 100 accts / 248 months), vs ~4–5.5s before. `getLedgerEntries` cut
+  3.4s→**830ms** by replacing the `txn WHERE entity_id=?` IndexSeek with a full scan. See
+  `docs/materialized-balances-design.md`. New upstream report: `tmp/quereus-4.11-range-and-indexed-reads.md`.
+- ⚠️ **TECH DEBT — full-scan "cheat" reads to be replaced with targeted indexed queries.** Two hot reads
+  *deliberately* full-scan the whole table and filter in JS, because on the current store an index seek reads
+  rows via per-row cursors (~0.14–0.18 ms/row) while a full scan is one batched `getAll` (~0.017 ms/row) —
+  so the "wrong" full scan is faster than the "right" indexed seek for large result sets:
+  - **`getLedgerEntries`** full-scans `entry` + `txn` (~800ms) instead of `WHERE account_id = ?` (307ms) +
+    per-txn sibling seeks. The natural targeted query returns only the account's ~6% of rows.
+  - **`getBalanceSheet` forward path** full-scans `account_balance_monthly` instead of `WHERE entity_id=? AND
+    period < ?`.
+  Both are marked in-code with the rationale + a pointer to `tmp/quereus-4.11-range-and-indexed-reads.md`.
+  **Replace with real `WHERE key = ?` / range queries once Quereus batches index-seek reads (Gap 1) and
+  supports range seeks (Gap 2)** — then the ledger is ~40ms reading only what we ask for, and the schema/reads
+  simplify (no full-scan-vs-seek cliff to dodge). This is the highest-leverage upstream fix for read perf.
 - ✅ **Quereus 4.11.0 (from 4.10, 2026-08-09) — shipped our P0 + P1 in response to the feedback report;
   adopted.** Confirmed in code: **P0 `getAll`** (plugin-indexeddb batches reads via `getAllKeys`/`getAll`,
   2 requests/page vs one cursor/row) and **P1** (module-level `TextDecoder` + `reviver` only when

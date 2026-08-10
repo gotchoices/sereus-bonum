@@ -676,7 +676,13 @@ class QuereusDataService implements DataService {
     const entityId = acct.entity_id as string;
 
     const acctDir = await this.buildAccountDir(entityId);
-    const txnRows = await all<Row>(db, 'SELECT id, date, reference, memo, created_at FROM txn WHERE entity_id = ?', [entityId]);
+    // TECH DEBT (full-scan "cheat"): full-scan + JS filter, NOT `WHERE entity_id = ?`. On the store an
+    // entity_id IndexSeek returns all the entity's txns via per-row cursors (~2.9s at 18k txns) whereas a full
+    // scan is one getAll (~260ms). REPLACE with a targeted `WHERE account_id = ?` read (+ per-txn sibling
+    // seeks) once Quereus batches index-seek reads — then this is ~40ms reading only the account's rows.
+    // See docs/STATUS.md § B (tech debt) + tmp/quereus-4.11-range-and-indexed-reads.md.
+    const txnRows = (await all<Row>(db, 'SELECT id, date, reference, memo, created_at, entity_id FROM txn'))
+      .filter((t) => t.entity_id === entityId);
     const txnById = new Map<string, Row>(txnRows.map((t) => [t.id, t]));
     const byTxn = await this.entriesByTxn(txnById);
 

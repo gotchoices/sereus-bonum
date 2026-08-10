@@ -223,7 +223,7 @@
   // Format amount
   function formatAmount(amount: number): string {
     const divisor = unit?.displayDivisor ?? 100;
-    return (amount / divisor).toFixed(2);
+    return (amount / divisor).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
   
   // Format date according to user preference
