@@ -114,14 +114,42 @@ accounts, 248 months** → **13,271-row MV**) the naïve read is *slow*, and the
 - **The monthly MV read is O(accounts × months)** and grows with history — it does NOT give O(1) reads. So it
   does **not** subsume the current-balance MV; keep both.
 
-**Final hybrid (wired, `MV_APPROACH='monthly'`):** `balanceAsOf(d)` = current-balance MV when `d ≥ today`
-(O(accounts), ~2ms); else full-scan monthly MV (`period < d-month`, ~230ms) + partial current month
-(`period = ?` IndexSeek, selective, ~3ms). Balance sheet = `balanceAsOf(end)`; income statement I/E =
-`balanceAsOf(end) − balanceAsOf(start−1)`.
+### Shipped mechanism: nearest-anchor prefix balance
 
-**Measured wired @ Kyle scale, Quereus 4.11 (all `maxDiff 0` vs brute-force):** balance sheet as-of-today
-**15ms**, as-of past date **200ms**, income statement **397ms** — vs ~4–5.5s brute-force. Schema v6
-(denormalized `entity_id`/`date`/`period` on `entry` + `idx_entry_period`). Uncommitted pending adopt/branch.
+Every figure is a per-account **prefix sum** `P(D) = Σ amount WHERE date ≤ D` (balance sheet = `P(end)`;
+income statement I/E = `P(end) − P(start−1)`). We read `P(D)` from the nearer of two **free anchors** and walk
+to `D` with month buckets — `getBalanceSheet`'s "prefix-balance reader":
+
+- `P(∞)` = the current-balance MV (`SUM GROUP BY account_id`, O(accounts), ~2ms) — the "as of now" anchor.
+- `P(0)` = 0.
+
+Dispatch on `D`:
+| regime | condition | read | cost |
+|---|---|---|---|
+| **current** | `D ≥ today` | current-balance MV | ~2ms |
+| **backward** | within `BACKWARD_MAX_MONTHS` (12) of today | current MV − Σ(entries after `D`); tail months by `period = ?` seek | ~5ms/month |
+| **forward** | older | Σ(monthly-MV months `< D`, **full scan**) + partial current month | flat ~150–220ms |
+
+The monthly MV is **full-scanned**, never `entity_id`-IndexSeeked (seek = per-row cursors, ~10× slower — see
+`tmp/quereus-4.11-range-and-indexed-reads.md`). `BACKWARD_MAX_MONTHS=12`: the backward tail is ~5ms/month and
+the forward scan is flat ~200ms, so the crossover is ~40 months — anything within the last year is far cheaper
+backward. Backward assumes entries aren't dated beyond the current month (a normal-ledger invariant); older/
+middle dates always take the correct forward scan. A brute-force grouped-join fallback covers MV-unavailable.
+
+**Measured wired @ Kyle scale (36k entries, 100 accts, 248 months), Quereus 4.11, all `maxDiff 0` vs brute-force:**
+
+| regime | date | time |
+|---|---|---|
+| current | today | 11ms |
+| backward | −1 / −3 / −8 / −12 months | 12 / 21 / 27 / 21ms |
+| forward | 2020 / 2010 | 208 / 220ms |
+| income statement | 2024 full year | 378ms |
+
+vs ~4–5.5s brute-force. Schema v6 (denormalized `entity_id`/`date`/`period` on `entry` + `idx_entry_period`;
+monthly MV intentionally unindexed). Both MVs are single-source → incrementally maintained and commutative
+(PN-counter CRDTs) — the right fit for the distributed roadmap; a cumulative-snapshot MV would read faster but
+break commutativity, so it's rejected. Deferred (build when income statements/past-period reports demand it):
+a **year tier** (`GROUP BY entity_id, account_id, year`) collapsing the forward scan's prior-years to O(years).
 
 ## References
 - `tmp/quereus-read-perf-report.md` — brute-force read-path findings (still needed for non-MV paths).

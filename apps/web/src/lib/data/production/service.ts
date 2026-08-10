@@ -24,13 +24,6 @@ import type { Database, SqlValue } from '@quereus/quereus';
 import { getQuereusDb, closeQuereusDb, all, get, run, uuid, nowIso, ensureBalanceMV, dropBalanceMV, BALANCE_MV, ensureMonthlyMV, dropMonthlyMV, MONTHLY_MV } from './db';
 import { log } from '$lib/logger';
 
-// EXPERIMENT: which per-account-balance strategy getBalanceSheet uses.
-//   'monthly' — uniform monthly-MV path: whole months from account_balance_monthly + a partial-month base
-//               read; fast for ANY date range (balance sheet as-of any date, income statement periods).
-//   'current' — the committed path: current-balance MV for as-of-today, grouped join otherwise.
-// Flip to A/B. See docs/materialized-balances-design.md.
-const MV_APPROACH: 'monthly' | 'current' = 'monthly';
-
 const NOT_IMPLEMENTED = 'Quereus backend: method not yet implemented (Track C2)';
 
 // --- Row mappers (snake_case columns → camelCase domain types) ------------
@@ -528,117 +521,106 @@ class QuereusDataService implements DataService {
        WHERE a.entity_id = ? AND a.is_active = 1
        ORDER BY g.display_order, a.code`, [entityId]);
 
-    // Per-account balances via in-engine grouped joins. Quereus ≥4.7 executes joins efficiently and
-    // correctly (the 4.6.0 grouped-join bug is fixed — see docs/STATUS.md § B), so we let the engine do
-    // the entry⋈txn join + SUM instead of loading every entry and joining in JS. Two 2-table grouped
-    // joins keyed by account type: A/L/E cumulative through `end`; I/E over [start,end] when a start is
-    // given, else cumulative. (2-table joins were never affected by the 4.6.0 bug.)
-    // Per-account balances via one fast 2-table grouped join (no `account_id IN (...)` — that clause
-    // tripled the time; driving from `txn.entity_id` is fastest on the store). Accounts with no matching
-    // entries are absent → treated as 0.
-    //   - Balance sheet (no start): SUM through `end`, all accounts cumulative.
-    //   - Income statement (start given): A/L/E stay cumulative while Income/Expense window to [start,end].
-    //     One pass computes BOTH via conditional aggregation, then JS picks cumulative-or-period by type
-    //     (cheaper than a second query or a 4-table conditional join).
+    // --- Prefix-balance reader -------------------------------------------------------------------------
+    // Every figure is a per-account prefix sum P(D) = Σ amount WHERE date ≤ D. Balance sheet = P(end);
+    // income statement I/E = P(end) − P(start−1), A/L/E stay cumulative = P(end). We read P(D) from the
+    // nearer of two FREE anchors and walk to D with month-granularity buckets:
+    //   • P(∞) = the current-balance MV (SUM GROUP BY account_id, O(accounts), ~2ms) — the "as of now" anchor.
+    //   • P(0) = 0 (before history).
+    // Dispatch on D:
+    //   D ≥ today        → current MV directly.
+    //   D within N months → BACKWARD: current MV − Σ(entries dated after D). The tail is a few whole months,
+    //                       each read by a selective `period = ?` IndexSeek. O(months-after-D).
+    //   D older          → FORWARD:  Σ(monthly-MV months < D) + the partial current month. O(accounts×months).
+    // The monthly MV is read by FULL SCAN (filter in JS), never the `entity_id` IndexSeek: on the store an
+    // index seek returns rows via per-row cursors (~10× a getAll-batched full scan). Fixing that upstream —
+    // plus range seeks so `period < ?` can seek — removes the need for this dispatch entirely; see
+    // tmp/quereus-4.11-range-and-indexed-reads.md and docs/materialized-balances-design.md.
+    // Backward assumes entries aren't dated beyond the current month (normal for a ledger); its tail loop
+    // spans D's month through today's. Middle/old dates take the always-correct forward scan.
     const balByAccount = new Map<string, number>();
+    const today = new Date().toISOString().slice(0, 10);
+    // Backward tail costs ~one `period=?` seek per month (~5ms); the forward MV scan is a flat ~150-220ms.
+    // Measured crossover is ~40 months, so anything within the last year stays far cheaper via backward.
+    const BACKWARD_MAX_MONTHS = 12;
 
+    const monthKey = (d: string) => d.slice(0, 7);
+    const monthsBetween = (a: string, b: string) => {
+      const [ay, am] = a.split('-').map(Number), [by, bm] = b.split('-').map(Number);
+      return (by - ay) * 12 + (bm - am);
+    };
+    const nextMonth = (m: string) => {
+      const [y, mo] = m.split('-').map(Number);
+      return mo === 12 ? `${y + 1}-01` : `${y}-${String(mo + 1).padStart(2, '0')}`;
+    };
     const dayBefore = (d: string): string => {
       const dt = new Date(`${d}T00:00:00Z`); dt.setUTCDate(dt.getUTCDate() - 1); return dt.toISOString().slice(0, 10);
     };
-    // balanceAsOf(D): per-account cumulative balance through date D. Balance sheet (no start) =
-    // balanceAsOf(end); income statement I/E = balanceAsOf(end) − balanceAsOf(day-before-start), A/L/E stay
-    // cumulative = balanceAsOf(end). Two regimes, both O(rows read) with getAll-batched full scans:
-    //   • d ≥ today → the O(accounts) current-balance MV (~2ms). (Sums ALL entries, so it also counts any
-    //     future-dated entry — matching the committed as-of-today fast path.)
-    //   • d < today → whole months < D's month from the monthly MV + the partial current month from `entry`.
-    // IMPORTANT: read the monthly MV by FULL SCAN (filter in JS), NOT the `entity_id` IndexSeek. On the store
-    // an index seek returns its rows via per-row cursors (~0.18ms/row → 2.4s for a 13k-row MV at Kyle scale),
-    // whereas a full scan is one batched getAll (~0.017ms/row → ~230ms for the same rows). The seek's cost is
-    // O(accounts × months) and grows with history; the scan reads the same set 10× cheaper. See
-    // tmp/quereus-read-perf-report.md (index-seek reads aren't getAll-batched).
-    const today = new Date().toISOString().slice(0, 10);
-    const diag = { regime: [] as string[], mvScanned: 0 };
-    const balanceAsOf = async (d: string): Promise<Map<string, number>> => {
+    const entriesInPeriod = (period: string) => all<{ account_id: string; amount: number; entity_id: string; date: string }>(
+      db, `SELECT account_id, amount, entity_id, date FROM entry WHERE period = ?`, [period]);
+    const currentBalance = async (): Promise<Map<string, number>> => {
       const bal = new Map<string, number>();
-      if (d >= today) {
-        diag.regime.push('curMV');
-        for (const r of await all<Row>(db, `SELECT account_id, balance FROM ${BALANCE_MV}`))
-          bal.set(r.account_id, Number(r.balance));
+      for (const r of await all<Row>(db, `SELECT account_id, balance FROM ${BALANCE_MV}`)) bal.set(r.account_id, Number(r.balance));
+      return bal;
+    };
+
+    let regime = '';
+    const balanceAsOf = async (d: string): Promise<Map<string, number>> => {
+      if (d >= today) { regime += ' curMV'; return currentBalance(); }
+      if (monthsBetween(monthKey(d), monthKey(today)) <= BACKWARD_MAX_MONTHS) {
+        // backward: current balance minus every entry dated after D (whole tail months + D's own tail).
+        regime += ' backward';
+        const bal = await currentBalance();
+        for (let m = monthKey(d), last = monthKey(today); ; m = nextMonth(m)) {
+          for (const r of await entriesInPeriod(m))
+            if (r.entity_id === entityId && r.date > d) bal.set(r.account_id, (bal.get(r.account_id) ?? 0) - Number(r.amount));
+          if (m === last) break;
+        }
         return bal;
       }
-      diag.regime.push('monthlyScan');
-      const period = d.slice(0, 7);
-      // whole months before D's month — FULL SCAN the monthly MV, filter/sum in JS (see note above).
+      // forward: whole months before D from the monthly MV (full scan) + the partial current month.
+      regime += ' forward';
+      const bal = new Map<string, number>();
+      const period = monthKey(d);
       for (const r of await all<{ account_id: string; period: string; balance: number; entity_id: string }>(db,
-        `SELECT account_id, period, balance, entity_id FROM ${MONTHLY_MV}`)) {
-        diag.mvScanned++;
-        if (r.entity_id === entityId && r.period < period)
-          bal.set(r.account_id, (bal.get(r.account_id) ?? 0) + Number(r.balance));
-      }
-      // the partial current month [monthStart, D] from the base table. Fetch the whole month with the
-      // `period = ?` predicate ALONE — a selective IndexSeek on idx_entry_period (~1 month of rows, ~3ms) —
-      // and restrict to this entity + date <= D in JS. (Adding entity_id/date to the WHERE makes the planner
-      // switch to idx_entry_entity_date, which equality-seeks the non-selective entity_id and scans the whole
-      // table.) One month is a handful of rows, so the JS filter/rollup is free.
-      for (const r of await all<{ account_id: string; amount: number; entity_id: string; date: string }>(db,
-        `SELECT account_id, amount, entity_id, date FROM entry WHERE period = ?`, [period])) {
-        if (r.entity_id === entityId && r.date <= d)
-          bal.set(r.account_id, (bal.get(r.account_id) ?? 0) + Number(r.amount));
-      }
+        `SELECT account_id, period, balance, entity_id FROM ${MONTHLY_MV}`))
+        if (r.entity_id === entityId && r.period < period) bal.set(r.account_id, (bal.get(r.account_id) ?? 0) + Number(r.balance));
+      for (const r of await entriesInPeriod(period))
+        if (r.entity_id === entityId && r.date <= d) bal.set(r.account_id, (bal.get(r.account_id) ?? 0) + Number(r.amount));
       return bal;
     };
 
     const t0 = performance.now();
-    let usedMonthly = false;
-    if (MV_APPROACH === 'monthly') {
-      try {
-        const balEnd = await balanceAsOf(end);
-        if (startDate) {
-          const balBefore = await balanceAsOf(dayBefore(startDate));
-          const ieIds = new Set(accts.filter((a) => a.account_type === 'INCOME' || a.account_type === 'EXPENSE').map((a) => a.id));
-          for (const a of accts) balByAccount.set(a.id, ieIds.has(a.id) ? (balEnd.get(a.id) ?? 0) - (balBefore.get(a.id) ?? 0) : (balEnd.get(a.id) ?? 0));
-        } else {
-          for (const [k, v] of balEnd) balByAccount.set(k, v);
-        }
-        usedMonthly = true;
-      } catch (e) {
-        log.data.warn('[BalanceSheet] monthly-MV path failed; falling back to current approach', e);
+    try {
+      const balEnd = await balanceAsOf(end);
+      if (startDate) {
+        const balBefore = await balanceAsOf(dayBefore(startDate));
+        const ieIds = new Set(accts.filter((a) => a.account_type === 'INCOME' || a.account_type === 'EXPENSE').map((a) => a.id));
+        for (const a of accts) balByAccount.set(a.id, ieIds.has(a.id) ? (balEnd.get(a.id) ?? 0) - (balBefore.get(a.id) ?? 0) : (balEnd.get(a.id) ?? 0));
+      } else {
+        for (const [k, v] of balEnd) balByAccount.set(k, v);
       }
-    }
-
-    if (!usedMonthly) {
+    } catch (e) {
+      // Robustness: if an MV is unavailable, fall back to the brute-force grouped join (correct, slower).
+      regime = ' brute-force';
+      log.data.warn('[BalanceSheet] MV path failed; falling back to brute-force join', e);
+      balByAccount.clear();
       if (startDate) {
         const rows = await all<Row>(db,
-          `SELECT e.account_id,
-                  SUM(e.amount) AS cumulative,
+          `SELECT e.account_id, SUM(e.amount) AS cumulative,
                   SUM(CASE WHEN t.date >= ? THEN e.amount ELSE 0 END) AS period
            FROM entry e JOIN txn t ON t.id = e.txn_id
-           WHERE t.entity_id = ? AND t.date <= ?
-           GROUP BY e.account_id`, [startDate, entityId, end]);
+           WHERE t.entity_id = ? AND t.date <= ? GROUP BY e.account_id`, [startDate, entityId, end]);
         const ieIds = new Set(accts.filter((a) => a.account_type === 'INCOME' || a.account_type === 'EXPENSE').map((a) => a.id));
         for (const r of rows) balByAccount.set(r.account_id, Number(ieIds.has(r.account_id) ? r.period : r.cumulative));
       } else {
-        const today = new Date().toISOString().split('T')[0];
-        let usedMV = false;
-        if (end >= today) {
-          try {
-            const mv = await all<Row>(db, `SELECT account_id, balance FROM ${BALANCE_MV}`);
-            for (const r of mv) balByAccount.set(r.account_id, Number(r.balance));
-            usedMV = true;
-          } catch { /* MV unavailable → fall through to the brute-force query */ }
-        }
-        if (!usedMV) {
-          const rows = await all<Row>(db,
-            `SELECT e.account_id, SUM(e.amount) AS balance
-             FROM entry e JOIN txn t ON t.id = e.txn_id
-             WHERE t.entity_id = ? AND t.date <= ?
-             GROUP BY e.account_id`, [entityId, end]);
-          for (const r of rows) balByAccount.set(r.account_id, Number(r.balance));
-        }
+        const rows = await all<Row>(db,
+          `SELECT e.account_id, SUM(e.amount) AS balance FROM entry e JOIN txn t ON t.id = e.txn_id
+           WHERE t.entity_id = ? AND t.date <= ? GROUP BY e.account_id`, [entityId, end]);
+        for (const r of rows) balByAccount.set(r.account_id, Number(r.balance));
       }
     }
-
-    log.data.info(`[BalanceSheet] ${startDate ? 'income-stmt' : 'balance-sheet'} end=${end} today=${today} regime=${usedMonthly ? diag.regime.join('+') : 'brute-force'} mvScanned=${diag.mvScanned} ${Math.round(performance.now() - t0)}ms`);
+    log.data.info(`[BalanceSheet] ${startDate ? 'income-stmt' : 'balance-sheet'} end=${end} regime=${regime.trim()} ${Math.round(performance.now() - t0)}ms`);
 
     const accountBalances: AccountBalance[] = [];
     const groupTotals = new Map<string, GroupBalance>();

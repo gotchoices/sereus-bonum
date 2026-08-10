@@ -84,9 +84,11 @@ async function initLocal(): Promise<Database> {
     log.data.info('[Quereus] Seeded base units + account groups');
   }
 
-  // Prototype: current-balance materialized view (idempotent; always ensured). See getBalanceSheet fast path.
+  // Balance materialized views (idempotent; always ensured). getBalanceSheet reads P(D) from these — the
+  // current-balance MV for the "as of now" anchor, the monthly MV for historical months. See
+  // docs/materialized-balances-design.md and getBalanceSheet's prefix-balance reader.
   await ensureBalanceMV(database);
-  try { await ensureMonthlyMV(database); } catch (e) { log.data.warn('[Quereus] ensureMonthlyMV failed (experiment)', e); }
+  try { await ensureMonthlyMV(database); } catch (e) { log.data.warn('[Quereus] ensureMonthlyMV failed', e); }
 
   log.data.info('[Quereus] Local backend ready');
   return database;
@@ -247,11 +249,14 @@ export async function dropBalanceMV(database: Database): Promise<void> {
   await database.exec(`DROP MATERIALIZED VIEW IF EXISTS ${BALANCE_MV}`);
 }
 
-// --- Monthly balance materialized view (EXPERIMENT) ----------------------------------------------------
+// --- Monthly balance materialized view -----------------------------------------------------------------
 // Per-(entity, account, month) balances. Single-source over `entry` (needs the denormalized entity_id /
-// period columns) so it qualifies for incremental delta-aggregate maintenance. Enables uniform-performance
-// reads for ANY date range: sum whole months from here (`period < D`) + one partial-month base query.
-// Indexed on (entity_id, period) so the range read is an IndexSeek. See docs/materialized-balances-design.md.
+// period columns) so it qualifies for incremental delta-aggregate maintenance (O(1)/write). getBalanceSheet
+// sums whole months from here for historical dates (`period < D`) + one partial-month base read.
+// NOTE: intentionally NOT indexed. The read is a FULL SCAN (filter in JS) because on the store an index seek
+// returns rows via per-row cursors — ~10× slower than a getAll-batched full scan for the many rows this read
+// touches. When Quereus batches index-seek reads + supports range seeks, switch this to a `period < ?` range
+// query and add the index back. See tmp/quereus-4.11-range-and-indexed-reads.md.
 export const MONTHLY_MV = 'account_balance_monthly';
 
 export async function ensureMonthlyMV(database: Database): Promise<void> {
@@ -260,7 +265,6 @@ export async function ensureMonthlyMV(database: Database): Promise<void> {
        SELECT entity_id, account_id, period, SUM(amount) AS balance
        FROM entry GROUP BY entity_id, account_id, period`,
   );
-  await database.exec(`CREATE INDEX IF NOT EXISTS idx_${MONTHLY_MV}_ent_period ON ${MONTHLY_MV}(entity_id, period)`);
 }
 
 export async function dropMonthlyMV(database: Database): Promise<void> {
