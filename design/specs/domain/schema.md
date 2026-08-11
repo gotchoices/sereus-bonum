@@ -177,12 +177,17 @@ A complete accounting transaction consisting of multiple balanced entries.
 | `date` | Date | Yes | Transaction date |
 | `memo` | String | No | Description of transaction |
 | `reference` | String | No | Check number, invoice number, etc. |
+| `valueUnit` | Unit | No | **Reckoning unit** — the unit this transaction's entry `value`s are expressed in. Null when every entry's account shares one unit (the ordinary single-unit case). May be *any* unit, not just a currency. |
 | `sourceId` | String | No | Source-system identity (GnuCash GUID / OFX FITID) — used to detect already-imported transactions on re-import (see [import.md](./import.md)) |
 | `createdAt` | Timestamp | Yes | Creation timestamp |
 | `updatedAt` | Timestamp | Yes | Last modification |
 
-**Constraint:** The sum of all Entry amounts (debits positive, credits negative) for a Transaction
-must equal zero.
+**Constraint:** A transaction balances when its entries sum to zero —
+- `valueUnit` null → the sum of Entry `amount`s equals zero (all entries share one unit);
+- `valueUnit` set → the sum of Entry `value`s equals zero, where an entry whose account unit *is*
+  the reckoning unit contributes its `amount`.
+
+See [units.md](./units.md#value-and-the-reckoning-unit) for the full rule and rationale.
 
 ---
 
@@ -195,7 +200,8 @@ A single debit or credit line within a transaction.
 | `id` | UUID | Yes | Primary key |
 | `transactionId` | UUID | Yes | FK → Transaction |
 | `accountId` | UUID | Yes | FK → Account |
-| `amount` | Integer | Yes | In smallest unit. Positive = debit, negative = credit. |
+| `amount` | Integer | Yes | Quantity moved, in the **account's** unit (smallest increment). Positive = debit, negative = credit. |
+| `value` | Integer | No | The same entry restated in the transaction's **reckoning unit** (`Transaction.valueUnit`), smallest increment. Null means "same as `amount`" — i.e. the account's unit already *is* the reckoning unit. |
 | `note` | String | No | Line-specific detail |
 | `tagId` | UUID | No | FK → Tag |
 | `reconciliationId` | UUID | No | FK → Reconciliation (if reconciled) |
@@ -203,6 +209,11 @@ A single debit or credit line within a transaction.
 **Conventions:**
 - Positive = debit, negative = credit. UI may present as separate columns.
 - Amount is in smallest indivisible unit (e.g., cents for USD). Use `Unit.displayDivisor` for display.
+- `amount` is always the **fact** (100 shares moved). `value` is what makes cross-unit entries
+  comparable, and carries the cost basis together with the transaction's `valueUnit` and `date`.
+- The **exchange rate is per entry** (`value ÷ amount`), not per transaction — one sale can fill at
+  several prices. See [units.md](./units.md#rates-are-per-entry-not-per-transaction).
+- Single-unit books leave `value` null everywhere and pay no storage or complexity cost.
 
 ---
 
@@ -272,14 +283,19 @@ A unit of measure for account balances. Can represent currencies, inventory item
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `code` | String | Yes | Primary key. e.g., "USD", "EUR", "widget" |
+| `code` | String | Yes | Primary key. Bare for currencies (`USD`, `CHIP`); **namespaced** otherwise (`NYSE:VPER`, `FUND:VWLUX`, `INV:widget`) |
 | `name` | String | Yes | Display name (e.g., "US Dollar", "Widget") |
-| `symbol` | String | No | Display symbol (e.g., "$", "€") |
+| `symbol` | String | No | Display symbol (e.g., "$", "€", "VPER") |
 | `unitType` | Enum | Yes | FIAT, CRYPTO, COMMODITY, SECURITY, INVENTORY, OTHER |
 | `displayDivisor` | Integer | Yes | Divide stored amount by this for display |
 
 **Note:** All amounts are stored as integers in the smallest unit. Divide by `displayDivisor` for
-display. Examples: USD uses 100 (cents → dollars), labor-minutes uses 60 (minutes → hours).
+display. Examples: USD uses 100 (cents → dollars), labor-minutes uses 60 (minutes → hours),
+securities typically 10000 (fractional shares).
+
+**Namespacing is required, not cosmetic:** the same ticker can trade on two markets — `VPER` exists
+under both NYSE and NASDAQ in real books — and `code` is the primary key. `symbol` keeps the short
+form for display.
 
 See [units.md](./units.md) for the full model (rationale in docs/Units-and-Exchange.md).
 
@@ -287,24 +303,26 @@ See [units.md](./units.md) for the full model (rationale in docs/Units-and-Excha
 
 ## Exchange
 
-A record of the exchange rate between two units, either linked to a transaction (cost basis) or
-standalone (reference rate).
+An **observed rate between two units** — a reference quote used to value holdings at report time.
+
+Transaction-time rates are *not* stored here: they live on the entries as `value ÷ amount`, which
+allows a different rate per entry. This table is purely the price history.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `id` | UUID | Yes | Primary key |
-| `transactionId` | UUID | No | FK → Transaction. Null for reference rates. |
-| `date` | Date | Yes | When this rate applies |
+| `date` | Date | Yes | When this rate was observed |
 | `unitA` | String | Yes | FK → Unit |
 | `unitB` | String | Yes | FK → Unit |
 | `rateNumerator` | Integer | Yes | 1 unitA = (num/denom) unitB |
 | `rateDenominator` | Integer | Yes | |
-| `source` | Enum | Yes | TRANSACTION, MARKET, or MANUAL |
+| `source` | Enum | Yes | MARKET (a feed) or MANUAL (user-asserted) |
 | `notes` | String | No | Explanation of rate source |
 
-**Interpretation:** `1 unitA = (rateNumerator / rateDenominator) unitB`
+**Interpretation:** `1 unitA = (rateNumerator / rateDenominator) unitB`. Stored as an exact rational,
+never a decimal — a $0.0132 share price must round-trip exactly.
 
-See [units.md](./units.md) for the balancing algorithm and usage.
+See [units.md](./units.md#reference-rates-the-exchange-table) for selection rules and rendering.
 
 ---
 

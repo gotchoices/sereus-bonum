@@ -234,9 +234,18 @@ See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
   (per-row MV maintenance ~50–120× a one-shot rebuild).
 
 ### C. Import
-- ⬜ **Stock / multi-unit base-unit fix** — `pickBaseUnit` grabs the first 3-letter commodity (a stock,
-  e.g. AEF) instead of the CURRENCY (USD), and missing units aren't created → `Loan_Investments.gnucash`
-  fails on `fk_entity_unit` (error now visible via notifications). Prefer CURRENCY + create missing units.
+- ✅ **Multi-unit import — DONE (2026-08-11).** `Loan_Investments.gnucash` now imports **completely**:
+  11,011/11,011 transactions, 339 accounts, 45 units, 279 reference rates, **0 incomplete, 0 errors**,
+  and a SQL check finds **0 transactions that don't balance** in their reckoning unit. All five
+  non-zero share balances match the source exactly (Viper 2,000,000.0000 sh; PSEC 2,500.0000; …).
+  `Kyle.gnucash` re-verified: 18,414 txns, 0 units created, `value`/`value_unit` null throughout —
+  the single-unit path is untouched. Four things were wrong and are fixed:
+  - `pickBaseUnit` grabbed the first 3-letter commodity (the stock AEF) instead of the book's
+    CURRENCY → `fk_entity_unit` failure. Now picks the currency most accounts are denominated in.
+  - Commodities weren't created as units, and account `unit` was hardcoded to the entity base unit.
+  - `parseGnuCashAmount` forced every rational through denominator 100, **corrupting** 10000-SCU
+    share counts (175,211 sh → 17,521.10). Rescaling now goes through each unit's own divisor.
+  - Only `split:value` was read; `split:quantity` was ignored — so quantities *were* dollar values.
 - ⬜ **Editable account mapping** in the preview (autocomplete / tree / settle / rescan) — M3 deferred.
 - ⬜ **Inline completion of Incomplete transactions** (today they must be excluded).
 - 🔮 **Import Transactions mode** (CSV / QIF / OFX bank downloads).
@@ -346,7 +355,10 @@ See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
   applied to I/E in `getBalanceSheet`'s income-statement path. Verify `startDate`/`endDate` handling.
 
 ### E. Storied but unimplemented features
-- ⬜ Multi-unit (08), Tags (11), Sharing / multi-user (10), AI assistant + capture (07 / 09).
+- 🔄 Multi-unit (08): **model + storage + import DONE**; the remaining work is UI — the split-row
+  quantity/price/value editor, the implied-rate confirmation guard, display-unit selection, and the
+  derived Unrecognized Gain/Loss line on converted reports.
+- ⬜ Tags (11), Sharing / multi-user (10), AI assistant + capture (07 / 09).
 
 ### F. Cadre / p2p (the gating item being waited on)
 - 🔄 quereus-p2p runs **single-node** on latest Sereus (see Track C below). **Multi-node cadre

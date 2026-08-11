@@ -93,10 +93,14 @@ create table txn (
   date text,
   memo text null,
   reference text null,
+  -- Reckoning unit: the unit entry.value is expressed in. NULL = single-unit txn (balance is
+  -- sum(amount)=0). May be ANY unit, not just a currency -- see design/specs/domain/units.md.
+  value_unit text null,
   source_id text null,
   created_at text,
   updated_at text,
-  constraint fk_txn_entity foreign key (entity_id) references entity(id)
+  constraint fk_txn_entity foreign key (entity_id) references entity(id),
+  constraint fk_txn_value_unit foreign key (value_unit) references unit(code)
 );
 
 create table reconciliation (
@@ -113,7 +117,8 @@ create table entry (
   id text primary key,
   txn_id text,
   account_id text,
-  amount integer,
+  amount integer,        -- quantity in the ACCOUNT's unit, smallest increment: + debit / - credit
+  value integer null,    -- same entry restated in txn.value_unit -- null means "same as amount"
   entity_id text null,   -- denormalized from txn: enables single-source period MVs + entity-scoped reads
   date text null,        -- denormalized from txn: partial-month base reads (day precision)
   period text null,      -- denormalized 'YYYY-MM' bucket: bare GROUP BY key for the monthly MV (incremental)
@@ -126,20 +131,21 @@ create table entry (
   constraint fk_entry_recon foreign key (reconciliation_id) references reconciliation(id)
 );
 
+-- Reference rates ONLY: observed quotes used to value holdings at report time. Transaction-time
+-- rates are NOT here -- they live on the entries as value/amount, which allows a different rate per
+-- entry (one sale can fill at several prices). See design/specs/domain/units.md.
 create table exchange (
   id text primary key,
-  txn_id text null,
   date text,
   unit_a text,
   unit_b text,
-  rate_numerator integer,
+  rate_numerator integer,      -- 1 unit_a = (num/denom) unit_b, exact rational (never a decimal)
   rate_denominator integer,
   source text,
   notes text null,
-  constraint fk_exchange_txn foreign key (txn_id) references txn(id),
   constraint fk_exchange_unit_a foreign key (unit_a) references unit(code),
   constraint fk_exchange_unit_b foreign key (unit_b) references unit(code),
-  constraint chk_exchange_source check (source in ('TRANSACTION','MARKET','MANUAL'))
+  constraint chk_exchange_source check (source in ('MARKET','MANUAL'))
 );
 
 -- Secondary indexes for common joins/filters (FKs are NOT auto-indexed).
@@ -170,4 +176,5 @@ create index idx_tag_parent on tag(parent_id);
 create index idx_recon_account on reconciliation(account_id);
 create index idx_entry_tag on entry(tag_id);
 create index idx_entry_recon on entry(reconciliation_id);
-create index idx_exchange_txn on exchange(txn_id);
+-- Rate lookup is always "pair, most recent at or before a date" -> composite prefix + range.
+create index idx_exchange_pair_date on exchange(unit_a, unit_b, date);

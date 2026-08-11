@@ -67,6 +67,32 @@ in its parent group — its own balance shows on its `(direct)` row and the sub-
 rather than splitting into a catalog group *plus* a same-named sibling account. This preserves the single
 logical path (see [schema.md](./schema.md#hierarchy)).
 
+### Books: Units & Multi-Unit Transactions
+
+Source books carry their own commodities (currencies, stocks, funds). Import maps them onto Bonum
+units and entry values per [units.md](./units.md):
+
+- **Commodities → Units.** Each source commodity becomes a `Unit`. Currencies keep their bare code
+  (`USD`); everything else is **namespaced by its source space** (`NYSE:VPER`, `FUND:VWLUX`) because
+  tickers collide across markets. The source `fraction` becomes `displayDivisor` (securities are
+  typically 10000), and the space determines `unitType`. Missing units are created before accounts.
+- **Account commodity → `Account.unit`.** Not the entity's base unit — a stock account holds shares.
+- **Entity base unit** is the source book's *currency* (never the first commodity encountered, which
+  in an investment file is usually a stock).
+- **Split quantity → `Entry.amount`, split value → `Entry.value`.** GnuCash stores both: quantity in
+  the account's commodity, value in the transaction's currency. These map directly onto Bonum's
+  amount/value pair. Both are exact rationals in the source and must be rescaled to the target unit's
+  divisor **without rounding through a fixed denominator** — a share count at 1/10000 forced through
+  1/100 is corrupted, not rounded.
+- **Transaction currency → `Transaction.valueUnit`,** but only when the transaction actually spans
+  units; a single-unit transaction leaves `valueUnit` and every `value` null, exactly as if entered
+  by hand.
+- **Price history → Exchange reference rates.** Source price databases (GnuCash keeps one) import as
+  `source: MARKET` quotes, preserving the exact rational rate and its date.
+
+Imported multi-unit transactions are **not** re-prompted for rates — the source already recorded the
+values the user approved at the time.
+
 ### Books: Type Mapping
 
 Source account types mapped to [Bonum groups](./account-groups.md):

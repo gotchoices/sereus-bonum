@@ -17,6 +17,7 @@ import type {
   Transaction, TransactionInput,
   Entry, EntryInput,
   Unit, UnitInput,
+  Exchange, ExchangeInput,
   BalanceSheetData, AccountBalance, GroupBalance,
   LedgerEntry, SplitEntry, BulkImportData
 } from '../types';
@@ -39,6 +40,19 @@ function toEntity(r: Row): Entity {
     defaultCostingMethod: r.default_costing_method ?? undefined,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
+  };
+}
+
+function toExchange(r: Row): Exchange {
+  return {
+    id: r.id,
+    date: r.date,
+    unitA: r.unit_a,
+    unitB: r.unit_b,
+    rateNumerator: Number(r.rate_numerator),
+    rateDenominator: Number(r.rate_denominator),
+    source: r.source,
+    notes: r.notes ?? undefined,
   };
 }
 
@@ -91,6 +105,7 @@ function toTransaction(r: Row): Transaction {
     date: r.date,
     memo: r.memo ?? undefined,
     reference: r.reference ?? undefined,
+    valueUnit: r.value_unit ?? undefined,
     sourceId: r.source_id ?? undefined,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -103,6 +118,7 @@ function toEntry(r: Row): Entry {
     transactionId: r.txn_id,
     accountId: r.account_id,
     amount: Number(r.amount),
+    value: r.value === null || r.value === undefined ? undefined : Number(r.value),
     note: r.note ?? undefined,
     tagId: r.tag_id ?? undefined,
     reconciliationId: r.reconciliation_id ?? undefined,
@@ -294,6 +310,36 @@ class QuereusDataService implements DataService {
     const updated = await this.getUnit(code);
     if (!updated) throw new Error(`Unit ${code} not found after update`);
     return updated;
+  }
+
+  // ===========================================================================
+  // Reference rates
+  //
+  // Report-time valuation only. Transaction rates are NOT here — they live on the entries as
+  // value/amount, so one transaction can carry a different rate per entry.
+  // ===========================================================================
+
+  async getExchangeRates(options?: { unitA?: string; unitB?: string; asOf?: string }): Promise<Exchange[]> {
+    const where: string[] = [];
+    const params: SqlValue[] = [];
+    if (options?.unitA) { where.push('unit_a = ?'); params.push(options.unitA); }
+    if (options?.unitB) { where.push('unit_b = ?'); params.push(options.unitB); }
+    // Conversions are as-of the report date, never today — a December balance sheet uses December rates.
+    if (options?.asOf) { where.push('date <= ?'); params.push(options.asOf); }
+    const sql = `SELECT * FROM exchange${where.length ? ` WHERE ${where.join(' AND ')}` : ''}`
+      + ' ORDER BY date DESC';
+    const rows = await all<Row>(this.getDb(), sql, params);
+    return rows.map(toExchange);
+  }
+
+  async createExchangeRate(data: ExchangeInput): Promise<Exchange> {
+    const rate: Exchange = { ...data, id: crypto.randomUUID() };
+    await run(this.getDb(),
+      `INSERT INTO exchange (id, date, unit_a, unit_b, rate_numerator, rate_denominator, source, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [rate.id, rate.date, rate.unitA, rate.unitB, rate.rateNumerator, rate.rateDenominator,
+        rate.source, rate.notes ?? null]);
+    return rate;
   }
 
   // ===========================================================================
@@ -891,6 +937,10 @@ class QuereusDataService implements DataService {
     try { await dropMonthlyMV(db); } catch { /* ignore */ }
     await run(db, 'BEGIN');
     try {
+      // Units first: accounts and txn.value_unit both reference them.
+      await bulkInsert(db,
+        'INSERT INTO unit (code, name, symbol, unit_type, display_divisor)',
+        5, data.units ?? [], (u) => [u.code, u.name, u.symbol ?? null, u.unitType, u.displayDivisor]);
       await bulkInsert(db,
         `INSERT INTO account (id, entity_id, account_group_id, parent_id, code, name, description,
           unit, costing_method, closed_date, partner_id, linked_account_id, is_active, source_id, created_at, updated_at)`,
@@ -899,17 +949,22 @@ class QuereusDataService implements DataService {
           a.partnerId ?? null, a.linkedAccountId ?? null, a.isActive ? 1 : 0, a.sourceId ?? null,
           a.createdAt, a.updatedAt]);
       await bulkInsert(db,
-        'INSERT INTO txn (id, entity_id, date, memo, reference, source_id, created_at, updated_at)',
-        8, data.transactions, (t) => [t.id, t.entityId, t.date, t.memo ?? null, t.reference ?? null,
-          t.sourceId ?? null, t.createdAt, t.updatedAt]);
+        'INSERT INTO txn (id, entity_id, date, memo, reference, value_unit, source_id, created_at, updated_at)',
+        9, data.transactions, (t) => [t.id, t.entityId, t.date, t.memo ?? null, t.reference ?? null,
+          t.valueUnit ?? null, t.sourceId ?? null, t.createdAt, t.updatedAt]);
       const txnById = new Map(data.transactions.map((t) => [t.id, t]));
       await bulkInsert(db,
-        'INSERT INTO entry (id, txn_id, account_id, amount, entity_id, date, period, note, tag_id, reconciliation_id)',
-        10, data.entries, (e) => {
+        'INSERT INTO entry (id, txn_id, account_id, amount, value, entity_id, date, period, note, tag_id, reconciliation_id)',
+        11, data.entries, (e) => {
           const t = txnById.get(e.transactionId);
-          return [e.id, e.transactionId, e.accountId, e.amount, t?.entityId ?? null, t?.date ?? null,
+          return [e.id, e.transactionId, e.accountId, e.amount, e.value ?? null,
+            t?.entityId ?? null, t?.date ?? null,
             t?.date ? t.date.slice(0, 7) : null, e.note ?? null, e.tagId ?? null, e.reconciliationId ?? null];
         });
+      await bulkInsert(db,
+        `INSERT INTO exchange (id, date, unit_a, unit_b, rate_numerator, rate_denominator, source, notes)`,
+        8, data.rates ?? [], (r) => [r.id, r.date, r.unitA, r.unitB, r.rateNumerator,
+          r.rateDenominator, r.source, r.notes ?? null]);
       await run(db, 'COMMIT');
     } catch (err) {
       try { await run(db, 'ROLLBACK'); } catch { /* ignore */ }

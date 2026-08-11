@@ -14,7 +14,7 @@ Keep it in sync whenever a story is added, renamed, or promoted.
 | 05 | [Reconciliation](./05-reconciliation.md) | MVP | draft |
 | 06 | [Transaction Search](./06-search.md) | MVP | draft |
 | 07 | [AI Assistant](./07-ai-assistant.md) | Post-MVP (phased) | draft |
-| 08 | [Multiple Units of Account](./08-multi-unit.md) | Core capability | draft |
+| 08 | [Multiple Units of Account](./08-multi-unit.md) | Core capability | model + import built; UI pending |
 | 09 | [AI-Assisted Capture & Import](./09-ai-capture-import.md) | Post-MVP | draft / exploratory |
 | 10 | [Sharing & Multi-User Books](./10-sharing.md) | Post-MVP (needs Quereus) | draft |
 | 11 | [Tagging Entries](./11-tags.md) | Post-MVP | draft |

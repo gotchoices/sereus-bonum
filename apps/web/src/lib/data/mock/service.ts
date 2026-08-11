@@ -9,6 +9,7 @@ import type {
   Transaction, TransactionInput,
   Entry, EntryInput,
   Unit, UnitInput,
+  Exchange, ExchangeInput,
   BalanceSheetData, GroupBalance, AccountBalance,
   LedgerEntry, SplitEntry,
   AccountType, BulkImportData
@@ -346,7 +347,7 @@ class SqliteDataService implements DataService {
   
   async getTransaction(id: string): Promise<Transaction | null> {
     const rows = this.getDb().exec(`
-      SELECT id, entity_id, date, memo, reference, created_at, updated_at, source_id
+      SELECT id, entity_id, date, memo, reference, created_at, updated_at, source_id, value_unit
       FROM txn WHERE id = ?
     `, [id]);
     if (!rows.length || !rows[0].values.length) return null;
@@ -433,16 +434,58 @@ class SqliteDataService implements DataService {
       createdAt: row[5] as string,
       updatedAt: row[6] as string,
       sourceId: row[7] as string | undefined,
+      valueUnit: (row[8] as string | null) ?? undefined,
     };
   }
   
+  // ===========================================================================
+  // Reference rates
+  //
+  // Report-time valuation only. Transaction rates are NOT here — they live on the entries as
+  // value/amount, so one transaction can carry a different rate per entry.
+  // ===========================================================================
+
+  async getExchangeRates(options?: { unitA?: string; unitB?: string; asOf?: string }): Promise<Exchange[]> {
+    const where: string[] = [];
+    const params: (string | number)[] = [];
+    if (options?.unitA) { where.push('unit_a = ?'); params.push(options.unitA); }
+    if (options?.unitB) { where.push('unit_b = ?'); params.push(options.unitB); }
+    // Conversions are as-of the report date, never today.
+    if (options?.asOf) { where.push('date <= ?'); params.push(options.asOf); }
+    const rows = this.getDb().exec(
+      `SELECT id, date, unit_a, unit_b, rate_numerator, rate_denominator, source, notes FROM exchange`
+      + `${where.length ? ` WHERE ${where.join(' AND ')}` : ''} ORDER BY date DESC`, params);
+    if (!rows.length) return [];
+    return rows[0].values.map((row) => ({
+      id: row[0] as string,
+      date: row[1] as string,
+      unitA: row[2] as string,
+      unitB: row[3] as string,
+      rateNumerator: row[4] as number,
+      rateDenominator: row[5] as number,
+      source: row[6] as Exchange['source'],
+      notes: (row[7] as string | null) ?? undefined,
+    }));
+  }
+
+  async createExchangeRate(data: ExchangeInput): Promise<Exchange> {
+    const rate: Exchange = { ...data, id: uuid() };
+    this.getDb().run(
+      `INSERT INTO exchange (id, date, unit_a, unit_b, rate_numerator, rate_denominator, source, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [rate.id, rate.date, rate.unitA, rate.unitB, rate.rateNumerator, rate.rateDenominator,
+        rate.source, rate.notes ?? null]);
+    this.save();
+    return rate;
+  }
+
   // ===========================================================================
   // Entries
   // ===========================================================================
   
   async getEntries(transactionId: string): Promise<Entry[]> {
     const rows = this.getDb().exec(`
-      SELECT id, txn_id, account_id, amount, note, tag_id, reconciliation_id
+      SELECT id, txn_id, account_id, amount, note, tag_id, reconciliation_id, value
       FROM entry WHERE txn_id = ?
     `, [transactionId]);
     if (!rows.length) return [];
@@ -455,7 +498,7 @@ class SqliteDataService implements DataService {
     unreconciled?: boolean;
   }): Promise<Entry[]> {
     let sql = `
-      SELECT e.id, e.txn_id, e.account_id, e.amount, e.note, e.tag_id, e.reconciliation_id
+      SELECT e.id, e.txn_id, e.account_id, e.amount, e.note, e.tag_id, e.reconciliation_id, e.value
       FROM entry e
       JOIN txn t ON t.id = e.txn_id
       WHERE e.account_id = ?
@@ -492,6 +535,7 @@ class SqliteDataService implements DataService {
       note: row[4] as string | undefined,
       tagId: row[5] as string | undefined,
       reconciliationId: row[6] as string | undefined,
+      value: (row[7] as number | null) ?? undefined,
     };
   }
   
@@ -1127,6 +1171,11 @@ class SqliteDataService implements DataService {
     const db = this.getDb();
     db.run('BEGIN');
     try {
+      for (const u of data.units ?? []) {
+        db.run(
+          'INSERT INTO unit (code, name, symbol, unit_type, display_divisor) VALUES (?, ?, ?, ?, ?)',
+          [u.code, u.name, u.symbol ?? null, u.unitType, u.displayDivisor]);
+      }
       for (const a of data.accounts) {
         db.run(
           `INSERT INTO account (id, entity_id, account_group_id, parent_id, code, name, description,
@@ -1139,13 +1188,20 @@ class SqliteDataService implements DataService {
       }
       for (const t of data.transactions) {
         db.run(
-          'INSERT INTO txn (id, entity_id, date, memo, reference, source_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-          [t.id, t.entityId, t.date, t.memo ?? null, t.reference ?? null, t.sourceId ?? null, t.createdAt, t.updatedAt]);
+          'INSERT INTO txn (id, entity_id, date, memo, reference, value_unit, source_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [t.id, t.entityId, t.date, t.memo ?? null, t.reference ?? null, t.valueUnit ?? null,
+            t.sourceId ?? null, t.createdAt, t.updatedAt]);
       }
       for (const e of data.entries) {
         db.run(
-          'INSERT INTO entry (id, txn_id, account_id, amount, note, tag_id, reconciliation_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [e.id, e.transactionId, e.accountId, e.amount, e.note ?? null, e.tagId ?? null, e.reconciliationId ?? null]);
+          'INSERT INTO entry (id, txn_id, account_id, amount, value, note, tag_id, reconciliation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          [e.id, e.transactionId, e.accountId, e.amount, e.value ?? null, e.note ?? null,
+            e.tagId ?? null, e.reconciliationId ?? null]);
+      }
+      for (const r of data.rates ?? []) {
+        db.run(
+          'INSERT INTO exchange (id, date, unit_a, unit_b, rate_numerator, rate_denominator, source, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          [r.id, r.date, r.unitA, r.unitB, r.rateNumerator, r.rateDenominator, r.source, r.notes ?? null]);
       }
       db.run('COMMIT');
     } catch (err) {

@@ -4,7 +4,7 @@ import type {
   ResolvedAccount, PreviewTransaction, PreviewEntry, MergePlan,
 } from './types';
 import { getDataService } from '$lib/data';
-import type { AccountGroup, AccountType, Account, Transaction, Entry } from '$lib/data';
+import type { AccountGroup, AccountType, Account, Transaction, Entry, Unit, Exchange } from '$lib/data';
 import { log } from '$lib/logger';
 import * as pako from 'pako';
 
@@ -66,10 +66,21 @@ export class ImportService {
     return entity.id;
   }
 
+  /**
+   * The entity's default display unit. It must be the book's CURRENCY: matching on "looks like a
+   * 3-letter code" picks a ticker (AEF) out of an investment book, which then fails the entity's
+   * unit FK. Prefer the currency the most accounts are denominated in.
+   */
   private pickBaseUnit(parsed: ParsedBooks): string {
-    // First currency-like commodity (3-letter code), else USD.
-    const cur = parsed.commodities.find((c) => /^[A-Z]{3}$/.test(c.symbol || c.id));
-    return (cur?.symbol || cur?.id || 'USD').toUpperCase();
+    const currencies = new Set(parsed.commodities.filter((c) => c.isCurrency).map((c) => c.id));
+    if (currencies.size === 0) return 'USD';
+
+    const uses = new Map<string, number>();
+    for (const a of parsed.accounts) {
+      if (a.unitCode && currencies.has(a.unitCode)) uses.set(a.unitCode, (uses.get(a.unitCode) ?? 0) + 1);
+    }
+    const ranked = [...uses.entries()].sort((x, y) => y[1] - x[1]);
+    return ranked[0]?.[0] ?? (currencies.has('USD') ? 'USD' : [...currencies][0]);
   }
 
   // ---------------------------------------------------------------------------
@@ -104,7 +115,10 @@ export class ImportService {
     const counts = { exists: 0, new: 0, incomplete: 0 };
     for (const t of transactions) counts[t.disposition]++;
 
-    return { entityId: targetEntityId ?? '', resolved, transactions, counts };
+    return {
+      entityId: targetEntityId ?? '', units: parsed.commodities, rates: parsed.rates,
+      resolved, transactions, counts,
+    };
   }
 
   /**
@@ -191,6 +205,7 @@ export class ImportService {
         sourceGuid: a.guid,
         sourceName: a.name,
         sourcePath: sourcePathOf(a),
+        unitCode: a.unitCode,
         usedInTransactions: usedGuids.has(a.guid),
       };
       // Already imported (stored source id) or same-name existing account.
@@ -218,10 +233,18 @@ export class ImportService {
     return parsed.transactions.map((t): PreviewTransaction => {
       const entries: PreviewEntry[] = t.entries.map((e) => {
         const r = resolvedByGuid.get(e.accountGuid);
-        return { accountGuid: e.accountGuid, accountId: r?.existingAccountId, amount: e.amount, note: e.memo };
+        return {
+          accountGuid: e.accountGuid, accountId: r?.existingAccountId,
+          amount: e.amount, value: e.value, note: e.memo,
+        };
       });
+      // The reckoning unit is only meaningful when the transaction actually spans units; a
+      // single-unit transaction stores neither it nor any entry value (see domain/units.md).
+      const units = new Set(t.entries.map((e) => resolvedByGuid.get(e.accountGuid)?.unitCode ?? t.valueUnit));
+      const multiUnit = units.size > 1 || (units.size === 1 && !units.has(t.valueUnit));
       const base = {
-        sourceGuid: t.guid, date: t.date, description: t.description, reference: t.reference, entries,
+        sourceGuid: t.guid, date: t.date, description: t.description, reference: t.reference,
+        valueUnit: multiUnit ? t.valueUnit : undefined, entries,
       };
       if (txnSourceIds.has(t.guid)) return { ...base, disposition: 'exists' };
 
@@ -231,8 +254,9 @@ export class ImportService {
         return !r || r.disposition === 'unresolved';
       });
       if (unresolved) return { ...base, disposition: 'incomplete', reason: 'An account could not be mapped' };
-      const sum = t.entries.reduce((s, e) => s + e.amount, 0);
-      if (Math.abs(sum) > 0.001) return { ...base, disposition: 'incomplete', reason: `Entries do not balance (off by ${sum})` };
+      // Balance is always checked in the reckoning unit: 100 shares and -$283 only cancel as values.
+      const sum = t.entries.reduce((s, e) => s + e.value, 0);
+      if (sum !== 0) return { ...base, disposition: 'incomplete', reason: `Entries do not balance (off by ${sum})` };
 
       return { ...base, disposition: 'new' };
     });
@@ -255,7 +279,7 @@ export class ImportService {
     };
 
     const entity = await ds.getEntity(plan.entityId);
-    const unit = entity?.baseUnit ?? 'USD';
+    const fallbackUnit = entity?.baseUnit ?? 'USD';
     const ts = new Date().toISOString();
     const guidToId = new Map<string, string>();
 
@@ -274,7 +298,8 @@ export class ImportService {
     const created: Account[] = creates.map((r) => ({
       id: guidToId.get(r.sourceGuid)!, entityId: plan.entityId, accountGroupId: r.targetGroupId!,
       parentId: r.parentSourceGuid ? guidToId.get(r.parentSourceGuid) : undefined,
-      name: r.targetAccountName ?? r.sourceName, unit, isActive: true,
+      // A stock account holds shares, not dollars — take the source commodity, not the base unit.
+      name: r.targetAccountName ?? r.sourceName, unit: r.unitCode ?? fallbackUnit, isActive: true,
       sourceId: r.sourceGuid, createdAt: ts, updatedAt: ts,
     }));
     result.accountsCreated = created.length;
@@ -290,7 +315,9 @@ export class ImportService {
     const entries: Entry[] = [];
     for (const t of transactionsToWrite) {
       if (t.excluded || t.disposition === 'exists') continue;
-      const mapped = t.entries.map((e) => ({ accountId: guidToId.get(e.accountGuid) ?? '', amount: e.amount, note: e.note }));
+      const mapped = t.entries.map((e) => ({
+        accountId: guidToId.get(e.accountGuid) ?? '', amount: e.amount, value: e.value, note: e.note,
+      }));
       if (mapped.some((m) => !m.accountId)) {
         result.errors.push(`Skipped transaction ${t.sourceGuid}: unmapped account`);
         continue;
@@ -298,18 +325,42 @@ export class ImportService {
       const txnId = crypto.randomUUID();
       transactions.push({
         id: txnId, entityId: plan.entityId, date: t.date, memo: t.description,
-        reference: t.reference, sourceId: t.sourceGuid, createdAt: ts, updatedAt: ts,
+        reference: t.reference, valueUnit: t.valueUnit, sourceId: t.sourceGuid, createdAt: ts, updatedAt: ts,
       });
       for (const m of mapped) {
-        entries.push({ id: crypto.randomUUID(), transactionId: txnId, accountId: m.accountId, amount: m.amount, note: m.note });
+        // `value` is stored only where it differs from `amount` — i.e. where the account's unit is
+        // not the reckoning unit. Single-unit books leave the column null throughout.
+        const value = t.valueUnit && m.value !== m.amount ? m.value : undefined;
+        entries.push({
+          id: crypto.randomUUID(), transactionId: txnId, accountId: m.accountId,
+          amount: m.amount, value, note: m.note,
+        });
       }
       result.transactionsImported++;
     }
 
+    // Units must exist before the accounts and transactions that reference them.
+    const existingUnits = new Set((await ds.getUnits()).map((u) => u.code));
+    const units: Unit[] = plan.units
+      .filter((c) => !existingUnits.has(c.id))
+      .map((c) => ({
+        code: c.id, name: c.name, symbol: c.symbol,
+        unitType: c.unitType, displayDivisor: c.displayDivisor,
+      }));
+    const knownUnits = new Set([...existingUnits, ...units.map((u) => u.code)]);
+    // Reference rates for units we actually hold; skip quotes naming a unit we never created.
+    const rates: Exchange[] = plan.rates
+      .filter((r) => knownUnits.has(r.unitA) && knownUnits.has(r.unitB))
+      .map((r) => ({
+        id: crypto.randomUUID(), date: r.date, unitA: r.unitA, unitB: r.unitB,
+        rateNumerator: r.numerator, rateDenominator: r.denominator,
+        source: 'MARKET' as const, notes: r.source,
+      }));
+
     // One atomic write.
     try {
-      await ds.bulkImport({ accounts, transactions, entries });
-      log.data.info(`[Import] Merge complete: +${result.accountsCreated} accts, +${result.transactionsImported} txns (${result.transactionsDuplicate} already present)`);
+      await ds.bulkImport({ units, accounts, transactions, entries, rates });
+      log.data.info(`[Import] Merge complete: +${units.length} units, +${result.accountsCreated} accts, +${result.transactionsImported} txns, +${rates.length} rates (${result.transactionsDuplicate} already present)`);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       log.data.error('[Import] Merge failed (rolled back):', error);

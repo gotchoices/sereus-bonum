@@ -9,6 +9,8 @@ export type AccountType = 'ASSET' | 'LIABILITY' | 'EQUITY' | 'INCOME' | 'EXPENSE
 export type UnitType = 'FIAT' | 'CRYPTO' | 'COMMODITY' | 'SECURITY' | 'INVENTORY' | 'OTHER';
 export type PartnerType = 'VENDOR' | 'CUSTOMER' | 'BOTH';
 export type CostingMethod = 'FIFO' | 'LIFO' | 'AVERAGE';
+/** Where a reference rate came from. Transaction rates aren't rates rows — they're on the entries. */
+export type RateSource = 'MARKET' | 'MANUAL';
 
 // Normal balance direction for account types
 export const NORMAL_BALANCE: Record<AccountType, 'debit' | 'credit'> = {
@@ -68,6 +70,12 @@ export interface Transaction {
   date: string;
   memo?: string;
   reference?: string;
+  /**
+   * Reckoning unit — the unit `Entry.value` is expressed in. Undefined when every entry's account
+   * shares one unit (the ordinary single-unit transaction). May be ANY unit, not just a currency:
+   * a stock-for-stock barter is reckoned in one of the stocks. See design/specs/domain/units.md.
+   */
+  valueUnit?: string;          // FK → Unit.code
   sourceId?: string;           // Source-system identity (GnuCash GUID / OFX FITID) for import merge
   createdAt: string;
   updatedAt: string;
@@ -77,18 +85,43 @@ export interface Entry {
   id: string;
   transactionId: string;
   accountId: string;
-  amount: number;              // Positive = debit, negative = credit
+  /** Quantity in the ACCOUNT's unit, smallest increment. Positive = debit, negative = credit. */
+  amount: number;
+  /**
+   * The same entry restated in the transaction's `valueUnit`. Undefined means "same as `amount`" —
+   * the account's unit already IS the reckoning unit. The entry's exchange rate is `value / amount`,
+   * so one transaction can carry a different rate per entry (a multi-fill trade).
+   */
+  value?: number;
   note?: string;
   tagId?: string;
   reconciliationId?: string;
 }
 
 export interface Unit {
-  code: string;                // Primary key
+  /** Primary key. Bare for currencies ("USD"); namespaced otherwise ("NYSE:VPER", "INV:widget") —
+   *  tickers collide across markets, so the namespace is required, not cosmetic. */
+  code: string;
   name: string;
-  symbol?: string;
+  symbol?: string;             // Short display form ("$", "€", "VPER")
   unitType: UnitType;
   displayDivisor: number;      // Stored amount / divisor = display amount
+}
+
+/**
+ * An observed rate between two units — a reference quote for valuing holdings at report time.
+ * Transaction-time rates are NOT here; they live on entries as `value / amount`.
+ * Interpretation: 1 unitA = (rateNumerator / rateDenominator) unitB, exact rational.
+ */
+export interface Exchange {
+  id: string;
+  date: string;
+  unitA: string;               // FK → Unit.code
+  unitB: string;               // FK → Unit.code
+  rateNumerator: number;
+  rateDenominator: number;
+  source: RateSource;
+  notes?: string;
 }
 
 export interface Tag {
@@ -130,6 +163,7 @@ export type AccountInput = Omit<Account, 'id' | 'createdAt' | 'updatedAt'>;
 export type TransactionInput = Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>;
 export type EntryInput = Omit<Entry, 'id' | 'transactionId'>;
 export type UnitInput = Unit;
+export type ExchangeInput = Omit<Exchange, 'id'>;
 export type TagInput = Omit<Tag, 'id'>;
 export type PartnerInput = Omit<Partner, 'id' | 'createdAt' | 'updatedAt'>;
 
@@ -265,6 +299,10 @@ export interface DataService {
   getUnit(code: string): Promise<Unit | null>;
   createUnit(data: UnitInput): Promise<Unit>;
   updateUnit(code: string, data: Partial<UnitInput>): Promise<Unit>;
+
+  // Reference rates (report-time valuation only — see design/specs/domain/units.md)
+  getExchangeRates(options?: { unitA?: string; unitB?: string; asOf?: string }): Promise<Exchange[]>;
+  createExchangeRate(data: ExchangeInput): Promise<Exchange>;
   
   // Balance calculations
   getAccountBalance(accountId: string, asOf?: string): Promise<number>;
@@ -299,8 +337,10 @@ export interface DataService {
 }
 
 export interface BulkImportData {
+  units?: Unit[];              // created first — accounts and txn.valueUnit reference them
   accounts: Account[];
   transactions: Transaction[];
   entries: Entry[];
+  rates?: Exchange[];          // imported price history (reference rates)
 }
 

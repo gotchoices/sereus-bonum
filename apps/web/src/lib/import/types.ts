@@ -7,6 +7,7 @@ export interface ParsedAccount {
   code?: string;
   description?: string;
   parentGuid?: string;
+  unitCode?: string;     // Bonum unit code of the account's commodity (e.g. "USD", "NYSE:VPER")
   placeholder?: boolean; // Explicit placeholder flag from source
   transactionCount?: number; // Number of transactions directly in this account
 }
@@ -16,13 +17,20 @@ export interface ParsedTransaction {
   date: string;
   description: string;
   reference?: string;
+  valueUnit?: string;    // Source transaction currency as a Bonum unit code (the reckoning unit)
   entries: ParsedEntry[];
 }
 
+/**
+ * A source split. `amount` is the quantity in the ACCOUNT's unit; `value` is the same split in the
+ * transaction's reckoning unit. Both are already scaled to their unit's displayDivisor. They differ
+ * only when the split's account holds a different unit than the transaction reckons in.
+ */
 export interface ParsedEntry {
   guid: string;
   accountGuid: string;
-  amount: number; // Already in cents, positive = debit, negative = credit
+  amount: number;        // Quantity in the account's unit, smallest increment; + debit / - credit
+  value: number;         // Same split in the transaction's reckoning unit, smallest increment
   memo?: string;
 }
 
@@ -30,12 +38,26 @@ export interface ParsedBooks {
   accounts: ParsedAccount[];
   transactions: ParsedTransaction[];
   commodities: ParsedCommodity[];
+  rates: ParsedRate[];
 }
 
 export interface ParsedCommodity {
-  id: string;
+  id: string;            // Bonum unit code: bare "USD" for currencies, "NYSE:VPER" otherwise
   name: string;
-  symbol: string;
+  symbol: string;        // Short display form ("VPER")
+  unitType: 'FIAT' | 'CRYPTO' | 'COMMODITY' | 'SECURITY' | 'INVENTORY' | 'OTHER';
+  displayDivisor: number;
+  isCurrency: boolean;
+}
+
+/** A quote from the source price database → a Bonum reference rate. */
+export interface ParsedRate {
+  date: string;
+  unitA: string;         // the commodity being quoted
+  unitB: string;         // the unit it's quoted in
+  numerator: number;     // 1 unitA = (num/denom) unitB — exact rational, never a decimal
+  denominator: number;
+  source: string;
 }
 
 export interface ImportResult {
@@ -67,6 +89,7 @@ export interface ResolvedAccount {
   targetAccountName?: string;       // account name to create
   parentSourceGuid?: string;        // when 'create' — source guid of the Bonum PARENT account
                                     // (an intermediate node below the group boundary); undefined = top of subtree
+  unitCode?: string;                // the account's unit (a stock account holds shares, not dollars)
   usedInTransactions: boolean;      // referenced by at least one transaction entry
 }
 
@@ -76,7 +99,8 @@ export type TxnDisposition = 'exists' | 'new' | 'incomplete';
 export interface PreviewEntry {
   accountGuid: string;
   accountId?: string;               // resolved Bonum account id (undefined → unresolved)
-  amount: number;                   // smallest unit; +debit / -credit
+  amount: number;                   // quantity in the ACCOUNT's unit, smallest increment; +debit / -credit
+  value: number;                    // the same entry in the txn's reckoning unit — what must sum to zero
   note?: string;
 }
 
@@ -85,6 +109,7 @@ export interface PreviewTransaction {
   date: string;
   description: string;
   reference?: string;
+  valueUnit?: string;               // reckoning unit; set only when the txn actually spans units
   disposition: TxnDisposition;
   reason?: string;                  // why 'incomplete'
   entries: PreviewEntry[];
@@ -93,6 +118,8 @@ export interface PreviewTransaction {
 
 export interface MergePlan {
   entityId: string;
+  units: ParsedCommodity[];         // source commodities → units (created before anything referencing them)
+  rates: ParsedRate[];              // source price history → reference rates
   resolved: ResolvedAccount[];      // by source account
   transactions: PreviewTransaction[];
   counts: { exists: number; new: number; incomplete: number };

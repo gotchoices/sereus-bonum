@@ -82,6 +82,9 @@ CREATE TABLE IF NOT EXISTS txn (
   date TEXT NOT NULL,
   memo TEXT,
   reference TEXT,
+  -- Reckoning unit: what entry.value is expressed in. NULL = single-unit txn (balance is
+  -- SUM(amount)=0). May be ANY unit, not just a currency. See design/specs/domain/units.md.
+  value_unit TEXT REFERENCES unit(code),
   source_id TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -92,7 +95,8 @@ CREATE TABLE IF NOT EXISTS entry (
   id TEXT PRIMARY KEY,
   txn_id TEXT NOT NULL REFERENCES txn(id) ON DELETE CASCADE,
   account_id TEXT NOT NULL REFERENCES account(id),
-  amount INTEGER NOT NULL,  -- Positive = debit, negative = credit
+  amount INTEGER NOT NULL,  -- Quantity in the ACCOUNT's unit; positive = debit, negative = credit
+  value INTEGER,            -- Same entry restated in txn.value_unit; NULL = "same as amount"
   note TEXT,
   tag_id TEXT REFERENCES tag(id),
   reconciliation_id TEXT REFERENCES reconciliation(id)
@@ -105,6 +109,19 @@ CREATE TABLE IF NOT EXISTS reconciliation (
   statement_date TEXT NOT NULL,
   ending_balance INTEGER NOT NULL,
   reconciled_at TEXT,
+  notes TEXT
+);
+
+-- Reference rates ONLY: observed quotes for report-time valuation. Transaction rates are NOT here --
+-- they live on the entries as value/amount, so one txn can carry a different rate per entry.
+CREATE TABLE IF NOT EXISTS exchange (
+  id TEXT PRIMARY KEY,
+  date TEXT NOT NULL,
+  unit_a TEXT NOT NULL REFERENCES unit(code),
+  unit_b TEXT NOT NULL REFERENCES unit(code),
+  rate_numerator INTEGER NOT NULL,   -- 1 unit_a = (num/denom) unit_b, exact rational
+  rate_denominator INTEGER NOT NULL,
+  source TEXT NOT NULL CHECK (source IN ('MARKET','MANUAL')),
   notes TEXT
 );
 
