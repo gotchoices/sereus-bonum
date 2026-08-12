@@ -11,6 +11,15 @@ export type PartnerType = 'VENDOR' | 'CUSTOMER' | 'BOTH';
 export type CostingMethod = 'FIFO' | 'LIFO' | 'AVERAGE';
 /** Where a reference rate came from. Transaction rates aren't rates rows — they're on the entries. */
 export type RateSource = 'MARKET' | 'MANUAL';
+/**
+ * How a report values holdings that aren't already in the display unit.
+ *
+ * - `COST`  — what was actually paid: the sum of the entries' recorded values. EXACT, consults no
+ *   rates, and the statement balances with no gain/loss line. Default, because it is a fact.
+ * - `MARKET` — native quantity x the report-date reference rate. An estimate, and it needs the
+ *   derived Unrecognized Gain/Loss line to balance.
+ */
+export type Valuation = 'COST' | 'MARKET';
 
 // Normal balance direction for account types
 export const NORMAL_BALANCE: Record<AccountType, 'debit' | 'credit'> = {
@@ -32,6 +41,16 @@ export interface Entity {
   fiscalYearEnd?: string;      // e.g., "12-31"
   baseUnit: string;            // FK → Unit.code
   defaultCostingMethod?: CostingMethod;
+  /**
+   * Read-side denormalizations, maintained on write and never queried for.
+   *
+   * The store charges per-row cursor cost for any predicate other than `col = ?` on a selective
+   * index, so a table-wide question like "what is the latest entry date?" costs seconds even though
+   * it returns one value. These ride along on the entity row instead.
+   */
+  maxEntryDate?: string;       // latest entry date; RAISED only (an over-estimate is harmless)
+  reckoningUnits?: string[];   // every txn.value_unit ever used in these books
+  entryPeriods?: string[];     // 'YYYY-MM' buckets holding entries; over-listing is harmless
   createdAt: string;
   updatedAt: string;
 }
@@ -157,7 +176,7 @@ export interface Partner {
 // Input types (for create/update operations)
 // =============================================================================
 
-export type EntityInput = Omit<Entity, 'id' | 'createdAt' | 'updatedAt'>;
+export type EntityInput = Omit<Entity, 'id' | 'createdAt' | 'updatedAt' | 'maxEntryDate' | 'reckoningUnits' | 'entryPeriods'>;
 export type AccountGroupInput = Omit<AccountGroup, 'id'>;
 export type AccountInput = Omit<Account, 'id' | 'createdAt' | 'updatedAt'>;
 export type TransactionInput = Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>;
@@ -178,9 +197,15 @@ export interface AccountBalance {
   groupId: string;
   groupName: string;
   accountType: AccountType;
-  /** THE FACT: balance in the account's own unit, smallest increment. Never converted. */
+  /**
+   * The figure being reported, in `unit`. Under COST valuation this is the sum of the entries'
+   * recorded values (already in the reckoning unit); under MARKET it is the raw quantity.
+   */
   balance: number;
   unit: string;
+  /** THE FACT: quantity in the account's OWN unit, whatever the valuation. Never converted. */
+  nativeBalance?: number;
+  nativeUnit?: string;
   /**
    * THE ESTIMATE: `balance` expressed in the report's display unit, smallest increment.
    * `null` means no rate path existed — show it as unvalued and exclude it from totals.
@@ -200,6 +225,13 @@ export interface BalanceSheetData {
   startDate?: string;         // Optional start date for period-based reports
   /** Unit every total below is expressed in. Defaults to the entity's baseUnit. */
   displayUnit: string;
+  /** How non-display-unit holdings were valued. */
+  valuation: Valuation;
+  /**
+   * True when the figures are exact — COST valuation with every transaction reckoned in the display
+   * unit, so nothing was estimated. Reports drop all estimate markers when this is set.
+   */
+  isExact: boolean;
   /**
    * Derived equity plug that makes a converted statement balance, credit-normal like `totalEquity`.
    * Computed at render, NEVER posted. Zero for single-unit books.
@@ -243,13 +275,18 @@ export interface LedgerEntry {
   reference?: string;
   memo?: string;
   accountId: string;
-  amount: number;           // Positive = debit, negative = credit
+  amount: number;           // Positive = debit, negative = credit, in the account's own unit
+  /** The entry restated in the transaction's reckoning unit; undefined when the units match. */
+  value?: number;
+  /** The transaction's reckoning unit; undefined for an ordinary single-unit transaction. */
+  valueUnit?: string;
   note?: string;
   runningBalance: number;   // Calculated running balance
   // Offset account info (for simple transactions)
   offsetAccountId?: string;
   offsetAccountName?: string;      // Just the account name (e.g., "Checking")
   offsetAccountPath?: string;      // Full path for tooltip (e.g., "Assets : Current : Checking")
+  offsetValue?: number;            // The offset entry's value, when the two legs span units
   // Split info
   isSplit: boolean;
   splitEntries?: SplitEntry[];
@@ -260,7 +297,12 @@ export interface SplitEntry {
   accountId: string;
   accountName: string;
   accountPath: string;      // Full path for display: "Expenses : Utilities"
+  /** Quantity in the split account's own unit. */
   amount: number;
+  /** The split restated in the transaction's reckoning unit; undefined when the units match. */
+  value?: number;
+  /** The split account's unit, so the editor can show the right precision without a second lookup. */
+  unit?: string;
   note?: string;
 }
 
@@ -338,7 +380,8 @@ export interface DataService {
     entityId: string, 
     endDate?: string,      // End date (formerly 'asOf')
     startDate?: string,    // Optional start date for period-based filtering
-    displayUnit?: string   // Unit to render in; defaults to the entity's baseUnit
+    displayUnit?: string,  // Unit to render in; defaults to the entity's baseUnit
+    valuation?: Valuation  // How non-display-unit holdings are valued; defaults to COST
   ): Promise<BalanceSheetData>;
   
   // Ledger view

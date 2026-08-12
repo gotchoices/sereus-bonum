@@ -1,7 +1,7 @@
 // Tier-1 unit tests for unit-aware formatting (design/specs/domain/units.md § Amounts & Display).
 
 import { describe, it, expect } from 'vitest';
-import { formatAmount, formatRate, decimalsFor, unitLookup } from './format';
+import { formatAmount, formatRate, decimalsFor, unitLookup, formatForInput } from './format';
 import type { Unit } from '$lib/data';
 
 const USD: Unit = { code: 'USD', name: 'US Dollar', symbol: '$', unitType: 'FIAT', displayDivisor: 100 };
@@ -93,5 +93,21 @@ describe('unitLookup', () => {
     const at = unitLookup([USD, VPER]);
     expect(at('NYSE:VPER')).toBe(VPER);
     expect(at('NASDAQ:VPER')).toBeUndefined();
+  });
+});
+
+describe('formatForInput', () => {
+  it('emits NO thousands separators — a number input rejects them and renders blank', () => {
+    expect(formatForInput(10000000, VPER)).toBe('1000.0000');
+    expect(formatAmount(10000000, VPER)).toBe('1,000.0000 VPER');   // display form, for contrast
+  });
+
+  it('drops the currency symbol too', () => {
+    expect(formatForInput(1087000, USD)).toBe('10870.00');
+  });
+
+  it("round-trips through parseFloat at the unit's precision", () => {
+    expect(parseFloat(formatForInput(128000000, VPER))).toBe(12800);
+    expect(parseFloat(formatForInput(500, JPY))).toBe(500);
   });
 });

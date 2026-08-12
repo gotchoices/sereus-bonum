@@ -129,7 +129,7 @@ function splitStatements(sql: string): string[] {
 
 // Bump when schema.qsql changes. A persisted store stamped with a different version is dropped and
 // rebuilt from the authoritative DDL (no in-place migration). Kept as its own infra table.
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 
 async function readSchemaVersion(database: Database): Promise<number> {
   try {
@@ -241,7 +241,8 @@ export const BALANCE_MV = 'account_balance';
 export async function ensureBalanceMV(database: Database): Promise<void> {
   await database.exec(
     `CREATE MATERIALIZED VIEW IF NOT EXISTS ${BALANCE_MV} USING store AS
-       SELECT account_id, SUM(amount) AS balance FROM entry GROUP BY account_id`,
+       SELECT account_id, SUM(amount) AS balance, SUM(COALESCE(value, amount)) AS cost
+       FROM entry GROUP BY account_id`,
   );
 }
 
@@ -262,7 +263,8 @@ export const MONTHLY_MV = 'account_balance_monthly';
 export async function ensureMonthlyMV(database: Database): Promise<void> {
   await database.exec(
     `CREATE MATERIALIZED VIEW IF NOT EXISTS ${MONTHLY_MV} USING store AS
-       SELECT entity_id, account_id, period, SUM(amount) AS balance
+       SELECT entity_id, account_id, period, SUM(amount) AS balance,
+              SUM(COALESCE(value, amount)) AS cost
        FROM entry GROUP BY entity_id, account_id, period`,
   );
 }

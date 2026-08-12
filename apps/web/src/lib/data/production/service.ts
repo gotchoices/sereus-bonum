@@ -17,7 +17,7 @@ import type {
   Transaction, TransactionInput,
   Entry, EntryInput,
   Unit, UnitInput,
-  Exchange, ExchangeInput,
+  Exchange, ExchangeInput, Valuation,
   BalanceSheetData, AccountBalance, GroupBalance,
   LedgerEntry, SplitEntry, BulkImportData
 } from '../types';
@@ -40,6 +40,9 @@ function toEntity(r: Row): Entity {
     fiscalYearEnd: r.fiscal_year_end ?? undefined,
     baseUnit: r.base_unit,
     defaultCostingMethod: r.default_costing_method ?? undefined,
+    maxEntryDate: r.max_entry_date ?? undefined,
+    reckoningUnits: r.reckoning_units ? String(r.reckoning_units).split(',').filter(Boolean) : undefined,
+    entryPeriods: r.entry_periods ? String(r.entry_periods).split(',').filter(Boolean) : undefined,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -454,6 +457,31 @@ class QuereusDataService implements DataService {
     return row ? toTransaction(row) : null;
   }
 
+  /**
+   * Keep the entity's read-side denormalizations current. Both are RAISED only:
+   * an over-stated max date costs a few empty-month probes, an under-stated one is a wrong balance.
+   * PK-scoped, so this is a 1-row write — not the table-wide seek that a `max()` query would be.
+   */
+  private async noteTransaction(entityId: string, date: string, valueUnit?: string): Promise<void> {
+    const e = await this.getEntity(entityId);
+    if (!e) return;
+    const sets: string[] = [];
+    const vals: SqlValue[] = [];
+    if (!e.maxEntryDate || date > e.maxEntryDate) { sets.push('max_entry_date = ?'); vals.push(date); }
+    const period = date.slice(0, 7);
+    if (!(e.entryPeriods ?? []).includes(period)) {
+      sets.push('entry_periods = ?');
+      vals.push([...(e.entryPeriods ?? []), period].sort().join(','));
+    }
+    if (valueUnit && !(e.reckoningUnits ?? []).includes(valueUnit)) {
+      sets.push('reckoning_units = ?');
+      vals.push([...(e.reckoningUnits ?? []), valueUnit].join(','));
+    }
+    if (sets.length === 0) return;
+    vals.push(entityId);
+    await run(this.getDb(), `UPDATE entity SET ${sets.join(', ')} WHERE id = ?`, vals);
+  }
+
   async createTransaction(data: TransactionInput, entries: EntryInput[]): Promise<Transaction> {
     assertBalanced(entries, data.valueUnit);
     const db = this.getDb();
@@ -466,6 +494,7 @@ class QuereusDataService implements DataService {
       await run(db, 'INSERT INTO entry (id, txn_id, account_id, amount, value, entity_id, date, period, note, tag_id, reconciliation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [uuid(), id, e.accountId, e.amount, e.value ?? null, data.entityId, data.date, data.date.slice(0, 7), e.note ?? null, e.tagId ?? null, e.reconciliationId ?? null]);
     }
+    await this.noteTransaction(data.entityId, data.date, data.valueUnit);
     return (await this.getTransaction(id))!;
   }
 
@@ -503,7 +532,9 @@ class QuereusDataService implements DataService {
       try { await run(db, 'ROLLBACK'); } catch { /* ignore */ }
       throw err;
     }
-    return (await this.getTransaction(id))!;
+    const updated = (await this.getTransaction(id))!;
+    await this.noteTransaction(updated.entityId, updated.date, updated.valueUnit);
+    return updated;
   }
 
   async deleteTransaction(id: string): Promise<void> {
@@ -560,7 +591,8 @@ class QuereusDataService implements DataService {
   }
 
   // Aggregation done in JS (avoids Quereus GROUP BY quirks).
-  async getBalanceSheet(entityId: string, endDate?: string, startDate?: string, displayUnit?: string): Promise<BalanceSheetData> {
+  async getBalanceSheet(entityId: string, endDate?: string, startDate?: string, displayUnit?: string,
+                        valuation: Valuation = 'COST'): Promise<BalanceSheetData> {
     const end = endDate || new Date().toISOString().split('T')[0];
     const db = this.getDb();
     const accts = await all<Row>(db,
@@ -585,10 +617,25 @@ class QuereusDataService implements DataService {
     // index seek returns rows via per-row cursors (~10× a getAll-batched full scan). Fixing that upstream —
     // plus range seeks so `period < ?` can seek — removes the need for this dispatch entirely; see
     // tmp/quereus-4.11-range-and-indexed-reads.md and docs/materialized-balances-design.md.
-    // Backward assumes entries aren't dated beyond the current month (normal for a ledger); its tail loop
-    // spans D's month through today's. Middle/old dates take the always-correct forward scan.
-    const balByAccount = new Map<string, number>();
+    // The backward tail must run to the LAST month that actually holds an entry, not to today's:
+    // books legitimately contain future-dated entries (Kyle's investment books carry three dated 2028),
+    // and the current-balance MV sums every entry regardless of date. Stopping at today would leave
+    // those future entries un-subtracted, so they'd show up in a balance sheet for a past date.
+    // One entity read serves three purposes: the display unit, the tail horizon, and the reckoning
+    // units behind cost figures. All three are denormalized onto the row precisely so no report has to
+    // ask the store a table-wide question.
+    const entity = await this.getEntity(entityId);
+
+    // Two measures per account, from the SAME MV rows: `a` = Σ amount (quantity in the account's own
+    // unit — the recorded fact) and `c` = Σ coalesce(value, amount) (cost, in the reckoning unit).
+    // Carrying both costs nothing: the MV already computes them and the reads are identical.
+    type Pair = { a: number; c: number };
+    const balByAccount = new Map<string, Pair>();
     const today = new Date().toISOString().slice(0, 10);
+    const bump = (m: Map<string, Pair>, k: string, a: number, c: number) => {
+      const cur = m.get(k);
+      if (cur) { cur.a += a; cur.c += c; } else { m.set(k, { a, c }); }
+    };
     // Backward tail costs ~one `period=?` seek per month (~5ms); the forward MV scan is a flat ~150-220ms.
     // Measured crossover is ~40 months, so anything within the last year stays far cheaper via backward.
     const BACKWARD_MAX_MONTHS = 12;
@@ -605,37 +652,60 @@ class QuereusDataService implements DataService {
     const dayBefore = (d: string): string => {
       const dt = new Date(`${d}T00:00:00Z`); dt.setUTCDate(dt.getUTCDate() - 1); return dt.toISOString().slice(0, 10);
     };
-    const entriesInPeriod = (period: string) => all<{ account_id: string; amount: number; entity_id: string; date: string }>(
-      db, `SELECT account_id, amount, entity_id, date FROM entry WHERE period = ?`, [period]);
-    const currentBalance = async (): Promise<Map<string, number>> => {
-      const bal = new Map<string, number>();
-      for (const r of await all<Row>(db, `SELECT account_id, balance FROM ${BALANCE_MV}`)) bal.set(r.account_id, Number(r.balance));
+    const entriesInPeriod = (period: string) => all<{ account_id: string; amount: number; value: number | null; entity_id: string; date: string }>(
+      db, `SELECT account_id, amount, value, entity_id, date FROM entry WHERE period = ?`, [period]);
+    const currentBalance = async (): Promise<Map<string, Pair>> => {
+      const bal = new Map<string, Pair>();
+      for (const r of await all<Row>(db, `SELECT account_id, balance, cost FROM ${BALANCE_MV}`))
+        bal.set(r.account_id, { a: Number(r.balance), c: Number(r.cost) });
       return bal;
     };
 
+    // The tail must run to the LAST entry date in the books, not to today: books legitimately carry
+    // future-dated entries (Kyle's investment books have three dated 2028), and the current-balance MV
+    // sums every entry regardless of date. Stopping at today would leave those un-subtracted, so they
+    // would show up in a balance sheet for a past date. `maxEntryDate` rides along on the entity row
+    // we already read — asking the store for `max(date)` would cost ~4s of per-row cursors.
+    const horizon = entity?.maxEntryDate && entity.maxEntryDate > today ? entity.maxEntryDate : today;
+
+    /**
+     * The month buckets the backward tail has to subtract: every period at or after D's own month.
+     * Taken from the entity's recorded period set when we have it, so a horizon 18 months out doesn't
+     * cost 18 seeks over months that hold nothing. Falls back to a contiguous walk.
+     */
+    const tailPeriods = (d: string): string[] => {
+      const from = monthKey(d), to = monthKey(horizon);
+      const known = entity?.entryPeriods;
+      if (known && known.length > 0) return known.filter((p) => p >= from && p <= to);
+      const out: string[] = [];
+      for (let m = from; ; m = nextMonth(m)) { out.push(m); if (m === to) break; }
+      return out;
+    };
+
     let regime = '';
-    const balanceAsOf = async (d: string): Promise<Map<string, number>> => {
-      if (d >= today) { regime += ' curMV'; return currentBalance(); }
-      if (monthsBetween(monthKey(d), monthKey(today)) <= BACKWARD_MAX_MONTHS) {
+    const balanceAsOf = async (d: string): Promise<Map<string, Pair>> => {
+      if (d >= horizon) { regime += ' curMV'; return currentBalance(); }
+      if (tailPeriods(d).length <= BACKWARD_MAX_MONTHS) {
         // backward: current balance minus every entry dated after D (whole tail months + D's own tail).
         regime += ' backward';
         const bal = await currentBalance();
-        for (let m = monthKey(d), last = monthKey(today); ; m = nextMonth(m)) {
+        for (const m of tailPeriods(d)) {
           for (const r of await entriesInPeriod(m))
-            if (r.entity_id === entityId && r.date > d) bal.set(r.account_id, (bal.get(r.account_id) ?? 0) - Number(r.amount));
-          if (m === last) break;
+            if (r.entity_id === entityId && r.date > d)
+              bump(bal, r.account_id, -Number(r.amount), -Number(r.value ?? r.amount));
         }
         return bal;
       }
       // forward: whole months before D from the monthly MV (full scan) + the partial current month.
       regime += ' forward';
-      const bal = new Map<string, number>();
+      const bal = new Map<string, Pair>();
       const period = monthKey(d);
-      for (const r of await all<{ account_id: string; period: string; balance: number; entity_id: string }>(db,
-        `SELECT account_id, period, balance, entity_id FROM ${MONTHLY_MV}`))
-        if (r.entity_id === entityId && r.period < period) bal.set(r.account_id, (bal.get(r.account_id) ?? 0) + Number(r.balance));
+      for (const r of await all<{ account_id: string; period: string; balance: number; cost: number; entity_id: string }>(db,
+        `SELECT account_id, period, balance, cost, entity_id FROM ${MONTHLY_MV}`))
+        if (r.entity_id === entityId && r.period < period) bump(bal, r.account_id, Number(r.balance), Number(r.cost));
       for (const r of await entriesInPeriod(period))
-        if (r.entity_id === entityId && r.date <= d) bal.set(r.account_id, (bal.get(r.account_id) ?? 0) + Number(r.amount));
+        if (r.entity_id === entityId && r.date <= d)
+          bump(bal, r.account_id, Number(r.amount), Number(r.value ?? r.amount));
       return bal;
     };
 
@@ -645,7 +715,11 @@ class QuereusDataService implements DataService {
       if (startDate) {
         const balBefore = await balanceAsOf(dayBefore(startDate));
         const ieIds = new Set(accts.filter((a) => a.account_type === 'INCOME' || a.account_type === 'EXPENSE').map((a) => a.id));
-        for (const a of accts) balByAccount.set(a.id, ieIds.has(a.id) ? (balEnd.get(a.id) ?? 0) - (balBefore.get(a.id) ?? 0) : (balEnd.get(a.id) ?? 0));
+        const zero = { a: 0, c: 0 };
+        for (const a of accts) {
+          const e = balEnd.get(a.id) ?? zero, b = balBefore.get(a.id) ?? zero;
+          balByAccount.set(a.id, ieIds.has(a.id) ? { a: e.a - b.a, c: e.c - b.c } : { a: e.a, c: e.c });
+        }
       } else {
         for (const [k, v] of balEnd) balByAccount.set(k, v);
       }
@@ -657,29 +731,46 @@ class QuereusDataService implements DataService {
       if (startDate) {
         const rows = await all<Row>(db,
           `SELECT e.account_id, SUM(e.amount) AS cumulative,
-                  SUM(CASE WHEN t.date >= ? THEN e.amount ELSE 0 END) AS period
+                  SUM(COALESCE(e.value, e.amount)) AS cumulative_cost,
+                  SUM(CASE WHEN t.date >= ? THEN e.amount ELSE 0 END) AS period,
+                  SUM(CASE WHEN t.date >= ? THEN COALESCE(e.value, e.amount) ELSE 0 END) AS period_cost
            FROM entry e JOIN txn t ON t.id = e.txn_id
-           WHERE t.entity_id = ? AND t.date <= ? GROUP BY e.account_id`, [startDate, entityId, end]);
+           WHERE t.entity_id = ? AND t.date <= ? GROUP BY e.account_id`, [startDate, startDate, entityId, end]);
         const ieIds = new Set(accts.filter((a) => a.account_type === 'INCOME' || a.account_type === 'EXPENSE').map((a) => a.id));
-        for (const r of rows) balByAccount.set(r.account_id, Number(ieIds.has(r.account_id) ? r.period : r.cumulative));
+        for (const r of rows) {
+          const v = Number(ieIds.has(r.account_id) ? r.period : r.cumulative);
+          const c = Number(ieIds.has(r.account_id) ? r.period_cost : r.cumulative_cost);
+          balByAccount.set(r.account_id, { a: v, c });
+        }
       } else {
         const rows = await all<Row>(db,
-          `SELECT e.account_id, SUM(e.amount) AS balance FROM entry e JOIN txn t ON t.id = e.txn_id
+          `SELECT e.account_id, SUM(e.amount) AS balance, SUM(COALESCE(e.value, e.amount)) AS cost
+           FROM entry e JOIN txn t ON t.id = e.txn_id
            WHERE t.entity_id = ? AND t.date <= ? GROUP BY e.account_id`, [entityId, end]);
-        for (const r of rows) balByAccount.set(r.account_id, Number(r.balance));
+        for (const r of rows) balByAccount.set(r.account_id, { a: Number(r.balance), c: Number(r.cost) });
       }
     }
     log.data.info(`[BalanceSheet] ${startDate ? 'income-stmt' : 'balance-sheet'} end=${end} regime=${regime.trim()} ${Math.round(performance.now() - t0)}ms`);
 
+    const display = displayUnit ?? entity?.baseUnit ?? 'USD';
+
     // Value the native balances in the chosen display unit. For a single-unit entity every account
     // already holds the display unit, so this is an identity pass — no estimates, no gain/loss line.
-    const entity = await this.getEntity(entityId);
-    const display = displayUnit ?? entity?.baseUnit ?? 'USD';
-    const nativeBalances: NativeAccountBalance[] = accts.map((a) => ({
-      accountId: a.id, accountName: a.name, accountCode: a.code ?? undefined,
-      groupId: a.group_id, groupName: a.group_name, accountType: a.account_type,
-      balance: balByAccount.get(a.id) ?? 0, unit: a.unit,
-    }));
+    // COST reports what was paid — already denominated in the reckoning unit, so no rate is consulted.
+    // MARKET reports the quantity, which valueReport then converts at report-date rates.
+    // Either way the account's own quantity travels alongside as the recorded fact.
+    const costIsInDisplayUnit = (entity?.reckoningUnits ?? []).every((u) => u === display);
+    const nativeBalances: NativeAccountBalance[] = accts.map((a) => {
+      const pair = balByAccount.get(a.id) ?? { a: 0, c: 0 };
+      const costed = valuation === 'COST' && pair.c !== pair.a && costIsInDisplayUnit;
+      return {
+        accountId: a.id, accountName: a.name, accountCode: a.code ?? undefined,
+        groupId: a.group_id, groupName: a.group_name, accountType: a.account_type,
+        balance: costed ? pair.c : pair.a,
+        unit: costed ? display : a.unit,
+        nativeBalance: pair.a, nativeUnit: a.unit,
+      };
+    });
     const needsRates = nativeBalances.some((b) => b.unit !== display);
     const [units, rates] = needsRates
       ? await Promise.all([this.getUnits(), this.getExchangeRates({ asOf: end })])
@@ -695,6 +786,11 @@ class QuereusDataService implements DataService {
     return {
       entityId, endDate: end, startDate: startDate || undefined,
       displayUnit: display,
+      valuation,
+      // Exact when nothing was estimated: cost basis, every reckoning unit is the display unit, and
+      // no account still needed a rate. All three are known without asking the store anything.
+      isExact: valuation === 'COST' && costIsInDisplayUnit
+        && valued.accountBalances.every((a) => !a.isEstimate) && !valued.totalsArePartial,
       unrecognizedGainLoss: valued.unrecognizedGainLoss,
       unvaluedUnits: valued.unvaluedUnits,
       totalsArePartial: valued.totalsArePartial,
@@ -730,7 +826,7 @@ class QuereusDataService implements DataService {
     // scan is one getAll (~260ms). REPLACE with a targeted `WHERE account_id = ?` read (+ per-txn sibling
     // seeks) once Quereus batches index-seek reads — then this is ~40ms reading only the account's rows.
     // See docs/STATUS.md § B (tech debt) + tmp/quereus-4.11-range-and-indexed-reads.md.
-    const txnRows = (await all<Row>(db, 'SELECT id, date, reference, memo, created_at, entity_id FROM txn'))
+    const txnRows = (await all<Row>(db, 'SELECT id, date, reference, memo, value_unit, created_at, entity_id FROM txn'))
       .filter((t) => t.entity_id === entityId);
     const txnById = new Map<string, Row>(txnRows.map((t) => [t.id, t]));
     const byTxn = await this.entriesByTxn(txnById);
@@ -765,7 +861,12 @@ class QuereusDataService implements DataService {
       const le: LedgerEntry = {
         entryId: e.id, transactionId: e.txn_id, date: t.date,
         reference: t.reference ?? undefined, memo: t.memo ?? undefined,
-        accountId, amount, note: e.note ?? undefined, runningBalance: running, isSplit,
+        accountId, amount,
+        // Carried so opening an existing multi-unit transaction in the editor restores its
+        // quantity/price/value instead of silently dropping the value.
+        value: e.value === null || e.value === undefined ? undefined : Number(e.value),
+        valueUnit: t.value_unit ?? undefined,
+        note: e.note ?? undefined, runningBalance: running, isSplit,
       };
       const siblings = group.filter((s) => s.id !== e.id);
       if (isSplit) {
@@ -777,6 +878,8 @@ class QuereusDataService implements DataService {
         le.offsetAccountId = siblings[0].account_id;
         le.offsetAccountName = d?.name;
         le.offsetAccountPath = d?.path;
+        le.offsetValue = siblings[0].value === null || siblings[0].value === undefined
+          ? undefined : Number(siblings[0].value);
       }
       result.push(le);
     }
@@ -784,20 +887,21 @@ class QuereusDataService implements DataService {
   }
 
   // accountId → {name, path, code, entityId} built from two single-table reads (no SQL join).
-  private async buildAccountDir(entityId?: string): Promise<Map<string, { name: string; path: string; code?: string; entityId: string }>> {
+  private async buildAccountDir(entityId?: string): Promise<Map<string, { name: string; path: string; code?: string; entityId: string; unit?: string }>> {
     const db = this.getDb();
     const accts = entityId
-      ? await all<Row>(db, 'SELECT id, name, code, account_group_id, entity_id FROM account WHERE entity_id = ?', [entityId])
-      : await all<Row>(db, 'SELECT id, name, code, account_group_id, entity_id FROM account');
+      ? await all<Row>(db, 'SELECT id, name, code, account_group_id, entity_id, unit FROM account WHERE entity_id = ?', [entityId])
+      : await all<Row>(db, 'SELECT id, name, code, account_group_id, entity_id, unit FROM account');
     const groups = await all<Row>(db, 'SELECT id, name, account_type FROM account_group');
     const gById = new Map<string, Row>(groups.map((g) => [g.id, g]));
-    const dir = new Map<string, { name: string; path: string; code?: string; entityId: string }>();
+    const dir = new Map<string, { name: string; path: string; code?: string; entityId: string; unit?: string }>();
     for (const a of accts) {
       const g = gById.get(a.account_group_id);
       dir.set(a.id, {
         name: a.name,
         path: g ? pathFor(g.account_type, g.name, a.name) : a.name,
         code: a.code ?? undefined,
+        unit: a.unit ?? undefined,
         entityId: a.entity_id,
       });
     }
@@ -806,7 +910,7 @@ class QuereusDataService implements DataService {
 
   // Full single-table entry scan grouped by txn; keeps only txns present in txnById (the target scope).
   private async entriesByTxn(txnById: Map<string, Row>): Promise<Map<string, Row[]>> {
-    const rows = await all<Row>(this.getDb(), 'SELECT id, txn_id, account_id, amount, note FROM entry');
+    const rows = await all<Row>(this.getDb(), 'SELECT id, txn_id, account_id, amount, value, note FROM entry');
     const byTxn = new Map<string, Row[]>();
     for (const e of rows) {
       if (!txnById.has(e.txn_id)) continue;
@@ -817,11 +921,16 @@ class QuereusDataService implements DataService {
     return byTxn;
   }
 
-  private toSplit(s: Row, acctDir: Map<string, { name: string; path: string }>): SplitEntry {
+  private toSplit(s: Row, acctDir: Map<string, { name: string; path: string; unit?: string }>): SplitEntry {
     const d = acctDir.get(s.account_id);
     return {
       entryId: s.id, accountId: s.account_id, accountName: d?.name ?? s.account_id,
-      accountPath: d?.path ?? '', amount: Number(s.amount), note: s.note ?? undefined,
+      accountPath: d?.path ?? '', amount: Number(s.amount),
+      // Carried so the editor can restore quantity/price/value when an existing multi-unit
+      // transaction is opened — without it, editing a stock trade would silently lose its value.
+      value: s.value === null || s.value === undefined ? undefined : Number(s.value),
+      unit: d?.unit,
+      note: s.note ?? undefined,
     };
   }
 
@@ -876,7 +985,7 @@ class QuereusDataService implements DataService {
     const entities = await all<Row>(db, 'SELECT id, name FROM entity');
     const entName = new Map<string, string>(entities.map((e) => [e.id, e.name]));
     const acctDir = await this.buildAccountDir();
-    const txnRows = await all<Row>(db, 'SELECT id, date, reference, memo, created_at FROM txn');
+    const txnRows = await all<Row>(db, 'SELECT id, date, reference, memo, value_unit, created_at FROM txn');
     const txnById = new Map<string, Row>(txnRows.map((t) => [t.id, t]));
     const byTxn = await this.entriesByTxn(txnById);
 
@@ -901,7 +1010,10 @@ class QuereusDataService implements DataService {
       const le = {
         entryId: e.id, transactionId: e.txn_id, date: t.date,
         reference: t.reference ?? undefined, memo: t.memo ?? undefined,
-        accountId: e.account_id, amount: Number(e.amount), note: e.note ?? undefined,
+        accountId: e.account_id, amount: Number(e.amount),
+        value: e.value === null || e.value === undefined ? undefined : Number(e.value),
+        valueUnit: t.value_unit ?? undefined,
+        note: e.note ?? undefined,
         runningBalance: 0, isSplit,
       } as LedgerEntry & { entityId?: string; entityName?: string; accountName?: string; accountPath?: string };
 
@@ -968,6 +1080,22 @@ class QuereusDataService implements DataService {
         `INSERT INTO exchange (id, date, unit_a, unit_b, rate_numerator, rate_denominator, source, notes)`,
         8, data.rates ?? [], (r) => [r.id, r.date, r.unitA, r.unitB, r.rateNumerator,
           r.rateDenominator, r.source, r.notes ?? null]);
+      // Read-side denormalizations, from the batch we just wrote — no scan needed.
+      for (const entityId of new Set(data.transactions.map((t) => t.entityId))) {
+        const mine = data.transactions.filter((t) => t.entityId === entityId);
+        const maxDate = mine.reduce((m, t) => (t.date > m ? t.date : m), '');
+        const units = [...new Set(mine.map((t) => t.valueUnit).filter(Boolean))] as string[];
+        const periods = [...new Set(mine.map((t) => t.date.slice(0, 7)))];
+        const cur = await get<Row>(db,
+          'SELECT max_entry_date, reckoning_units, entry_periods FROM entity WHERE id = ?', [entityId]);
+        const prevUnits = cur?.reckoning_units ? String(cur.reckoning_units).split(',').filter(Boolean) : [];
+        const prevPeriods = cur?.entry_periods ? String(cur.entry_periods).split(',').filter(Boolean) : [];
+        await run(db, 'UPDATE entity SET max_entry_date = ?, reckoning_units = ?, entry_periods = ? WHERE id = ?',
+          [cur?.max_entry_date && cur.max_entry_date > maxDate ? cur.max_entry_date : maxDate,
+            [...new Set([...prevUnits, ...units])].join(',') || null,
+            [...new Set([...prevPeriods, ...periods])].sort().join(',') || null,
+            entityId]);
+      }
       await run(db, 'COMMIT');
     } catch (err) {
       try { await run(db, 'ROLLBACK'); } catch { /* ignore */ }

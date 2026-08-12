@@ -258,14 +258,24 @@ to arbitrary units.
 
 ### Two valuations, distinguished
 
-| View | Basis | Balances exactly? |
-|------|-------|-------------------|
-| **Cost** | Σ entry values (what was actually paid) | Yes — no derived line |
-| **Market** | native quantity × report-date rate | Only with Unrecognized Gain/Loss |
+| View | Basis | Rates consulted? | Balances exactly? |
+|------|-------|------------------|-------------------|
+| **Cost** (default) | Σ entry values — what was actually paid | **None** | Yes — no derived line |
+| **Market** | native quantity × report-date rate | Yes | Only with Unrecognized Gain/Loss |
 
-Cost view is exact when the entity's transactions share a reckoning unit. Where they don't (genuinely
-unit-agnostic books), each transaction's values are themselves converted at its own date's rate, and
-the result becomes an estimate too — flagged the same way.
+**Cost is the default, because it is a fact.** Every entry already carries its value in the
+transaction's reckoning unit, so when the entity's transactions all reckon in the display unit the
+whole statement is exact: no rate is consulted, nothing is marked as an estimate, no holding is
+unvaluable, and the Unrecognized Gain/Loss line is absent. A set of books imported from a
+conventional program is exactly this case — every transaction was denominated in a currency at the
+time it was written.
+
+Cost even values holdings that Market cannot: a security with no quote in the price history still has
+a known acquisition cost.
+
+Where an entity's transactions *don't* all reckon in the display unit, each transaction's values must
+themselves be converted at its own date's rate, and cost figures become estimates too — flagged the
+same way. Reports must say which valuation produced the numbers.
 
 ---
 

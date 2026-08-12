@@ -24,6 +24,11 @@ export interface FormatOptions {
   withUnit?: boolean;
   /** Force a sign on positive values. */
   signed?: boolean;
+  /**
+   * Thousands separators. Default true for display — but MUST be false when the string is going into
+   * an `<input type="number">`, which silently rejects "1,000.0000" and renders an empty field.
+   */
+  grouping?: boolean;
 }
 
 /**
@@ -34,7 +39,7 @@ export interface FormatOptions {
  *   formatAmount(17280, { code: 'USD', displayDivisor: 100 })  → "$172.80"
  */
 export function formatAmount(amount: number, unit?: Unit, options: FormatOptions = {}): string {
-  const { withUnit = true, signed = false } = options;
+  const { withUnit = true, signed = false, grouping = true } = options;
   const divisor = unit?.displayDivisor ?? 100;
   const decimals = decimalsFor(divisor);
   const value = amount / divisor || 0;   // `|| 0` normalises -0 so we never render "-$0.00"
@@ -45,6 +50,7 @@ export function formatAmount(amount: number, unit?: Unit, options: FormatOptions
       style: 'currency', currency: code,
       minimumFractionDigits: decimals, maximumFractionDigits: decimals,
       signDisplay: signed ? 'exceptZero' : 'auto',
+      useGrouping: grouping,
     }).format(value);
     return text;
   }
@@ -53,6 +59,7 @@ export function formatAmount(amount: number, unit?: Unit, options: FormatOptions
   const text = new Intl.NumberFormat('en-US', {
     minimumFractionDigits: decimals, maximumFractionDigits: decimals,
     signDisplay: signed ? 'exceptZero' : 'auto',
+    useGrouping: grouping,
   }).format(value);
   const label = unit?.symbol || code;
   return withUnit ? `${text} ${label}` : text;
@@ -80,4 +87,19 @@ export function formatRate(rate: number, fromUnit?: Unit, toUnit?: Unit): string
 export function unitLookup(units: Unit[]): (code: string) => Unit | undefined {
   const byCode = new Map(units.map((u) => [u.code, u]));
   return (code) => byCode.get(code);
+}
+
+/**
+ * A stored amount as a bare decimal string for an `<input type="number">`.
+ *
+ * Separate from `formatAmount` on purpose: a number input parses its value with the HTML number
+ * grammar, which has no room for thousands separators or a currency symbol. Feed it "1,000.0000" and
+ * it shows an EMPTY field — which is how a stock transaction opened for editing silently lost its
+ * quantity and value.
+ */
+export function formatForInput(amount: number, unit?: Unit): string {
+  const divisor = unit?.displayDivisor ?? 100;
+  // Deliberately NOT via formatAmount: its currency branch would prepend "$", which a number input
+  // rejects just as surely as a comma.
+  return (amount / divisor || 0).toFixed(decimalsFor(divisor));
 }

@@ -42,7 +42,7 @@
         "design/specs/web/screens/saved-reports-ux.md": "0c48670d4d21219e8ed1e3c55290234327f154f1b11e5fe2eab9b2842b765269",
         "design/stories/web/01-firstlook.md": "11e9c354253b25afbcbaee117a3cc645ba53348eaf9c46a831127520807a3222",
         "design/stories/web/04-reporting.md": "9f2e90d7cefd3e1d23787b6edaafe84cddb6d39c556c1c08c21dd92ff18f90c5",
-        "design/specs/domain/rules.md": "fb5f4acfe557b963423b354d66c89b5fcf5f37364de3b03ef2096f03d5b09244",
+        "design/specs/domain/rules.md": "b869c72e983ac332c1f693a08d5f98dc32648f63ac406e9412adb98c7e3de345",
         "design/specs/domain/schema.md": "127488d12ec3a5470180242e0d815da4e04f23413f3a8693830fac12bf319f3d",
         "design/specs/domain/export.md": "bee9d08052449e9c34f929adc94dc5b5f472de0471cf0a247d3f5a73f405295a"
       }
@@ -59,7 +59,7 @@
         "design/stories/web/01-firstlook.md": "11e9c354253b25afbcbaee117a3cc645ba53348eaf9c46a831127520807a3222",
         "design/specs/web/screens/account-edit.md": "517e45b8455af56c18806544c13ab6b6c179a9d7c3bb80661a1bee6f1dba5b47",
         "design/specs/domain/schema.md": "127488d12ec3a5470180242e0d815da4e04f23413f3a8693830fac12bf319f3d",
-        "design/specs/domain/rules.md": "fb5f4acfe557b963423b354d66c89b5fcf5f37364de3b03ef2096f03d5b09244"
+        "design/specs/domain/rules.md": "b869c72e983ac332c1f693a08d5f98dc32648f63ac406e9412adb98c7e3de345"
       }
     },
     {
@@ -79,7 +79,7 @@
         "design/stories/web/02-gnucash.md": "aface7ea6ecc5c8030d0e7165cc5cba488f5bd1d74da3eb706d56d5dc1599ba2",
         "design/specs/web/components/transaction-edit.md": "c0050acbe7b2e0b00610c47fc160eb5663fcd3500888ccfad090e130f1b15894",
         "design/specs/web/components/account-autocomplete.md": "cb46a848d70142a9a5d8def94782e17590369a33a3caa39a57844aef5634b6d8",
-        "design/specs/domain/rules.md": "fb5f4acfe557b963423b354d66c89b5fcf5f37364de3b03ef2096f03d5b09244",
+        "design/specs/domain/rules.md": "b869c72e983ac332c1f693a08d5f98dc32648f63ac406e9412adb98c7e3de345",
         "design/specs/domain/schema.md": "127488d12ec3a5470180242e0d815da4e04f23413f3a8693830fac12bf319f3d"
       }
     },

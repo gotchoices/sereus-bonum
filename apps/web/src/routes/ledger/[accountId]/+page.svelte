@@ -9,8 +9,9 @@
   import { settings } from '$lib/stores/settings';
   import { loadViewState, saveViewState } from '$lib/stores/viewState';
   import { getDataService, type LedgerEntry, type Account, type Unit, type AccountGroup, type Entity } from '$lib/data';
-  import { formatAmount as formatUnitAmount } from '$lib/report/format';
+  import { formatAmount as formatUnitAmount, formatForInput } from '$lib/report/format';
   import { buildRateTable, convertBalance, findConversion, divisorLookup } from '$lib/report/convert';
+  import { rateAckKey } from '$lib/report/entry-math';
   import type { Exchange } from '$lib/data';
   import AccountAutocomplete from '$lib/components/AccountAutocomplete.svelte';
   import TransactionEditor from '$lib/components/TransactionEditor.svelte';
@@ -39,7 +40,9 @@
    */
   function referenceRateFor(fromUnit: string): number | null {
     if (!fromUnit || !reckoningUnit || fromUnit === reckoningUnit || !rates.length) return null;
-    const c = findConversion(buildRateTable(rates), fromUnit, reckoningUnit);
+    // As of the TRANSACTION's date, not today: a 2014 trade at $10.87/share is not "wrong" because
+    // the stock trades at $6.25 now. Comparing across a decade would cry wolf on every old entry.
+    const c = findConversion(buildRateTable(rates, editingData?.date), fromUnit, reckoningUnit);
     return c ? c.rate.num / c.rate.den : null;
   }
 
@@ -441,6 +444,9 @@
     log.ui.debug('[Ledger] Transaction:', txn);
     
     editingTransactionId = txn.transactionId;
+    // Pre-acknowledge the rates already on file. The guard exists to catch a rate the user is
+    // creating or changing now — re-confirming an untouched historical trade is just friction.
+    acknowledgedRates = {};
     
     const mainEntry = txn.entries[0]; // Current account entry
     log.ui.debug('[Ledger] Main entry:', mainEntry);
@@ -456,8 +462,11 @@
         date: txn.date,
         reference: txn.reference || '',
         memo: txn.memo || '',
-        currentAccountDebit: mainEntry.amount > 0 ? formatAmount(mainEntry.amount) : '',
-        currentAccountCredit: mainEntry.amount < 0 ? formatAmount(Math.abs(mainEntry.amount)) : '',
+        currentAccountDebit: mainEntry.amount > 0 ? formatIn(mainEntry.amount, account?.unit) : '',
+        currentAccountCredit: mainEntry.amount < 0 ? formatIn(Math.abs(mainEntry.amount), account?.unit) : '',
+        currentAccountValue: mainEntry.value === undefined
+          ? undefined : formatIn(Math.abs(mainEntry.value), mainEntry.valueUnit),
+        currentAccountPrice: priceFrom(mainEntry.amount, mainEntry.value, account?.unit, mainEntry.valueUnit),
         splits: mainEntry.splitEntries.map(split => {
           log.ui.debug('[Ledger] Loading split entry:', {
             entryId: split.entryId,
@@ -470,8 +479,12 @@
             id: split.entryId,
             accountId: split.accountId,
             accountSearch: split.accountName || '',
-            debit: split.amount > 0 ? formatAmount(split.amount) : '',
-            credit: split.amount < 0 ? formatAmount(Math.abs(split.amount)) : '',
+            // In the split row's OWN unit — a stock row is shares at 4 decimals, not dollars.
+            debit: split.amount > 0 ? formatIn(split.amount, split.unit) : '',
+            credit: split.amount < 0 ? formatIn(Math.abs(split.amount), split.unit) : '',
+            value: split.value === undefined
+              ? undefined : formatIn(Math.abs(split.value), mainEntry.valueUnit),
+            price: priceFrom(split.amount, split.value, split.unit, mainEntry.valueUnit),
             note: split.note || '',
           };
         }),
@@ -483,19 +496,37 @@
         date: txn.date,
         reference: txn.reference || '',
         memo: txn.memo || '',
-        currentAccountDebit: mainEntry.amount > 0 ? formatAmount(mainEntry.amount) : '',
-        currentAccountCredit: mainEntry.amount < 0 ? formatAmount(Math.abs(mainEntry.amount)) : '',
+        currentAccountDebit: mainEntry.amount > 0 ? formatIn(mainEntry.amount, account?.unit) : '',
+        currentAccountCredit: mainEntry.amount < 0 ? formatIn(Math.abs(mainEntry.amount), account?.unit) : '',
+        currentAccountValue: mainEntry.value === undefined
+          ? undefined : formatIn(Math.abs(mainEntry.value), mainEntry.valueUnit),
+        currentAccountPrice: priceFrom(mainEntry.amount, mainEntry.value, account?.unit, mainEntry.valueUnit),
         splits: [{
           id: crypto.randomUUID(),
           accountId: mainEntry.offsetAccountId || '',
           accountSearch: mainEntry.offsetAccountName || '',
-          debit: mainEntry.amount < 0 ? formatAmount(Math.abs(mainEntry.amount)) : '',
-          credit: mainEntry.amount > 0 ? formatAmount(mainEntry.amount) : '',
+          // Simple mode implies the offset from the current row, so its amount fields stay blank.
+          debit: '',
+          credit: '',
           note: '',
         }],
       };
     }
     
+    // Seed acknowledgments from what was loaded (keys change the moment a quantity or value is edited).
+    if (editingData) {
+      const ack: Record<string, string> = {};
+      const qty = (d: string, c: string) => (d ? parseFloat(d) : c ? -parseFloat(c) : undefined);
+      const cur = qty(editingData.currentAccountDebit, editingData.currentAccountCredit);
+      const curVal = editingData.currentAccountValue ? Math.abs(parseFloat(editingData.currentAccountValue)) : undefined;
+      const curKey = rateAckKey(cur, curVal);
+      if (curKey) ack['current'] = curKey;
+      for (const sp of editingData.splits) {
+        const k = rateAckKey(qty(sp.debit, sp.credit), sp.value ? Math.abs(parseFloat(sp.value)) : undefined);
+        if (k) ack[sp.id] = k;
+      }
+      acknowledgedRates = ack;
+    }
     log.ui.debug('[Ledger] EditingData:', editingData);
   }
   
@@ -523,6 +554,24 @@
     const d = editingData;
     return !!d && d.splits.length === 1 && !d.splits[0].debit && !d.splits[0].credit;
   });
+
+  /**
+   * A stored amount as an editor field value, in a specific unit's precision (a split row may not
+   * share this ledger's unit). Bare decimal: a number input silently blanks "1,000.0000".
+   */
+  function formatIn(amount: number, unitCode: string | undefined): string {
+    const u = allUnits.find((x) => x.code === (unitCode ?? ''));
+    return formatForInput(amount, u ?? unit ?? undefined);
+  }
+  /** Restore a row's price from its stored quantity and value, so the editor opens fully populated. */
+  function priceFrom(amount: number, value: number | undefined, unitCode: string | undefined,
+                     valueUnitCode: string | undefined): string {
+    if (value === undefined || amount === 0) return '';
+    const qDiv = allUnits.find((x) => x.code === (unitCode ?? ''))?.displayDivisor ?? 100;
+    const vDiv = allUnits.find((x) => x.code === (valueUnitCode ?? ''))?.displayDivisor ?? 100;
+    const rate = Math.abs(value / vDiv) / Math.abs(amount / qDiv);
+    return String(Number(rate.toFixed(6)));
+  }
 
   function getEditBalance(): number {
     if (!editingData || !account) return 0;
@@ -577,7 +626,7 @@
     
     const balance = getEditBalance();
     const divisor = unit?.displayDivisor ?? 100;
-    const autoAmount = formatAmount(-balance);
+    const autoAmount = formatIn(-balance, reckoningUnit || account?.unit);
     
     editingData.splits = [
       ...editingData.splits,

@@ -9,7 +9,7 @@ import type {
   Transaction, TransactionInput,
   Entry, EntryInput,
   Unit, UnitInput,
-  Exchange, ExchangeInput,
+  Exchange, ExchangeInput, Valuation,
   BalanceSheetData, GroupBalance, AccountBalance,
   LedgerEntry, SplitEntry,
   AccountType, BulkImportData
@@ -49,7 +49,8 @@ class SqliteDataService implements DataService {
   async getEntities(): Promise<Entity[]> {
     const rows = this.getDb().exec(`
       SELECT id, name, description, fiscal_year_end, base_unit, 
-             default_costing_method, created_at, updated_at
+             default_costing_method, created_at, updated_at,
+             max_entry_date, reckoning_units, entry_periods
       FROM entity ORDER BY name
     `);
     if (!rows.length) return [];
@@ -59,7 +60,8 @@ class SqliteDataService implements DataService {
   async getEntity(id: string): Promise<Entity | null> {
     const rows = this.getDb().exec(`
       SELECT id, name, description, fiscal_year_end, base_unit,
-             default_costing_method, created_at, updated_at
+             default_costing_method, created_at, updated_at,
+             max_entry_date, reckoning_units, entry_periods
       FROM entity WHERE id = ?
     `, [id]);
     if (!rows.length || !rows[0].values.length) return null;
@@ -119,6 +121,9 @@ class SqliteDataService implements DataService {
       fiscalYearEnd: row[3] as string | undefined,
       baseUnit: row[4] as string,
       defaultCostingMethod: row[5] as Entity['defaultCostingMethod'],
+      maxEntryDate: (row[8] as string | null) ?? undefined,
+      reckoningUnits: row[9] ? String(row[9]).split(',').filter(Boolean) : undefined,
+      entryPeriods: row[10] ? String(row[10]).split(',').filter(Boolean) : undefined,
       createdAt: row[6] as string,
       updatedAt: row[7] as string,
     };
@@ -617,7 +622,8 @@ class SqliteDataService implements DataService {
     entityId: string, 
     endDate?: string,
     startDate?: string,
-    displayUnit?: string
+    displayUnit?: string,
+    valuation: Valuation = 'COST'
   ): Promise<BalanceSheetData> {
     const end = endDate || new Date().toISOString().split('T')[0];
     
@@ -641,11 +647,18 @@ class SqliteDataService implements DataService {
           a.unit,
           COALESCE(SUM(
             CASE 
-              WHEN g.account_type IN ('ASSET', 'LIABILITY', 'EQUITY') THEN e.amount
+              WHEN g.account_type IN ('ASSET', 'LIABILITY', 'EQUITY') AND t.date <= ? THEN e.amount
               WHEN g.account_type IN ('INCOME', 'EXPENSE') AND t.date >= ? AND t.date <= ? THEN e.amount
               ELSE 0
             END
-          ), 0) as balance
+          ), 0) as balance,
+          COALESCE(SUM(
+            CASE 
+              WHEN g.account_type IN ('ASSET', 'LIABILITY', 'EQUITY') AND t.date <= ? THEN COALESCE(e.value, e.amount)
+              WHEN g.account_type IN ('INCOME', 'EXPENSE') AND t.date >= ? AND t.date <= ? THEN COALESCE(e.value, e.amount)
+              ELSE 0
+            END
+          ), 0) as cost
         FROM account a
         JOIN account_group g ON g.id = a.account_group_id
         LEFT JOIN entry e ON e.account_id = a.id
@@ -654,7 +667,7 @@ class SqliteDataService implements DataService {
         GROUP BY a.id, a.name, a.code, g.id, g.name, g.account_type, a.unit
         ORDER BY g.display_order, a.code
       `;
-      params = [startDate, end, end, entityId];
+      params = [end, startDate, end, end, startDate, end, end, entityId];
       log.data.debug(`Using period-based query: ${startDate} to ${end}`);
     } else {
       // Cumulative query: all accounts through endDate
@@ -667,7 +680,8 @@ class SqliteDataService implements DataService {
           g.name as group_name,
           g.account_type,
           a.unit,
-          COALESCE(SUM(e.amount), 0) as balance
+          COALESCE(SUM(CASE WHEN t.date <= ? THEN e.amount ELSE 0 END), 0) as balance,
+          COALESCE(SUM(CASE WHEN t.date <= ? THEN COALESCE(e.value, e.amount) ELSE 0 END), 0) as cost
         FROM account a
         JOIN account_group g ON g.id = a.account_group_id
         LEFT JOIN entry e ON e.account_id = a.id
@@ -676,7 +690,7 @@ class SqliteDataService implements DataService {
         GROUP BY a.id, a.name, a.code, g.id, g.name, g.account_type, a.unit
         ORDER BY g.display_order, a.code
       `;
-      params = [end, entityId];
+      params = [end, end, end, entityId];
       log.data.debug(`Using cumulative query through ${end}`);
     }
     
@@ -696,12 +710,28 @@ class SqliteDataService implements DataService {
           accountType: row[5] as AccountType,
           unit: row[6] as string,
           balance: row[7] as number,
-        });
+          nativeBalance: row[7] as number,
+          nativeUnit: row[6] as string,
+          cost: row[8] as number,
+        } as NativeAccountBalance & { cost: number });
       }
     }
 
     const entity = await this.getEntity(entityId);
     const display = displayUnit ?? entity?.baseUnit ?? 'USD';
+
+    // COST reports what was paid (already in the reckoning unit); MARKET reports the quantity for
+    // valueReport to convert. Mirrors production/service.ts.
+    const ru = this.getDb().exec(
+      'SELECT DISTINCT value_unit FROM txn WHERE entity_id = ? AND value_unit IS NOT NULL', [entityId]);
+    const reckoningUnits: string[] = ru.length ? ru[0].values.map((r) => r[0] as string) : [];
+    const costIsInDisplayUnit = reckoningUnits.every((u) => u === display);
+    if (valuation === 'COST' && costIsInDisplayUnit) {
+      for (const b of nativeBalances as Array<NativeAccountBalance & { cost: number }>) {
+        if (b.cost !== b.balance) { b.balance = b.cost; b.unit = display; }
+      }
+    }
+
     const needsRates = nativeBalances.some((b) => b.unit !== display);
     const units = needsRates ? await this.getUnits() : [];
     const rates = needsRates ? await this.getExchangeRates({ asOf: end }) : [];
@@ -729,6 +759,9 @@ class SqliteDataService implements DataService {
       endDate: end,
       startDate: startDate || undefined,
       displayUnit: display,
+      valuation,
+      isExact: valuation === 'COST' && costIsInDisplayUnit
+        && valued.accountBalances.every((a) => !a.isEstimate) && !valued.totalsArePartial,
       unrecognizedGainLoss: valued.unrecognizedGainLoss,
       unvaluedUnits: valued.unvaluedUnits,
       totalsArePartial: valued.totalsArePartial,

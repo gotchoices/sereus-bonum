@@ -42,6 +42,19 @@ create table entity (
   fiscal_year_end text null,
   base_unit text,
   default_costing_method text null,
+  -- Read-side denormalizations, maintained on write. The store cannot seek a range or an aggregate
+  -- without paying per-row cursor cost over the whole table (see tmp/quereus-4.11-range-and-indexed-reads.md),
+  -- so anything a report needs about "the books as a whole" is kept here and read with the entity row.
+  -- max_entry_date: latest entry date, so a past balance knows how far its tail runs. Raised only,
+  -- never lowered -- over-estimating costs a few empty-month probes, under-estimating is a wrong balance.
+  max_entry_date text null,
+  -- reckoning_units: comma-separated set of txn.value_unit ever used, so a report knows whether a
+  -- cost-basis figure is already denominated in the display unit (and therefore exact).
+  reckoning_units text null,
+  -- entry_periods: the 'YYYY-MM' buckets that actually hold entries. Lets the backward tail probe only
+  -- months that exist instead of walking a contiguous range -- with entries dated 2028 the range is
+  -- mostly empty months, each costing a seek. Over-listing is harmless (a probe that finds nothing).
+  entry_periods text null,
   created_at text,
   updated_at text,
   constraint fk_entity_unit foreign key (base_unit) references unit(code),

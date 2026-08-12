@@ -239,9 +239,12 @@ export interface NativeAccountBalance {
   groupId: string;
   groupName: string;
   accountType: AccountType;
-  /** Signed sum of entry amounts (debit positive), in `unit`'s smallest increment. */
+  /** Signed sum (debit positive), in `unit`'s smallest increment. */
   balance: number;
   unit: string;
+  /** The account's own quantity, carried through untouched so reports can show the fact. */
+  nativeBalance?: number;
+  nativeUnit?: string;
 }
 
 export interface ValuedReport {
@@ -290,6 +293,7 @@ export function valueReport(
       accountId: a.accountId, accountName: a.accountName, accountCode: a.accountCode,
       groupId: a.groupId, groupName: a.groupName, accountType: a.accountType,
       balance: a.balance, unit: a.unit,
+      nativeBalance: a.nativeBalance, nativeUnit: a.nativeUnit,
       convertedBalance: c.converted, isEstimate: c.isEstimate,
       rateAsOf: c.provenance?.asOf, ratePath: c.provenance?.path,
     });

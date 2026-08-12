@@ -371,8 +371,75 @@ See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
   - **Balance rule is now value-based in both data services** — `assertBalanced(entries, valueUnit)`.
     Summing raw amounts across units was the last place the old single-unit assumption survived.
   - 99 unit tests (was 37) + 4 e2e green.
+  - ✅ **COST vs MARKET valuation (2026-08-11).** Reports default to **Cost** — the sum of the entries'
+    recorded values, which consults **no rates at all** and is therefore exact: no estimate markers, no
+    unvaluable holdings, no gain/loss line. Imported books are exactly this case (all 11,011 investment
+    transactions reckon in USD). Cost even values holdings Market can't: `AMEX:AEF` has no quote in the
+    price history but its acquisition cost is known. Market remains a toggle for current valuation.
+    Implemented as an `amount`-sum plus a `(value − amount)` correction over the small valued-entry set,
+    so the balance MVs are untouched.
   - ⬜ Remaining: the Settings UI for managing units and adding manual reference rates (data layer and
     spec are done; the reports banner already deep-links there).
+
+- ⚡ **Perf regression from the as-of fix — FOUND AND UNDONE (2026-08-11).** My first cut at the date fix
+  made the balance sheet **8,596ms** (and the reports page ~60s). Root cause: I put `entity_id = ?` into
+  four new hot queries. On this store that is an IndexSeek returning every row of the table through
+  per-row cursors (`tmp/quereus-4.11-range-and-indexed-reads.md`, Gap 1) — measured on Kyle's books:
+
+  | query | ms | rows |
+  |---|---|---|
+  | `max(date) FROM entry WHERE entity_id=?` | 4,186 | 1 |
+  | `entry WHERE entity_id=? AND value IS NOT NULL` | 3,749 | 553 |
+  | `DISTINCT value_unit FROM txn WHERE entity_id=?` | 1,471 | 1 |
+  | `getAccountBalance(acct, asOf)` — the UI ran it **×45** | 1,809 | — |
+  | *full scan of all 23,898 entries, for contrast* | **355** | 23,898 |
+
+  **A query returning 1 row cost 12× a full scan of the whole table.** The rule this codebase is built
+  around, and that I broke: never ask the store a table-wide question — full-scan and filter in JS, or
+  denormalize the answer onto a row you already read. All four were re-done at **zero added queries**:
+  - `nativeBalance`/`nativeUnit` now ride on `AccountBalance` (the amount sum was already in hand) —
+    the ×45 loop is deleted.
+  - `entity.max_entry_date` / `reckoning_units` / `entry_periods` are **denormalized onto the entity row**,
+    maintained monotonically on write, and read by the `getEntity()` call the report already makes (1ms).
+    Raised only: over-stating costs a few empty probes, under-stating would be a wrong balance.
+  - Cost basis is a **second measure in both MVs** (`SUM(COALESCE(value, amount))`) — verified to build
+    AND maintain incrementally (insert of amount 100 / value 7777 moved the two measures by exactly that).
+  - `entry_periods` lets the backward tail probe only months that hold entries, so a 2028 horizon doesn't
+    walk 18 empty months.
+
+  **Result: 39ms** (baseline 34ms), correctness intact. `yarn perf`: every read at or better than
+  baseline (0.01×–0.94×), `✓ balanced` at all sizes. Writes are 1.44× baseline, of which the new MV
+  measure is only ~5% (1.7s of 32s at size 5000, measured by removing it); the other 1.36× predates this
+  round (the `entry.value` / `txn.value_unit` columns).
+
+- ⬜ **Separate, pre-existing: ~6.5s per full page load** — `IndexedDB upgrade to create 'main.…' is
+  blocked, waiting for other connections to close`. It blocks on `schema_meta` (untouched code) as well
+  as on the MVs, so it is a store/connection-lifecycle issue, not from the units work; a schema-version
+  bump forces it once. Not yet characterized for client-side (SPA) navigation, which is the path a user
+  actually takes — worth measuring before treating it as a real-world cost.
+
+- 🐛 **Balance-sheet as-of date ignored future-dated entries — FIXED (2026-08-11).** *Pre-existing, not
+  from the units work* (the assumption is documented in `8ff2288`); the investment books are the first
+  dataset to violate it. Both backends were wrong, in different ways:
+  - **Quereus:** the backward regime derives a past balance as `current MV − entries after D`, but ran
+    its tail loop only to *today's* month. Three transactions dated **2028** were therefore never
+    subtracted, so they showed up in every historical report. The tail now runs to a **horizon** = the
+    latest entry date in the books.
+  - **Mock/sql.js:** the date test sat in a `LEFT JOIN txn … ON t.date <= ?`. A non-matching txn leaves
+    `t.*` NULL but the *entry* row survives the left join and still reaches `SUM(e.amount)` — so the
+    as-of date was ignored entirely. The test moved inside the `SUM`.
+  - Verified on the reported symptom: `Imbalance-USD` (one entry, dated 2028-01-01, −$479,841.70) now
+    reads **$0.00** as of 2025-12-31 and today, and −$479,841.70 as of 2028-12-31.
+
+- 🐛 **Editing an existing multi-unit transaction lost its data — FIXED (2026-08-11).** Three causes:
+  `SplitEntry`/`LedgerEntry` didn't carry `value`/`valueUnit` at all; the editor never restored
+  quantity/price/value; and — the subtle one — the editor fields are `<input type="number">`, which
+  **silently blanks** any value containing a thousands separator or currency symbol, so
+  `"1,000.0000"` rendered as an empty field. Added `formatForInput` (bare decimal) for every
+  editor-bound field, distinct from the display formatter. Also: the implied-rate deviation check now
+  uses rates **as of the transaction's date** (a 2014 trade at $10.87 isn't wrong because the stock
+  trades at $6.25 today), and rates already on file are pre-acknowledged so untouched history doesn't
+  demand re-confirmation.
 - ⬜ Tags (11), Sharing / multi-user (10), AI assistant + capture (07 / 09).
 
 ### F. Cadre / p2p (the gating item being waited on)

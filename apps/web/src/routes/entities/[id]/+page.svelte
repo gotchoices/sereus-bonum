@@ -11,7 +11,7 @@
     topLevelGroupsByType,
     loadAccounts
   } from '$lib/stores/accounts';
-  import { getDataService, type AccountType, type BalanceSheetData } from '$lib/data';
+  import { getDataService, type AccountType, type BalanceSheetData, type Valuation } from '$lib/data';
   import { units, loadUnits } from '$lib/stores/units';
   import { presentBalance, formatVariance } from '$lib/report/present';
   import { formatAmount, formatRate, unitLookup } from '$lib/report/format';
@@ -58,6 +58,8 @@
   // Display unit for the whole report. Books are never bound to one unit — the entity's baseUnit is
   // just the default. See design/specs/web/screens/accounts-view.md § Display Unit.
   let displayUnit = $state<string>('');
+  // COST (what was paid — exact, no rates) vs MARKET (report-date rates — an estimate).
+  let valuation = $state<Valuation>('COST');
   let retainedEarningsExpanded = $state(false);
 
   // Per-column balance data (index-aligned with `columns`).
@@ -94,6 +96,7 @@
       // '' means "follow the entity's base unit" — the entity may not be loaded yet, and the data
       // service already applies that default, so don't freeze a guess here.
       displayUnit = loadViewState(`accounts-displayunit-${entityId}`, '');
+      valuation = loadViewState<Valuation>(`accounts-valuation-${entityId}`, 'COST');
 
       // Restore columns, migrating older persisted shapes: {columns} → {endField,startField} → {endDate,startDate}.
       const saved = loadViewState<any>(`accounts-dates-${entityId}`, null);
@@ -134,7 +137,7 @@
     const rc = resolvedColumns;
     balanceByColumn = await Promise.all(columns.map((_, i) => {
       const start = rc[i].start && rc[i].start! <= rc[i].end ? rc[i].start : undefined;
-      return ds.getBalanceSheet(entityId, rc[i].end, start, displayUnit || undefined);
+      return ds.getBalanceSheet(entityId, rc[i].end, start, displayUnit || undefined, valuation);
     }));
     // Adopt whatever the service resolved (the entity's baseUnit) so the selector has a concrete value.
     if (!displayUnit) displayUnit = balanceByColumn.find((b) => b)?.displayUnit ?? '';
@@ -469,7 +472,7 @@
     const unvaluedIds = new Set<string>();
     for (const bd of balanceByColumn) for (const ab of bd?.accountBalances ?? []) {
       if (ab.isEstimate) estimatedIds.add(ab.accountId);
-      if (ab.convertedBalance === null && ab.unit !== bd?.displayUnit) unvaluedIds.add(ab.accountId);
+      if (ab.convertedBalance === null && (ab.nativeUnit ?? ab.unit) !== bd?.displayUnit) unvaluedIds.add(ab.accountId);
     }
     // A subtotal is an estimate if anything under it was converted, and is short if anything under it
     // couldn't be valued at all.
@@ -508,7 +511,7 @@
         return [{
           key: `a-${a.id}`, depth, label: a.name, code: a.code || undefined, kind: 'account',
           accountId: a.id, amounts: rolled, toggleId: kids.length > 0 ? a.id : undefined, expanded,
-          estimate: sub.some((id) => estimatedIds.has(id)),
+          estimate: !isExactReport && sub.some((id) => estimatedIds.has(id)),
           // Only a LEAF with no rate is truly figure-less; a parent still has valued children to total.
           unvalued: unvaluedIds.has(a.id) && sub.every((id) => unvaluedIds.has(id) || !rawByCol.some((m) => m.has(id))),
         }, ...childRows];
@@ -526,7 +529,7 @@
         const sub = groupSubtree(group.id);
         return [{
           key: `g-${group.id}`, depth, label: group.name, kind: 'group', toggleId: group.id, expanded,
-          amounts: total, estimate: sub.some((id) => estimatedIds.has(id)),
+          amounts: total, estimate: !isExactReport && sub.some((id) => estimatedIds.has(id)),
         }, ...childRows];
       };
       for (const g of ($topLevelGroupsByType.get(type) ?? []).slice().sort(byDisplay)) rows.push(...emitGroup(g, 1));
@@ -634,10 +637,16 @@
   let anyUnvalued = $derived([...new Set(balanceByColumn.flatMap(unvaluedOf))]);
 
   // Native (recorded) balance of an account in a column, as a string — the FACT beside the estimate.
+  // The recorded quantity, in the account's own unit. It rides along with the balance sheet — asking
+  // the store for it per account cost ~1.8s each (see docs/STATUS.md), which is the whole reason
+  // `nativeBalance` exists on the row.
   function nativeLabelFor(accountId: string): string | undefined {
     for (const bd of balanceByColumn) {
       const ab = bd?.accountBalances.find((x) => x.accountId === accountId);
-      if (ab && ab.unit !== bd?.displayUnit) return formatAmount(ab.balance, unitAt(ab.unit));
+      if (!ab) continue;
+      const nUnit = ab.nativeUnit ?? ab.unit;
+      if (nUnit === bd?.displayUnit) return undefined;   // already the display unit — nothing to add
+      return formatAmount(ab.nativeBalance ?? ab.balance, unitAt(nUnit));
     }
     return undefined;
   }
@@ -654,6 +663,15 @@
       }
     }
     return undefined;
+  }
+
+  /** True when nothing on the report was estimated — every marker is suppressed. */
+  let isExactReport = $derived(balanceByColumn.every((bd) => !bd || bd.isExact));
+
+  async function setValuation(v: Valuation) {
+    valuation = v;
+    saveViewState(`accounts-valuation-${entityId}`, v);
+    await reloadBalance();
   }
 
   async function setDisplayUnit(code: string) {
@@ -699,6 +717,17 @@
             {#each unitOptions as code (code)}
               <option value={code}>{unitOptionLabel(code)}</option>
             {/each}
+          </select>
+        </div>
+      {/if}
+
+      {#if unitOptions.length > 1}
+        <div class="mode-selector">
+          <label for="valuation-select">{$t('accounts.valuation')}:</label>
+          <select id="valuation-select" bind:value={valuation} onchange={() => setValuation(valuation)}
+                  title={$t('accounts.valuation_hint')}>
+            <option value="COST">{$t('accounts.valuation_cost')}</option>
+            <option value="MARKET">{$t('accounts.valuation_market')}</option>
           </select>
         </div>
       {/if}

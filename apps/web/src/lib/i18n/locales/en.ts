@@ -117,6 +117,10 @@ export default {
     retained_earnings: 'Retained Earnings',
     // Multi-unit reporting (design/specs/web/screens/accounts-view.md § Display Unit)
     display_in: 'Display in',
+    valuation: 'Valued at',
+    valuation_cost: 'Cost',
+    valuation_market: 'Market',
+    valuation_hint: 'Cost = what was actually paid (exact, no exchange rates involved). Market = today\'s holdings valued at report-date rates (an estimate, and it needs the Unrecognized Gain/Loss line to balance).',
     unrecognized_gain_loss: 'Unrecognized Gain/Loss',
     derived: 'derived',
     derived_hint: 'Computed for this report at these rates — not posted to your books. It makes the converted statement balance.',

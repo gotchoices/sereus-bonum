@@ -27,6 +27,10 @@ CREATE TABLE IF NOT EXISTS entity (
   description TEXT,
   fiscal_year_end TEXT,
   base_unit TEXT NOT NULL REFERENCES unit(code),
+  -- Read-side denormalizations maintained on write; see production/schema.qsql for why.
+  max_entry_date TEXT,
+  reckoning_units TEXT,
+  entry_periods TEXT,
   default_costing_method TEXT CHECK (default_costing_method IN ('FIFO', 'LIFO', 'AVERAGE')),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL

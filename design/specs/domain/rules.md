@@ -62,3 +62,15 @@ income, never posted.
 - Transaction history is preserved: edits are timestamped and attributable, not silently overwritten.
 - Invariants above must survive a peer-to-peer sync/merge; conflicting edits are reconciled without
   ever leaving the books unbalanced. See [interfaces.md](./interfaces.md).
+
+## As-of Dates and Future-Dated Entries
+
+A report "as of" date D includes exactly the entries dated **on or before D** — no exception for
+entries dated in the future.
+
+Books legitimately contain future-dated entries: a scheduled payoff, a draft, a post-dated cheque.
+Kyle's investment books carry three transactions dated 2028. Any balance strategy that derives a
+past balance by subtracting a *tail* from a running total must therefore extend that tail to the
+**latest entry date in the books**, not to today — otherwise future entries are never subtracted and
+silently inflate every historical report. Likewise a date filter must be applied inside the
+aggregate, not in a `LEFT JOIN ... ON` clause, where a non-matching row still reaches the `SUM`.
