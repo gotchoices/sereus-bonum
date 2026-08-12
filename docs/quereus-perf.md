@@ -1,3 +1,7 @@
+> **Historical.** This is the original 4.3.2 diagnosis that led to the materialized-balance design.
+> For the *living* list of workarounds we still carry and when each can be dropped, see
+> [quereus-workarounds.md](./quereus-workarounds.md).
+
 # Quereus performance: diagnosis & recommendations
 
 Context: Home screen ~10 s, balance sheet ~18 s on real data (Kyle.gnucash: ~143 accounts, 17,756

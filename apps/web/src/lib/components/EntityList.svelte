@@ -66,14 +66,18 @@
       <div 
         class="entity-item"
         class:selected={$selectedEntityId === entity.id}
-        on:click={() => handleSelect(entity.id)}
+        on:click={(e) => { if (!(e.target as HTMLElement).closest('a')) handleSelect(entity.id); }}
         on:contextmenu={(e) => handleContextMenu(e, entity.id)}
         on:keydown={(e) => e.key === 'Enter' && handleSelect(entity.id)}
         role="button"
         tabindex="0"
       >
         <div class="entity-info">
-          <a href="/entities/{entity.id}" class="entity-name" on:click|stopPropagation>
+          <!-- No stopPropagation here. SvelteKit's router listens for clicks DELEGATED at the document,
+               so halting the bubble makes the browser do a real navigation — tearing down and rebuilding
+               the whole Quereus backend on every entity click. The row handler ignores anchor clicks
+               instead, which keeps this a client-side transition. -->
+          <a href="/entities/{entity.id}" class="entity-name">
             {entity.name}
           </a>
           {#if entity.description}
@@ -86,12 +90,15 @@
   {/if}
 </div>
 
-<!-- Context Menu -->
+<!-- Context Menu.
+     The container stops clicks reaching the click-away handler, but NOT for links: swallowing an
+     anchor's click stops SvelteKit's document-delegated router from seeing it, which turns an in-app
+     transition into a full page reload (rebuilding the whole database connection). -->
 {#if contextMenuEntityId}
   <div 
     class="context-menu"
     style="left: {contextMenuPosition.x}px; top: {contextMenuPosition.y}px;"
-    on:click|stopPropagation
+    on:click={(e) => { if (!(e.target as HTMLElement).closest('a')) e.stopPropagation(); }}
   >
     <button class="menu-item" on:click={() => { /* TODO: edit modal */ closeContextMenu(); }}>
       <span>📝</span> {$t('entities.edit')}

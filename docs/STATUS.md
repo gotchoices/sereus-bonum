@@ -229,6 +229,19 @@ See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
   (app boot + probe + a screen's first query) could get a half-ready service ("… not initialized"). Now it
   awaits a shared in-flight promise and publishes only after init completes; `resetDataService` clears it.
   E2e (which seeds via the probe at boot) is stable again.
+- 📒 **[docs/quereus-workarounds.md](quereus-workarounds.md) — the living register (new 2026-08-12).**
+  Every place we do something the "wrong" way to work around a store gap (JS joins, denormalized entry
+  columns, month-bucket date ranges, full-scanning an indexed MV, entity read-side denormalizations, FK
+  enforcement off during bulk cascade), each with the **revert test** that says when it can be deleted.
+  Stamped with the Quereus version it was reviewed against — walk it on every upgrade. Also records two
+  things that *look* like Quereus problems and aren't (see N1 below).
+- 🐛 **Home → entity took ~4s because it was a FULL PAGE RELOAD — FIXED (2026-08-12).** Not extra queries:
+  `EntityList.svelte` had `on:click|stopPropagation` on the entity link (and on the context-menu container
+  wrapping the "Manage Accounts" link). SvelteKit's router listens for clicks **delegated at the document**,
+  so halting the bubble means the browser navigates for real and the whole Quereus backend is rebuilt —
+  schema check, catalog rehydrate, IndexedDB upgrade block. Verified directly: a plain anchor navigates
+  client-side, the same anchor with `stopPropagation` reloads. Both handlers now ignore anchor clicks.
+  The balance sheet itself was never the problem (~39ms — which is why changing the date was already <1s).
 - 🔮 **Upstream (filed, pending maintainer):** `tmp/quereus-join-index-perf.md` (store JOINs don't push
   join keys) — **largely resolved in 4.4.0 per the measurement above**; `tmp/quereus-mv-maintenance-perf.md`
   (per-row MV maintenance ~50–120× a one-shot rebuild).
