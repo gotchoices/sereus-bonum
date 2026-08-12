@@ -90,6 +90,20 @@ goes straight to the transaction preview.
 - User might have a separate Bonum window open to create new account groups
 - A re-scan operation should pick up these changes from the database
 
+### Step 2b: Units
+
+Source books carry their own commodities — currencies, stocks, funds. Import maps each to a Bonum
+**unit** (rules in [domain/import.md](../../domain/import.md#books-units--multi-unit-transactions)).
+
+- A summary lists the units that will be **created** vs. **already present**, with the code the source
+  maps to (`USD`, `NYSE:VPER`, `FUND:VWLUX`) and its display divisor. Securities are namespaced by
+  market, because the same ticker can trade on two exchanges.
+- The **entity's base unit** (default report display) is shown and editable; Bonum proposes the
+  currency most source accounts are denominated in, never a ticker.
+- Any imported **price history** is reported as a count of reference rates to be added.
+- No action is required in the common case; this step is a confirmation, not a mapping chore. It is
+  skipped entirely when the source has a single currency and nothing else.
+
 ### Step 3: Transaction Preview & Merge Review
 
 **Purpose:** Before anything is written, show every source transaction and what the import will do
@@ -112,7 +126,14 @@ import (on a first import into a new entity, everything is simply "new").
   adding 3 shows just the 3 new by default, and 1,003 when toggled on.
 - Each row shows date, reference/memo, and amount; expandable to show its entries (same split
   presentation as the [ledger](./ledger.md)).
-- Incomplete rows are flagged with what's missing.
+- **Multi-unit transactions** show each entry's native quantity with its unit and the entry's value in
+  the transaction's reckoning unit, which is labelled on the row. A transaction that fills at several
+  prices shows each entry's own rate — nothing is averaged.
+- Imported multi-unit transactions are **not** re-prompted for rate confirmation: the source already
+  recorded values the user approved at the time. The implied-rate guard applies to hand entry, not
+  import.
+- Incomplete rows are flagged with what's missing — including an entry in a non-reckoning unit that has
+  no value, which reads as "needs a value in <unit>", not as a zero.
 
 **User actions:**
 - **Complete an incomplete transaction:** edit it inline — assign the missing account via

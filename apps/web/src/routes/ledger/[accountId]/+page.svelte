@@ -9,6 +9,9 @@
   import { settings } from '$lib/stores/settings';
   import { loadViewState, saveViewState } from '$lib/stores/viewState';
   import { getDataService, type LedgerEntry, type Account, type Unit, type AccountGroup, type Entity } from '$lib/data';
+  import { formatAmount as formatUnitAmount } from '$lib/report/format';
+  import { buildRateTable, convertBalance, findConversion, divisorLookup } from '$lib/report/convert';
+  import type { Exchange } from '$lib/data';
   import AccountAutocomplete from '$lib/components/AccountAutocomplete.svelte';
   import TransactionEditor from '$lib/components/TransactionEditor.svelte';
   import { formatDate as formatDateUtil } from '$lib/utils/formatDate';
@@ -20,6 +23,26 @@
   // Account info
   let account: Account | null = $state(null);
   let unit: Unit | null = $state(null);
+  let allUnits = $state<Unit[]>([]);
+  let rates = $state<Exchange[]>([]);
+  /** accountId → unit code, so the editor knows when a split row is in a different unit. */
+  let unitByAccount = $state<Record<string, string>>({});
+  /** Implied rates the user has acknowledged this edit session, keyed by split id. */
+  let acknowledgedRates = $state<Record<string, string>>({});
+
+  const unitOf = (id: string): Unit | undefined =>
+    allUnits.find((u) => u.code === (unitByAccount[id] ?? ''));
+
+  /**
+   * Latest known reference rate from `fromUnit` into the reckoning unit, for the deviation warning.
+   * Null when we have nothing to compare against — in which case we stay silent rather than guess.
+   */
+  function referenceRateFor(fromUnit: string): number | null {
+    if (!fromUnit || !reckoningUnit || fromUnit === reckoningUnit || !rates.length) return null;
+    const c = findConversion(buildRateTable(rates), fromUnit, reckoningUnit);
+    return c ? c.rate.num / c.rate.den : null;
+  }
+
   let entity: Entity | null = $state(null);
   let accountGroup: AccountGroup | null = $state(null);
   
@@ -123,8 +146,13 @@
     id: string;
     accountId: string;
     accountSearch: string;
+    /** Quantity in THIS row's account unit (debit/credit split by sign, as the columns present it). */
     debit: string;
     credit: string;
+    /** The same row restated in the transaction's reckoning unit. Empty when the units already match. */
+    value?: string;
+    /** Per-unit price (value ÷ quantity, in whole units). Any two of qty/price/value fill the third. */
+    price?: string;
     note: string;
   }
   
@@ -134,10 +162,56 @@
     memo: string;
     currentAccountDebit: string;
     currentAccountCredit: string;
+    currentAccountValue?: string;
+    currentAccountPrice?: string;
     splits: EditingSplitEntry[];
   }
   
   let editingData: EditingData | null = $state(null);
+
+  /**
+   * The transaction's reckoning unit — what every entry's VALUE is expressed in and what must sum to
+   * zero. Prefer the entity's base unit when the transaction touches it (the ordinary case); otherwise
+   * the finest-grained leg, since rounding happens in the reckoning unit's smallest increment.
+   * It need not be a currency: a stock-for-stock barter reckons in one of the stocks.
+   * See design/specs/domain/units.md § Choosing the reckoning unit.
+   */
+  let reckoningUnit = $derived.by(() => {
+    if (!editingData || !account) return account?.unit ?? '';
+    const legs = [account.unit, ...editingData.splits.map((s) => unitByAccount[s.accountId]).filter(Boolean)];
+    const distinct = [...new Set(legs)];
+    if (distinct.length <= 1) return account.unit;
+    if (entity && distinct.includes(entity.baseUnit)) return entity.baseUnit;
+    return distinct.reduce((best, code) =>
+      (allUnits.find((u) => u.code === code)?.displayDivisor ?? 100) >
+      (allUnits.find((u) => u.code === best)?.displayDivisor ?? 100) ? code : best, distinct[0]);
+  });
+  // An estimated value of this account's balance in the entity's base unit — shown BESIDE the real
+  // balance, marked, never in place of it. See design/specs/web/screens/ledger.md.
+  let baseUnitEstimate = $derived.by(() => {
+    if (!entity || !account || !unit || account.unit === entity.baseUnit || !rates.length) return '';
+    const balance = entries.length > 0 ? entries[entries.length - 1].runningBalance : 0;
+    if (balance === 0) return '';
+    const c = convertBalance(balance, account.unit, entity.baseUnit,
+      buildRateTable(rates), divisorLookup(allUnits));
+    if (c.converted === null) return '';
+    return `≈ ${formatUnitAmount(c.converted, allUnits.find((u) => u.code === entity!.baseUnit))}`;
+  });
+  let baseUnitEstimateTitle = $derived.by(() => {
+    if (!entity || !account || !rates.length) return '';
+    const c = findConversion(buildRateTable(rates), account.unit, entity.baseUnit);
+    if (!c) return '';
+    return `Estimated via ${c.provenance.path.join(' → ')}, rate as of ${c.provenance.asOf}`;
+  });
+  /** True when the legs span units — the only case where any of the multi-unit chrome appears. */
+  let isMultiUnitEdit = $derived.by(() => {
+    if (!editingData || !account) return false;
+    return editingData.splits.some((s) => s.accountId && unitByAccount[s.accountId]
+      && unitByAccount[s.accountId] !== account!.unit);
+  });
+
+  // An estimated value of this account's balance in the entity's base unit — shown BESIDE the real
+  // balance, marked, never in place of it. See design/specs/web/screens/ledger.md.
   
   // Load data
   async function loadData() {
@@ -160,7 +234,15 @@
       
       // Load unit
       const units = await dataService.getUnits();
+      allUnits = units;
       unit = units.find(u => u.code === account!.unit) || null;
+      // Reference rates only matter when this account isn't already in the entity's base unit.
+      rates = await dataService.getExchangeRates({});
+      // Unit per account: a split row's unit decides whether it needs a value, and at what precision.
+      if (entity) {
+        const accts = await dataService.getAccounts(entity.id);
+        unitByAccount = Object.fromEntries(accts.map((a) => [a.id, a.unit]));
+      }
       
       // Load account group directly from backend (for path)
       log.data.debug('[Ledger] Account accountGroupId:', account.accountGroupId);
@@ -220,10 +302,11 @@
     return fullPath;
   }
   
-  // Format amount
+  // Format an amount in THIS account's unit. The decimal places come from the unit's divisor — a
+  // security holds 4 (12,800.0000 shares), yen hold 0 — so a fixed 2 would misreport share counts.
+  // Bare number: the ledger's columns are already labelled with the account's unit in the header.
   function formatAmount(amount: number): string {
-    const divisor = unit?.displayDivisor ?? 100;
-    return (amount / divisor).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return formatUnitAmount(amount, unit ?? undefined, { withUnit: false });
   }
   
   // Format date according to user preference
@@ -416,37 +499,70 @@
     log.ui.debug('[Ledger] EditingData:', editingData);
   }
   
-  // Calculate edit balance
+  // Calculate edit balance, IN THE RECKONING UNIT.
+  //
+  // 100 shares and -$283 don't cancel as quantities; they cancel as values. So each leg contributes
+  // its `value` when it holds a different unit, and its plain amount when it already holds the
+  // reckoning unit. A leg in another unit with no value yet contributes NaN, which keeps the
+  // transaction unbalanced (and unsaveable) instead of silently treating the leg as zero.
+  function legValue(qtyDebit: string, qtyCredit: string, valueStr: string, unitCode: string): number {
+    const debit = qtyDebit ? parseFloat(qtyDebit) : 0;
+    const credit = qtyCredit ? parseFloat(qtyCredit) : 0;
+    const qty = debit || -credit;
+    if (!unitCode || unitCode === reckoningUnit) return qty;
+    if (!valueStr) return qty === 0 ? 0 : NaN;   // needs a value before it can balance
+    return Math.sign(qty || 1) * Math.abs(parseFloat(valueStr));
+  }
+
+  /**
+   * Simple mode shows ONE amount pair: the offset leg is implied as the mirror of the current leg.
+   * With one unit that mirror is the quantity; across units it has to be the VALUE, since that is
+   * what actually cancels.
+   */
+  let isSimpleEntry = $derived.by(() => {
+    const d = editingData;
+    return !!d && d.splits.length === 1 && !d.splits[0].debit && !d.splits[0].credit;
+  });
+
   function getEditBalance(): number {
-    if (!editingData) return 0;
-    
-    const divisor = unit?.displayDivisor ?? 100;
-    
-    const currentDebit = editingData.currentAccountDebit ? parseFloat(editingData.currentAccountDebit) : 0;
-    const currentCredit = editingData.currentAccountCredit ? parseFloat(editingData.currentAccountCredit) : 0;
-    const currentAmount = currentDebit || -currentCredit;
-    
-    const splitsSum = editingData.splits.reduce((sum, split) => {
-      const debit = split.debit ? parseFloat(split.debit) : 0;
-      const credit = split.credit ? parseFloat(split.credit) : 0;
-      return sum + (debit || -credit);
-    }, 0);
-    
-    return (currentAmount + splitsSum) * divisor;
+    if (!editingData || !account) return 0;
+    const divisor = allUnits.find((u) => u.code === reckoningUnit)?.displayDivisor ?? 100;
+
+    const current = legValue(
+      editingData.currentAccountDebit, editingData.currentAccountCredit,
+      editingData.currentAccountValue ?? '', account.unit);
+
+    // The implied offset exactly cancels the current leg, so a simple entry always balances once the
+    // current leg has a value. (Without a value it is NaN, which correctly blocks the save.)
+    if (isSimpleEntry && editingData.splits[0].accountId) {
+      return Number.isNaN(current) ? NaN : 0;
+    }
+
+    const splitsSum = editingData.splits.reduce((sum, split) =>
+      sum + legValue(split.debit, split.credit, split.value ?? '', unitByAccount[split.accountId] ?? ''), 0);
+
+    return Math.round((current + splitsSum) * divisor);
   }
   
   // Get edit totals
   function getEditTotals(): { debits: number; credits: number; balance: number } {
     if (!editingData) return { debits: 0, credits: 0, balance: 0 };
     
-    const currentDebit = editingData.currentAccountDebit ? parseFloat(editingData.currentAccountDebit) : 0;
-    const currentCredit = editingData.currentAccountCredit ? parseFloat(editingData.currentAccountCredit) : 0;
-    
-    const debitsTotal = currentDebit + editingData.splits.reduce((sum, s) => 
-      sum + (s.debit ? parseFloat(s.debit) : 0), 0);
-    
-    const creditsTotal = currentCredit + editingData.splits.reduce((sum, s) => 
-      sum + (s.credit ? parseFloat(s.credit) : 0), 0);
+    // Totals are VALUES in the reckoning unit (for a single-unit transaction, value == amount, so this
+    // is the familiar dollar total).
+    const valueOf = (d: string, c: string, v: string, u: string) => {
+      const n = legValue(d, c, v, u);
+      return Number.isNaN(n) ? 0 : n;
+    };
+    const curVal = account ? valueOf(editingData.currentAccountDebit, editingData.currentAccountCredit,
+      editingData.currentAccountValue ?? '', account.unit) : 0;
+
+    const splitVals = isSimpleEntry && editingData.splits[0].accountId
+      ? [-curVal]     // the implied offset
+      : editingData.splits.map((s) => valueOf(s.debit, s.credit, s.value ?? '', unitByAccount[s.accountId] ?? ''));
+
+    const debitsTotal = Math.max(curVal, 0) + splitVals.reduce((sum, v) => sum + Math.max(v, 0), 0);
+    const creditsTotal = Math.max(-curVal, 0) + splitVals.reduce((sum, v) => sum + Math.max(-v, 0), 0);
     
     return {
       debits: debitsTotal,
@@ -536,6 +652,11 @@
     
     // Validate
     const balance = getEditBalance();
+    if (Number.isNaN(balance)) {
+      // A leg in another unit with no value yet — incomplete, not zero.
+      alert($t('ledger.needs_value_alert'));
+      return;
+    }
     if (Math.abs(balance) > 1) {
       alert($t('ledger.transaction_must_balance'));
       return;
@@ -547,22 +668,54 @@
       let savedTransactionId: string | null = null;
       
       // Build the balanced entry set from the editor (this account + splits) — shared by create/edit.
+      //
+      // `amount` is the quantity in each row's OWN unit; `value` restates it in the reckoning unit and
+      // is stored only where the two differ. A single-unit transaction leaves value/valueUnit null and
+      // behaves exactly as before. See design/specs/domain/units.md.
+      const isMultiUnit = isMultiUnitEdit;
+      const reckDivisor = allUnits.find((u) => u.code === reckoningUnit)?.displayDivisor ?? 100;
+
+      const scaleQty = (accId: string, qty: number) =>
+        Math.round(qty * (allUnits.find((u) => u.code === (unitByAccount[accId] ?? ''))?.displayDivisor ?? divisor));
+      const valueFor = (accId: string, qty: number, valueStr: string | undefined) => {
+        if (!isMultiUnit) return undefined;
+        const rowUnit = unitByAccount[accId] ?? '';
+        if (!rowUnit || rowUnit === reckoningUnit) return undefined;   // value == amount
+        const v = valueStr ? Math.abs(parseFloat(valueStr)) : 0;
+        return Math.round(Math.sign(qty || 1) * v * reckDivisor);
+      };
+
       const currentDebit = editingData.currentAccountDebit ? parseFloat(editingData.currentAccountDebit) : 0;
       const currentCredit = editingData.currentAccountCredit ? parseFloat(editingData.currentAccountCredit) : 0;
-      const currentAmount = (currentDebit || -currentCredit) * divisor;
+      const currentQty = currentDebit || -currentCredit;
+      const currentAmount = scaleQty(accountId, currentQty);
 
       const isSimple = editingData.splits.length === 1 && !!editingData.splits[0].accountId;
-      const entries = isSimple
+      const currentValue = valueFor(accountId, currentQty, editingData.currentAccountValue);
+      const entries = isSimple && !isMultiUnit
         ? [
             { accountId, amount: currentAmount },
             { accountId: editingData.splits[0].accountId, amount: -currentAmount },
           ]
+        : isSimple && isSimpleEntry
+        // Multi-unit simple entry: the offset mirrors the VALUE, in its own (reckoning) unit.
+        ? [
+            { accountId, amount: currentAmount, value: currentValue },
+            { accountId: editingData.splits[0].accountId, amount: -(currentValue ?? 0) },
+          ]
         : [
-            { accountId, amount: currentAmount },
+            {
+              accountId, amount: currentAmount,
+              value: valueFor(accountId, currentQty, editingData.currentAccountValue),
+            },
             ...editingData.splits.filter((s) => s.accountId).map((s) => {
               const debit = s.debit ? parseFloat(s.debit) : 0;
               const credit = s.credit ? parseFloat(s.credit) : 0;
-              return { accountId: s.accountId, amount: (debit || -credit) * divisor };
+              const qty = debit || -credit;
+              return {
+                accountId: s.accountId, amount: scaleQty(s.accountId, qty),
+                value: valueFor(s.accountId, qty, s.value),
+              };
             }),
           ];
 
@@ -570,6 +723,8 @@
         date: editingData.date,
         reference: editingData.reference || undefined,
         memo: editingData.memo || undefined,
+        // Only a genuinely multi-unit transaction records a reckoning unit.
+        valueUnit: isMultiUnit ? reckoningUnit : undefined,
       };
 
       if (isNewEntry) {
@@ -859,9 +1014,14 @@
           {/if}
           
           <div class="balance-display">
+            <!-- The account's OWN unit: this ledger's every figure is a quantity of it. -->
             <span class="balance-value">
-              {unit?.symbol ?? ''}{#if entries.length > 0}{formatAmount(entries[entries.length - 1].runningBalance)}{:else}0.00{/if}
+              {formatUnitAmount(entries.length > 0 ? entries[entries.length - 1].runningBalance : 0, unit ?? undefined)}
             </span>
+            {#if baseUnitEstimate}
+              <!-- An estimate in the entity's base unit, clearly marked and never mistaken for the balance. -->
+              <span class="balance-estimate" title={baseUnitEstimateTitle}>{baseUnitEstimate}</span>
+            {/if}
           </div>
         </div>
       </div>
@@ -931,6 +1091,12 @@
                 accountName={account?.name ?? ''}
                 accountPath={getAccountPath()}
                 {unit}
+                {reckoningUnit}
+                reckoningUnitObj={allUnits.find((u) => u.code === reckoningUnit)}
+                unitForAccount={(id: string) => unitOf(id)}
+                referenceRate={referenceRateFor}
+                {acknowledgedRates}
+                onAcknowledgeRate={(rowId: string, key: string) => { acknowledgedRates = { ...acknowledgedRates, [rowId]: key }; }}
                 onSave={saveEdit}
                 onCancel={cancelEdit}
                 onAddSplit={addSplitEntry}
@@ -1000,6 +1166,12 @@
                 accountName={account?.name ?? ''}
                 accountPath={getAccountPath()}
                 {unit}
+                {reckoningUnit}
+                reckoningUnitObj={allUnits.find((u) => u.code === reckoningUnit)}
+                unitForAccount={(id: string) => unitOf(id)}
+                referenceRate={referenceRateFor}
+                {acknowledgedRates}
+                onAcknowledgeRate={(rowId: string, key: string) => { acknowledgedRates = { ...acknowledgedRates, [rowId]: key }; }}
                 onSave={saveEdit}
                 onCancel={cancelEdit}
                 onDelete={deleteTransaction}
@@ -1178,6 +1350,12 @@
                 accountName={account?.name ?? ''}
                 accountPath={getAccountPath()}
                 {unit}
+                {reckoningUnit}
+                reckoningUnitObj={allUnits.find((u) => u.code === reckoningUnit)}
+                unitForAccount={(id: string) => unitOf(id)}
+                referenceRate={referenceRateFor}
+                {acknowledgedRates}
+                onAcknowledgeRate={(rowId: string, key: string) => { acknowledgedRates = { ...acknowledgedRates, [rowId]: key }; }}
                 onSave={saveEdit}
                 onCancel={cancelEdit}
                 onAddSplit={addSplitEntry}
@@ -1298,6 +1476,14 @@
     font-size: 1.25rem;
     font-weight: 600;
     font-family: 'Courier New', monospace;
+  }
+  /* The estimate sits beside the balance, visibly subordinate — the balance is the fact. */
+  .balance-estimate {
+    margin-left: 0.5rem;
+    font-size: 0.7em;
+    font-weight: 400;
+    color: var(--text-muted, #9ca3af);
+    cursor: help;
   }
   
   /* Column Headers (fixed, outside scroll area) */

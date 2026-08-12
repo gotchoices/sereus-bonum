@@ -34,11 +34,11 @@ Fields come from the Account entity ([domain/schema.md](../../domain/schema.md) 
 | `description` | yes | |
 | `accountGroupId` (group) | yes | see re-parent invariant below |
 | `parentId` (parent account) | yes | null = directly in a group; see invariant |
-| `unit` | yes* | *changing the unit of an account that already has entries re-denominates history — restrict / warn |
+| `unit` | yes* | The unit this account holds — a currency, a security (`NYSE:VPER`), a CHIP, an inventory item. Picker lists existing units and allows **creating a new one** (code, name, symbol, type, display divisor). *Changing the unit of an account that already has entries re-denominates history — restrict / warn |
 | `costingMethod` | yes | FIFO / LIFO / AVERAGE |
 | `partnerId`, `linkedAccountId` | yes | optional |
 | `isActive` (status) | yes | retire = `false`; see retire invariant |
-| current balance | read-only | show as context (helps decide retire/delete) |
+| current balance | read-only | show as context (helps decide retire/delete), **in the account's own unit** |
 | `id`, `entityId`, `sourceId`, `createdAt`, `updatedAt` | read-only | system / import identity |
 | `closedThrough` | out of scope | period close-out is a separate flow (see [rules.md](../../domain/rules.md#closing)) |
 

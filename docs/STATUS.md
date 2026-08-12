@@ -355,9 +355,24 @@ See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
   applied to I/E in `getBalanceSheet`'s income-statement path. Verify `startDate`/`endDate` handling.
 
 ### E. Storied but unimplemented features
-- 🔄 Multi-unit (08): **model + storage + import DONE**; the remaining work is UI — the split-row
-  quantity/price/value editor, the implied-rate confirmation guard, display-unit selection, and the
-  derived Unrecognized Gain/Loss line on converted reports.
+- ✅ **Multi-unit (08) — DONE end to end (2026-08-11).** Model, storage, import, **and UI**.
+  - **Conversion engine** `lib/report/convert.ts`: as-of-date rate selection (a December report uses
+    December rates), transitive paths (`widget → USD → CHIP`), exact rational math with cross-reduction
+    so chained 1e8-denominator quotes don't lose precision, and `valueReport` — shared by both backends.
+  - **Reports** render in any chosen unit: native quantity as the fact, `≈` estimate beside it,
+    derived **Unrecognized Gain/Loss** equity line, `—` (never `$0.00`) for holdings with no rate path,
+    and a banner naming them. Verified on the investment books: the converted balance sheet balances
+    **to the cent** at two different dates.
+  - **Ledger** shows balances in the account's own unit at its own precision (`2,500.0000 PSEC`) with a
+    marked base-unit estimate; `formatAmount` no longer passes namespaced codes to `Intl` as currencies.
+  - **Editor** grows a quantity/price/value row when a leg is in another unit (any two fill the third),
+    shows the implied rate, and **blocks the save until it's confirmed** — warning when it deviates from
+    a known reference rate (the forgotten-wire-fee case). Works in simple and split mode.
+  - **Balance rule is now value-based in both data services** — `assertBalanced(entries, valueUnit)`.
+    Summing raw amounts across units was the last place the old single-unit assumption survived.
+  - 99 unit tests (was 37) + 4 e2e green.
+  - ⬜ Remaining: the Settings UI for managing units and adding manual reference rates (data layer and
+    spec are done; the reports banner already deep-links there).
 - ⬜ Tags (11), Sharing / multi-user (10), AI assistant + capture (07 / 09).
 
 ### F. Cadre / p2p (the gating item being waited on)

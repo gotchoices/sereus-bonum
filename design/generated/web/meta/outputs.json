@@ -38,12 +38,12 @@
         "design/specs/domain/export.md"
       ],
       "depHashes": {
-        "design/specs/web/screens/accounts-view.md": "ad5d8c72139ec40e54831052969aae3dd9815735b7f80054df9f8b11af2be11b",
+        "design/specs/web/screens/accounts-view.md": "178e64cd53e387068d6725123f28dea56188a5382f973afb5ea77452a7af81db",
         "design/specs/web/screens/saved-reports-ux.md": "0c48670d4d21219e8ed1e3c55290234327f154f1b11e5fe2eab9b2842b765269",
         "design/stories/web/01-firstlook.md": "11e9c354253b25afbcbaee117a3cc645ba53348eaf9c46a831127520807a3222",
         "design/stories/web/04-reporting.md": "9f2e90d7cefd3e1d23787b6edaafe84cddb6d39c556c1c08c21dd92ff18f90c5",
         "design/specs/domain/rules.md": "fb5f4acfe557b963423b354d66c89b5fcf5f37364de3b03ef2096f03d5b09244",
-        "design/specs/domain/schema.md": "44ec79253286e31c446d1238de03d3282379e50a04969629998d59753f6a4d80",
+        "design/specs/domain/schema.md": "127488d12ec3a5470180242e0d815da4e04f23413f3a8693830fac12bf319f3d",
         "design/specs/domain/export.md": "bee9d08052449e9c34f929adc94dc5b5f472de0471cf0a247d3f5a73f405295a"
       }
     },
@@ -57,8 +57,8 @@
       ],
       "depHashes": {
         "design/stories/web/01-firstlook.md": "11e9c354253b25afbcbaee117a3cc645ba53348eaf9c46a831127520807a3222",
-        "design/specs/web/screens/account-edit.md": "492010eefd2c288097f5e85ecfbd943c77ff928b5ef4f33eb171c0c7b143abf7",
-        "design/specs/domain/schema.md": "44ec79253286e31c446d1238de03d3282379e50a04969629998d59753f6a4d80",
+        "design/specs/web/screens/account-edit.md": "517e45b8455af56c18806544c13ab6b6c179a9d7c3bb80661a1bee6f1dba5b47",
+        "design/specs/domain/schema.md": "127488d12ec3a5470180242e0d815da4e04f23413f3a8693830fac12bf319f3d",
         "design/specs/domain/rules.md": "fb5f4acfe557b963423b354d66c89b5fcf5f37364de3b03ef2096f03d5b09244"
       }
     },
@@ -74,13 +74,13 @@
         "design/specs/domain/schema.md"
       ],
       "depHashes": {
-        "design/specs/web/screens/ledger.md": "6102fde4889a385391e9673faa36c079ccae46388cbffd7aebdb62ecea1870f6",
+        "design/specs/web/screens/ledger.md": "31459acc981b7bca6f6f944c20f28e1f37e6589f66becd0469d94557b7572ddf",
         "design/stories/web/03-entries.md": "bfaff41f79d2542c5d1ec3d5c4fad72ef79d6f1d3e6660174527ba9cb9368830",
         "design/stories/web/02-gnucash.md": "aface7ea6ecc5c8030d0e7165cc5cba488f5bd1d74da3eb706d56d5dc1599ba2",
-        "design/specs/web/components/transaction-edit.md": "2ae5d29a44168cc9d75a80157e78ec8b0371dc331f378594e41b2a5ab53467df",
+        "design/specs/web/components/transaction-edit.md": "c0050acbe7b2e0b00610c47fc160eb5663fcd3500888ccfad090e130f1b15894",
         "design/specs/web/components/account-autocomplete.md": "cb46a848d70142a9a5d8def94782e17590369a33a3caa39a57844aef5634b6d8",
         "design/specs/domain/rules.md": "fb5f4acfe557b963423b354d66c89b5fcf5f37364de3b03ef2096f03d5b09244",
-        "design/specs/domain/schema.md": "44ec79253286e31c446d1238de03d3282379e50a04969629998d59753f6a4d80"
+        "design/specs/domain/schema.md": "127488d12ec3a5470180242e0d815da4e04f23413f3a8693830fac12bf319f3d"
       }
     },
     {
@@ -103,8 +103,8 @@
         "design/stories/web/09-ai-capture-import.md"
       ],
       "depHashes": {
-        "design/specs/web/screens/import.md": "708496debbf12e61eb5b52d66ec0caca1610f2c037f7a7120cebf958e63d0a07",
-        "design/specs/domain/import.md": "4991609989846c5c8e00bacb9eb99cbcc5181d0fe49e6cf22fa2746376bdc6a7",
+        "design/specs/web/screens/import.md": "a0cd27eb1f4354625a89425068d6f65fb838ef9da9f7ba24167b0e75fe73f00a",
+        "design/specs/domain/import.md": "848771590c3e4a90a49af5a9da16855077dc566771038a41686356183239ea6b",
         "design/stories/web/02-gnucash.md": "aface7ea6ecc5c8030d0e7165cc5cba488f5bd1d74da3eb706d56d5dc1599ba2",
         "design/stories/web/09-ai-capture-import.md": "ef9db1ace50ab26bb9f0701b1905c0242e27669baa7d3e7b6e7deb46d6971d88"
       }
@@ -116,7 +116,7 @@
         "design/stories/web/01-firstlook.md"
       ],
       "depHashes": {
-        "design/specs/web/screens/settings.md": "277578e5f469cb38b1256e9f7aac0d4b8d153222b99fd584ee0813ef6353be4c",
+        "design/specs/web/screens/settings.md": "27f67624d5861d0907e5379d06ea4b047a9bab31d80805ca64b167bcf22bf495",
         "design/stories/web/01-firstlook.md": "11e9c354253b25afbcbaee117a3cc645ba53348eaf9c46a831127520807a3222"
       }
     },

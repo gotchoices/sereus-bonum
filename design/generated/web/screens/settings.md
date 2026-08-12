@@ -1,5 +1,6 @@
 ---
 dependsOn:
+  - design/specs/domain/units.md
   - design/specs/web/screens/settings.md
   - design/stories/web/01-firstlook.md
 depHashes:
@@ -123,3 +124,12 @@ auto-save to `localStorage` and apply immediately — no explicit Save button. S
   validation short of an explicit "Test Connection" round-trip.
 - **Sign reversal granularity** — the store models per-type reversal (`equity`/`income`/`liability`),
   but the UI collapses it to one "Equity & Income" toggle (liability always `false`), matching the spec.
+
+## Units & Reference Rates (spec'd 2026-08-11, UI pending)
+
+Spec: [settings.md](../../../specs/web/screens/settings.md#units--reference-rates)
+
+Data layer is in place — `DataService.getExchangeRates({unitA,unitB,asOf})` and `createExchangeRate`
+on both backends, `exchange` table holding MARKET/MANUAL quotes as exact rationals. The management UI
+(unit list/editor, rate list, "add a manual rate") is **not built yet**; the reports screen already
+deep-links here from its unvalued-units banner.

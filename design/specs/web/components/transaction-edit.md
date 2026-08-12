@@ -52,8 +52,11 @@ Edit a transaction with two entries: the current account and one offset account.
 3. Memo (optional): Transaction description
 4. Account (required): Offset account - uses **[Account Autocomplete](./account-autocomplete.md)**
 5. Split button `[|]`: Inline with Account field (NEW entry only, enabled when Account is empty)
-6. Debit (one required): Amount field
-7. Credit (one required): Amount field
+6. Debit (one required): Amount field, in the row account's own unit
+7. Credit (one required): Amount field, in the row account's own unit
+
+If the offset account holds a different unit than the current account, the row gains Price and Value
+fields — see [Multi-Unit Entries](#multi-unit-entries).
 
 **Note:** The consumer (e.g., ledger screen) determines visual layout and alignment. See [Ledger Screen](../screens/ledger.md) for how fields are positioned within the table structure.
 
@@ -116,7 +119,11 @@ Edit a transaction with multiple entries: the current account and multiple offse
 - Date must be valid
 - Main line: Either Debit OR Credit (not both, not neither)
 - Each split: Account selected and either Debit OR Credit (not both, not neither)
-- Transaction must balance: Sum of all entries = $0.00 (within $0.01 tolerance)
+- Transaction must balance **in its reckoning unit**: the sum of every row's Value = zero exactly.
+  For an all-one-unit transaction (the common case) Value is just the amount, so this reads as the
+  familiar "sum of entries = $0.00".
+- A row in a non-reckoning unit with no Value yet is **incomplete**, not zero — it blocks the save and
+  says which unit still needs a value.
 - When one field (Debit or Credit) has value and user tabs away, the other field is cleared
 
 **Tab Flow:**
@@ -129,6 +136,69 @@ Edit a transaction with multiple entries: the current account and multiple offse
 **Split Actions:**
 - `[×]` Remove button: Removes that split row (not in tab order, mouse-only)
 - `[+ Add Split]` button: Manually adds new split row (rarely needed, usually auto-created)
+
+---
+
+## Multi-Unit Entries
+
+Most transactions are single-unit and none of this appears. It surfaces the moment two accounts in
+one transaction hold different units — shares and dollars, euros and dollars, widgets and CHIPs. The
+rules are in [domain/units.md](../../domain/units.md).
+
+### The default entry unit is the account's own unit
+
+A row for a stock account asks for **shares**, not dollars. A row for a CHIP account asks for CHIPs.
+The unit symbol is shown in or beside the field so it's never ambiguous what the number means.
+
+### Quantity, Price, Value — any two fill the third
+
+When a row's account holds a unit other than the transaction's reckoning unit, that row expands from
+a single amount into three fields:
+
+```
+  Note        Account            Quantity        Price        Value
+  Buy 100     Stock : VPER    12,800.0000  ×  0.013500  =    172.80
+```
+
+- The user fills **any two**; the third computes immediately and is shown as derived (not typed).
+- Editing a filled field recomputes the field the user did *not* most recently touch, so the pair
+  they're actively working with is preserved.
+- **Quantity** is in the account's unit. **Value** is in the transaction's reckoning unit. **Price**
+  is value ÷ quantity, expressed per one whole unit (dollars per share, not cents per ten-thousandth
+  of a share).
+- Rows whose account already holds the reckoning unit keep the ordinary single-amount Debit/Credit
+  presentation — no price, no value.
+
+### The reckoning unit
+
+The transaction shows which unit its values are reckoned in, and it is editable. Bonum proposes one
+per [domain/units.md](../../domain/units.md#choosing-the-reckoning-unit) — the entity's base unit
+when the transaction touches it, otherwise the finest-grained leg. The user may choose **any unit the
+transaction touches**, including a stock or a CHIP: a stock-for-stock barter with a CHIP fee is
+reckoned in one of the stocks and never mentions a currency.
+
+Changing the reckoning unit re-expresses the Value column; it never changes a Quantity, because
+quantities are the recorded facts.
+
+### Implied-rate confirmation (required)
+
+Whenever the user supplies a quantity and a value (rather than typing the price directly), the editor
+must:
+
+1. Show the **implied rate** prominently, in whole units — "1 VPER = $0.0135".
+2. Require an explicit acknowledgment before the transaction can be saved.
+3. **Warn** when the implied rate deviates sharply from the most recent reference rate for that pair,
+   naming both rates.
+
+This exists to catch a *forgotten row*. Buying €850 for $1,000 while omitting a $30 wire fee still
+balances — it just silently implies $1.212/EUR instead of $1.176/EUR, hiding the $30 inside a
+distorted rate. An imbalance would be caught; a distorted rate would not. Hence the confirmation.
+
+### Rates are per row
+
+Two rows on the same account, in the same transaction, may carry different prices — a stock order
+that fills at three prices is three rows at three rates, and all three are recorded. The editor must
+never average them into one rate or collapse the rows.
 
 ---
 
@@ -217,11 +287,17 @@ Uses **[Account Autocomplete](./account-autocomplete.md)** component for all acc
 - Date: Must be valid date
 - Main line: Either Debit OR Credit (not both, not neither)
 - Each split: `selectedId` set AND either Debit OR Credit (not both, not neither)
-- Balance: Sum of all entries = $0.00 (within $0.01 tolerance)
+- Balance: sum of every row's Value = zero, exactly, in the reckoning unit
+
+### Multi-Unit
+- Every row whose account holds a non-reckoning unit has a Value (any two of quantity/price/value)
+- The reckoning unit is one of the units the transaction actually touches
+- Any implied rate has been shown and acknowledged
 
 ### Visual Feedback
 - Invalid fields: Red border or highlight
-- Balance indicator: ✓ (balanced) or ⚠ $X.XX (imbalance amount)
+- Balance indicator: ✓ (balanced) or ⚠ X.XX (imbalance, in the reckoning unit with its symbol)
+- Implied rates displayed inline per row; unacknowledged rates block save
 - Save action disabled until all validation passes
 
 ---

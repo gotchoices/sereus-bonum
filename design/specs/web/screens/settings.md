@@ -92,3 +92,28 @@ All settings are:
 - Stored in `localStorage` per device
 - Applied immediately across the app
 
+
+## Units & Reference Rates
+
+Bonum treats every currency, security, commodity, and inventory item as a **unit**
+(see [domain/units.md](../../domain/units.md)). Two things are managed here.
+
+**Units.** List, create, and edit units: `code` (bare for currencies — `USD`; namespaced otherwise —
+`NYSE:VPER`, `INV:widget`), `name`, `symbol`, type, and `displayDivisor`. The divisor is fixed once the
+unit has entries — changing it would reinterpret every stored amount, so it must be locked, not warned
+about.
+
+**Reference rates.** Observed quotes between two units, used only to value holdings at report time.
+Transaction rates are *not* here — they live on the entries themselves.
+
+- List rates by pair, most recent first, showing value, date, and source (MARKET / MANUAL).
+- **Add a manual rate**: pair, date, rate, and a note explaining where it came from. This is how a user
+  values an idle holding — hold CHIPs with no recent activity, log a CHIP/USD quote, and the balance
+  sheet can render in dollars.
+- Imported price histories (GnuCash keeps one) land here as MARKET rates and are visible alongside
+  manual ones.
+- Rates are stored as exact rationals; the UI must round only for display, never for storage.
+
+**Surfacing gaps:** when a report can't reach the display unit from some held unit, it flags that unit
+(see [accounts-view.md](./accounts-view.md#display-unit)) and offers a direct path to add the missing
+rate here.

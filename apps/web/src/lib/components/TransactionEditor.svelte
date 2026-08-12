@@ -1,6 +1,8 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
   import AccountAutocomplete from './AccountAutocomplete.svelte';
+  import { completeRow, impliedRate, rateDeviates, rateAckKey, type EntryField } from '$lib/report/entry-math';
+  import { formatRate } from '$lib/report/format';
   
   interface EditingData {
     date: string;
@@ -8,12 +10,19 @@
     memo: string;
     currentAccountDebit: string;
     currentAccountCredit: string;
+    currentAccountValue?: string;
+    currentAccountPrice?: string;
     splits: Array<{
       id: string;
       accountId: string;
       accountSearch: string;
+      /** Quantity in THIS row's account unit. */
       debit: string;
       credit: string;
+      /** The row restated in the reckoning unit; empty when the units already match. */
+      value?: string;
+      /** Price per whole unit. Any two of quantity/price/value fill the third. */
+      price?: string;
       note: string;
     }>;
   }
@@ -26,6 +35,17 @@
     accountName: string;
     accountPath: string;
     unit: { symbol?: string; displayDivisor: number } | null;
+    /** Reckoning unit code — what every row's VALUE is expressed in and what must sum to zero. */
+    reckoningUnit?: string;
+    /** Row-level unit lookup, so a split knows whether it needs a value. */
+    unitForAccount?: (accountId: string) => { code: string; symbol?: string; displayDivisor: number } | undefined;
+    /** The reckoning unit as a full Unit, for rate formatting. */
+    reckoningUnitObj?: { code: string; symbol?: string; displayDivisor: number };
+    /** Reference rate for a unit pair, for the implied-rate deviation warning. Null when unknown. */
+    referenceRate?: (fromUnit: string) => number | null;
+    /** Acknowledged implied rates, keyed by row id — save is blocked until each is confirmed. */
+    acknowledgedRates?: Record<string, string>;
+    onAcknowledgeRate?: (rowId: string, key: string) => void;
     onSave: () => void;
     onCancel: () => void;
     onDelete?: (txnId: string) => void;
@@ -48,6 +68,12 @@
     accountName,
     accountPath,
     unit,
+    reckoningUnit = '',
+    reckoningUnitObj = undefined,
+    unitForAccount = () => undefined,
+    referenceRate = () => null,
+    acknowledgedRates = {},
+    onAcknowledgeRate = () => {},
     onSave,
     onCancel,
     onDelete,
@@ -63,6 +89,108 @@
   }: Props = $props();
   
   let isSimpleMode = $derived(editingData.splits.length === 1);
+
+  // --- Multi-unit rows -----------------------------------------------------------------------
+  // None of this renders for an ordinary single-unit transaction. A row needs quantity/price/value
+  // only when its account holds a unit other than the one the transaction is reckoned in.
+  const rowUnitCode = (accountId: string) => unitForAccount(accountId)?.code ?? '';
+  const rowNeedsValue = (accountId: string) =>
+    !!reckoningUnit && !!accountId && !!rowUnitCode(accountId) && rowUnitCode(accountId) !== reckoningUnit;
+
+  const num = (v: string | undefined): number | undefined => {
+    if (v === undefined || v === '') return undefined;
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : undefined;
+  };
+  const qtyOf = (debit: string, credit: string) => num(debit) ?? (num(credit) !== undefined ? -num(credit)! : undefined);
+  const fmt = (n: number | undefined, places: number) => (n === undefined ? '' : String(Number(n.toFixed(places))));
+
+  /** Recompute the third field after the user edits one of quantity / price / value. */
+  function recompute(row: { debit: string; credit: string; value?: string; price?: string; accountId: string },
+                     edited: EntryField) {
+    const quantity = qtyOf(row.debit, row.credit);
+    const filled = completeRow(
+      { quantity, price: num(row.price), value: num(row.value) === undefined ? undefined : Math.abs(num(row.value)!) },
+      edited);
+    if (edited !== 'price' && filled.price !== undefined) row.price = fmt(filled.price, 6);
+    if (edited !== 'value' && filled.value !== undefined) row.value = fmt(Math.abs(filled.value), 2);
+    if (edited !== 'quantity' && filled.quantity !== undefined) {
+      // Preserve which column the user was using (debit vs credit).
+      const target = row.credit && !row.debit ? 'credit' : 'debit';
+      row[target] = fmt(Math.abs(filled.quantity), 4);
+    }
+  }
+
+  /** The implied rate for a row, plus whether it deviates from a known reference rate. */
+  function rateInfoFor(row: { id: string; debit: string; credit: string; value?: string; accountId: string }) {
+    const quantity = qtyOf(row.debit, row.credit);
+    const value = num(row.value);
+    const implied = impliedRate(quantity, value === undefined ? undefined : Math.abs(value));
+    if (implied === null) return null;
+    const reference = referenceRate(row.id === 'current' ? currentUnitCode() : rowUnitCode(row.accountId));
+    return {
+      implied,
+      key: rateAckKey(quantity, value === undefined ? undefined : Math.abs(value)),
+      deviates: reference !== null && rateDeviates(implied, reference),
+      reference,
+    };
+  }
+
+  /** Rows whose implied rate the user has not yet confirmed — these block the save. */
+  /** The ledger account's own unit code (this ledger's rows are quantities of it). */
+  const currentUnitCode = () => (unit as { code?: string } | null)?.code ?? '';
+  /**
+   * The ledger's own account carries the quantity on the main row, so it needs a value whenever its
+   * unit isn't the reckoning unit — in simple mode (a stock ledger with a cash offset) and in split
+   * mode alike.
+   */
+  let currentNeedsValue = $derived(
+    !!reckoningUnit && !!currentUnitCode() && currentUnitCode() !== reckoningUnit
+    && !!editingData.splits[0]?.accountId);
+  /** True when any row is in a unit other than the reckoning unit. */
+  let isMultiUnitEditor = $derived(
+    currentNeedsValue || editingData.splits.some((sp) => rowNeedsValue(sp.accountId)));
+  /**
+   * Label for the totals row. Totals are values in the RECKONING unit, which for a single-unit
+   * transaction is just this ledger's unit (so nothing visibly changes for ordinary entry).
+   */
+  let totalsLabel = $derived(
+    !isMultiUnitEditor ? (unit?.symbol ?? '') : `${reckoningUnit} `);
+
+  /** Recompute the third field for the simple-mode current-account row. */
+  function recomputeCurrent(edited: EntryField) {
+    const row = {
+      debit: editingData.currentAccountDebit, credit: editingData.currentAccountCredit,
+      value: editingData.currentAccountValue, price: editingData.currentAccountPrice, accountId: '',
+    };
+    recompute(row, edited);
+    editingData.currentAccountDebit = row.debit;
+    editingData.currentAccountCredit = row.credit;
+    editingData.currentAccountValue = row.value;
+    editingData.currentAccountPrice = row.price;
+  }
+
+  /** Implied rate for the simple-mode current-account row. */
+  let currentRateInfo = $derived.by(() => {
+    if (!currentNeedsValue) return null;
+    return rateInfoFor({
+      id: 'current', debit: editingData.currentAccountDebit, credit: editingData.currentAccountCredit,
+      value: editingData.currentAccountValue, accountId: '',
+    });
+  });
+
+  let unconfirmedRates = $derived.by(() => {
+    const out: string[] = [];
+    if (currentNeedsValue && currentRateInfo && acknowledgedRates['current'] !== currentRateInfo.key) {
+      out.push('current');
+    }
+    for (const split of editingData.splits) {
+      if (!rowNeedsValue(split.accountId)) continue;
+      const info = rateInfoFor(split);
+      if (info && acknowledgedRates[split.id] !== info.key) out.push(split.id);
+    }
+    return out;
+  });
   
   function formatAmount(amount: number): string {
     const divisor = unit?.displayDivisor ?? 100;
@@ -106,6 +234,45 @@
     background: var(--bg-secondary);
   }
   
+  /* Multi-unit sub-row: price/value/implied-rate for a row whose account is in another unit. */
+  .unit-row > div {
+    background: var(--bg-secondary, #f3f4f6);
+    padding-top: 0.25rem;
+    padding-bottom: 0.5rem;
+  }
+  .unit-hint {
+    font-size: 0.75rem;
+    color: var(--text-muted, #6b7280);
+    font-style: italic;
+  }
+  .unit-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    font-size: 0.7rem;
+    color: var(--text-muted, #6b7280);
+  }
+  .unit-rate {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    font-size: 0.75rem;
+    justify-content: center;
+  }
+  .implied-rate { font-variant-numeric: tabular-nums; }
+  .implied-rate.deviates { color: var(--danger, #b45309); font-weight: 600; }
+  .btn-confirm-rate {
+    font-size: 0.7rem;
+    padding: 0.1rem 0.4rem;
+    border: 1px solid var(--accent-color, #0066cc);
+    background: transparent;
+    color: var(--accent-color, #0066cc);
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .rate-ok { color: var(--success, #16a34a); }
+  .rate-warning { color: var(--danger, #b45309); font-size: 0.7rem; cursor: help; }
+
   /* Actions row spans full width */
   .editor-actions {
     grid-column: 1 / -1;
@@ -293,6 +460,13 @@
   .btn-primary:hover {
     background: var(--accent-hover, #0052a3);
   }
+
+  .btn-primary:disabled,
+  .btn-primary[disabled] {
+    background: var(--bg-secondary, #d1d5db);
+    color: var(--text-muted, #6b7280);
+    cursor: not-allowed;
+  }
   
   .btn-secondary {
     background: var(--bg-secondary, #f5f5f5);
@@ -388,12 +562,71 @@
     </div>
     <div class="col-balance" role="gridcell"></div>
   </div>
+  {#if currentNeedsValue}
+    <!-- The two legs are in different units, so the quantity above can't balance the offset on its own.
+         Price and Value complete it — the user fills any two. Simple mode keeps ONE amount pair, so it
+         is the current account (the ledger's own unit) that carries the value. -->
+    <div class="editor-row unit-row" role="row">
+      <div class="col-expand" role="gridcell"></div>
+      <div class="col-date" role="gridcell"></div>
+      <div class="col-ref" role="gridcell"></div>
+      <div class="col-memo" role="gridcell">
+        <span class="unit-hint">{$t('ledger.quantity_in', { unit: unit?.symbol || currentUnitCode() })}</span>
+      </div>
+      <div class="col-offset" role="gridcell">
+        <label class="unit-field">
+          <span>{$t('ledger.price')}</span>
+          <input
+            type="number" step="any"
+            value={editingData.currentAccountPrice ?? ''}
+            oninput={(e) => { editingData.currentAccountPrice = e.currentTarget.value; recomputeCurrent('price'); }}
+            onfocus={onFocus} class="edit-input edit-amount"
+          />
+        </label>
+      </div>
+      <div class="col-debit" role="gridcell">
+        <label class="unit-field">
+          <span>{$t('ledger.value')} ({reckoningUnit})</span>
+          <input
+            type="number" step="0.01"
+            value={editingData.currentAccountValue ?? ''}
+            oninput={(e) => { editingData.currentAccountValue = e.currentTarget.value; recomputeCurrent('value'); }}
+            onfocus={onFocus} class="edit-input edit-amount"
+          />
+        </label>
+      </div>
+      <div class="col-credit unit-rate" role="gridcell">
+        {#if currentRateInfo}
+          <span class="implied-rate" class:deviates={currentRateInfo.deviates}>
+            {formatRate(currentRateInfo.implied, unit as never, reckoningUnitObj as never)}
+          </span>
+          {#if acknowledgedRates['current'] !== currentRateInfo.key}
+            <!-- A forgotten leg still BALANCES — it only distorts this rate, so it must be confirmed. -->
+            <button class="btn-confirm-rate" onclick={() => onAcknowledgeRate('current', currentRateInfo.key)}>
+              {$t('ledger.confirm_rate')}
+            </button>
+          {:else}
+            <span class="rate-ok">✓</span>
+          {/if}
+          {#if currentRateInfo.deviates && currentRateInfo.reference !== null}
+            <span class="rate-warning" title={$t('ledger.rate_deviates_hint')}>
+              ⚠ {$t('ledger.rate_deviates', { reference: currentRateInfo.reference.toPrecision(6) })}
+            </span>
+          {/if}
+        {/if}
+      </div>
+      <div class="col-balance" role="gridcell"></div>
+    </div>
+  {/if}
   
   <!-- Simple mode actions -->
   <div class="editor-actions" role="row">
     <div class="edit-actions-container">
       <div class="edit-actions-left">
-        <button class="btn-primary" onclick={onSave}>{$t('common.save')}</button>
+        <button class="btn-primary" onclick={onSave} disabled={unconfirmedRates.length > 0}
+                title={unconfirmedRates.length > 0 ? $t('ledger.confirm_rate_first') : ''}>
+          {$t('common.save')}
+        </button>
         <button class="btn-secondary" onclick={onCancel}>{$t('common.cancel')}</button>
         {#if !isNewEntry}
           <button class="btn-secondary" onclick={onAddSplit}>+ {$t('ledger.add_split')}</button>
@@ -476,6 +709,62 @@
     </div>
     <div class="col-balance" role="gridcell"></div>
   </div>
+  {#if currentNeedsValue}
+    <!-- The two legs are in different units, so the quantity above can't balance the offset on its own.
+         Price and Value complete it — the user fills any two. Simple mode keeps ONE amount pair, so it
+         is the current account (the ledger's own unit) that carries the value. -->
+    <div class="editor-row unit-row" role="row">
+      <div class="col-expand" role="gridcell"></div>
+      <div class="col-date" role="gridcell"></div>
+      <div class="col-ref" role="gridcell"></div>
+      <div class="col-memo" role="gridcell">
+        <span class="unit-hint">{$t('ledger.quantity_in', { unit: unit?.symbol || currentUnitCode() })}</span>
+      </div>
+      <div class="col-offset" role="gridcell">
+        <label class="unit-field">
+          <span>{$t('ledger.price')}</span>
+          <input
+            type="number" step="any"
+            value={editingData.currentAccountPrice ?? ''}
+            oninput={(e) => { editingData.currentAccountPrice = e.currentTarget.value; recomputeCurrent('price'); }}
+            onfocus={onFocus} class="edit-input edit-amount"
+          />
+        </label>
+      </div>
+      <div class="col-debit" role="gridcell">
+        <label class="unit-field">
+          <span>{$t('ledger.value')} ({reckoningUnit})</span>
+          <input
+            type="number" step="0.01"
+            value={editingData.currentAccountValue ?? ''}
+            oninput={(e) => { editingData.currentAccountValue = e.currentTarget.value; recomputeCurrent('value'); }}
+            onfocus={onFocus} class="edit-input edit-amount"
+          />
+        </label>
+      </div>
+      <div class="col-credit unit-rate" role="gridcell">
+        {#if currentRateInfo}
+          <span class="implied-rate" class:deviates={currentRateInfo.deviates}>
+            {formatRate(currentRateInfo.implied, unit as never, reckoningUnitObj as never)}
+          </span>
+          {#if acknowledgedRates['current'] !== currentRateInfo.key}
+            <!-- A forgotten leg still BALANCES — it only distorts this rate, so it must be confirmed. -->
+            <button class="btn-confirm-rate" onclick={() => onAcknowledgeRate('current', currentRateInfo.key)}>
+              {$t('ledger.confirm_rate')}
+            </button>
+          {:else}
+            <span class="rate-ok">✓</span>
+          {/if}
+          {#if currentRateInfo.deviates && currentRateInfo.reference !== null}
+            <span class="rate-warning" title={$t('ledger.rate_deviates_hint')}>
+              ⚠ {$t('ledger.rate_deviates', { reference: currentRateInfo.reference.toPrecision(6) })}
+            </span>
+          {/if}
+        {/if}
+      </div>
+      <div class="col-balance" role="gridcell"></div>
+    </div>
+  {/if}
   
   <!-- Split entry rows -->
   {#each editingData.splits as split (split.id)}
@@ -535,6 +824,65 @@
         {/if}
       </div>
     </div>
+    {#if rowNeedsValue(split.accountId)}
+      <!-- This row's account holds a different unit than the transaction reckons in, so the quantity
+           above can't balance on its own. Price and Value complete it — the user fills any two.
+           See design/specs/web/components/transaction-edit.md § Multi-Unit Entries. -->
+      {@const info = rateInfoFor(split)}
+      {@const rowUnit = unitForAccount(split.accountId)}
+      <div class="editor-row unit-row" role="row">
+        <div class="col-expand" role="gridcell"></div>
+        <div class="col-date" role="gridcell"></div>
+        <div class="col-ref" role="gridcell"></div>
+        <div class="col-memo" role="gridcell">
+          <span class="unit-hint">
+            {$t('ledger.quantity_in', { unit: rowUnit?.symbol || rowUnit?.code || '' })}
+          </span>
+        </div>
+        <div class="col-offset" role="gridcell">
+          <label class="unit-field">
+            <span>{$t('ledger.price')}</span>
+            <input
+              type="number" step="any" bind:value={split.price}
+              oninput={() => recompute(split, 'price')}
+              onfocus={onFocus} class="edit-input edit-amount"
+            />
+          </label>
+        </div>
+        <div class="col-debit" role="gridcell">
+          <label class="unit-field">
+            <span>{$t('ledger.value')} ({reckoningUnit})</span>
+            <input
+              type="number" step="0.01" bind:value={split.value}
+              oninput={() => recompute(split, 'value')}
+              onfocus={onFocus} class="edit-input edit-amount"
+            />
+          </label>
+        </div>
+        <div class="col-credit unit-rate" role="gridcell">
+          {#if info}
+            <span class="implied-rate" class:deviates={info.deviates}>
+              {formatRate(info.implied, rowUnit as never, reckoningUnitObj as never)}
+            </span>
+            {#if acknowledgedRates[split.id] !== info.key}
+              <!-- A forgotten leg still BALANCES — it just distorts this rate. The balance check can't
+                   catch it, so the rate must be confirmed explicitly. -->
+              <button class="btn-confirm-rate" onclick={() => onAcknowledgeRate(split.id, info.key)}>
+                {$t('ledger.confirm_rate')}
+              </button>
+            {:else}
+              <span class="rate-ok">✓</span>
+            {/if}
+            {#if info.deviates && info.reference !== null}
+              <span class="rate-warning" title={$t('ledger.rate_deviates_hint')}>
+                ⚠ {$t('ledger.rate_deviates', { reference: info.reference.toPrecision(6) })}
+              </span>
+            {/if}
+          {/if}
+        </div>
+        <div class="col-balance" role="gridcell"></div>
+      </div>
+    {/if}
   {/each}
   
   <!-- Split mode actions -->
@@ -543,7 +891,10 @@
       {@const totals = getEditTotals()}
       <div class="edit-actions-container">
         <div class="edit-actions-left">
-          <button class="btn-primary" onclick={onSave}>{$t('common.save')}</button>
+          <button class="btn-primary" onclick={onSave} disabled={unconfirmedRates.length > 0}
+                  title={unconfirmedRates.length > 0 ? $t('ledger.confirm_rate_first') : ''}>
+            {$t('common.save')}
+          </button>
           {#if !isNewEntry && onDelete && transactionId}
             <button class="btn-danger" onclick={() => onDelete?.(transactionId!)}>{$t('common.delete')}</button>
           {/if}
@@ -551,12 +902,15 @@
           <button class="btn-secondary" onclick={onAddSplit}>+ {$t('ledger.add_split')}</button>
         </div>
         <div class="edit-totals-right">
-          <span class="total-amount">{unit?.symbol ?? ''}{totals.debits.toFixed(2)}</span>
-          <span class="total-amount">{unit?.symbol ?? ''}{totals.credits.toFixed(2)}</span>
-          {#if Math.abs(totals.balance) <= 1}
-            <span class="balanced">{unit?.symbol ?? ''}0.00 ✓</span>
+          <!-- Totals are VALUES in the reckoning unit — quantities in different units can't be summed. -->
+          <span class="total-amount">{totalsLabel}{totals.debits.toFixed(2)}</span>
+          <span class="total-amount">{totalsLabel}{totals.credits.toFixed(2)}</span>
+          {#if Number.isNaN(totals.balance)}
+            <span class="imbalanced">{$t('ledger.needs_value')} ⚠</span>
+          {:else if Math.abs(totals.balance) <= 1}
+            <span class="balanced">{totalsLabel}0.00 ✓</span>
           {:else}
-            <span class="imbalanced">{unit?.symbol ?? ''}{formatAmount(totals.balance)} ⚠</span>
+            <span class="imbalanced">{totalsLabel}{formatAmount(totals.balance)} ⚠</span>
           {/if}
         </div>
       </div>

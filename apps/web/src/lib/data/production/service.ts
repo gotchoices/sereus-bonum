@@ -23,6 +23,8 @@ import type {
 } from '../types';
 import type { Database, SqlValue } from '@quereus/quereus';
 import { getQuereusDb, closeQuereusDb, all, get, run, uuid, nowIso, ensureBalanceMV, dropBalanceMV, BALANCE_MV, ensureMonthlyMV, dropMonthlyMV, MONTHLY_MV } from './db';
+import { valueReport, assertBalanced } from '$lib/report/convert';
+import type { NativeAccountBalance } from '$lib/report/convert';
 import { log } from '$lib/logger';
 
 const NOT_IMPLEMENTED = 'Quereus backend: method not yet implemented (Track C2)';
@@ -435,7 +437,7 @@ class QuereusDataService implements DataService {
   async getTransactions(entityId: string, options?: {
     accountId?: string; startDate?: string; endDate?: string; limit?: number;
   }): Promise<Transaction[]> {
-    let sql = 'SELECT DISTINCT t.id, t.entity_id, t.date, t.memo, t.reference, t.created_at, t.updated_at FROM txn t';
+    let sql = 'SELECT DISTINCT t.id, t.entity_id, t.date, t.memo, t.reference, t.value_unit, t.created_at, t.updated_at FROM txn t';
     const params: SqlValue[] = [entityId];
     const conds = ['t.entity_id = ?'];
     if (options?.accountId) { sql += ' JOIN entry e ON e.txn_id = t.id'; conds.push('e.account_id = ?'); params.push(options.accountId); }
@@ -453,26 +455,27 @@ class QuereusDataService implements DataService {
   }
 
   async createTransaction(data: TransactionInput, entries: EntryInput[]): Promise<Transaction> {
-    const total = entries.reduce((sum, e) => sum + e.amount, 0);
-    if (Math.abs(total) > 0.001) throw new Error(`Transaction entries do not balance: ${total}`);
+    assertBalanced(entries, data.valueUnit);
     const db = this.getDb();
     const id = uuid();
     const ts = nowIso();
-    await run(db, 'INSERT INTO txn (id, entity_id, date, memo, reference, source_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, data.entityId, data.date, data.memo ?? null, data.reference ?? null, data.sourceId ?? null, ts, ts]);
+    await run(db, 'INSERT INTO txn (id, entity_id, date, memo, reference, value_unit, source_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, data.entityId, data.date, data.memo ?? null, data.reference ?? null, data.valueUnit ?? null,
+        data.sourceId ?? null, ts, ts]);
     for (const e of entries) {
-      await run(db, 'INSERT INTO entry (id, txn_id, account_id, amount, entity_id, date, period, note, tag_id, reconciliation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [uuid(), id, e.accountId, e.amount, data.entityId, data.date, data.date.slice(0, 7), e.note ?? null, e.tagId ?? null, e.reconciliationId ?? null]);
+      await run(db, 'INSERT INTO entry (id, txn_id, account_id, amount, value, entity_id, date, period, note, tag_id, reconciliation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [uuid(), id, e.accountId, e.amount, e.value ?? null, data.entityId, data.date, data.date.slice(0, 7), e.note ?? null, e.tagId ?? null, e.reconciliationId ?? null]);
     }
     return (await this.getTransaction(id))!;
   }
 
   async updateTransaction(id: string, data: Partial<TransactionInput>, entries?: EntryInput[]): Promise<Transaction> {
     if (entries) {
-      const total = entries.reduce((sum, e) => sum + e.amount, 0);
-      if (Math.abs(total) > 0.001) throw new Error(`Transaction entries do not balance: ${total}`);
+      // The reckoning unit may be changing in this same update, so prefer the incoming value.
+      const valueUnit = 'valueUnit' in data ? data.valueUnit : (await this.getTransaction(id))?.valueUnit;
+      assertBalanced(entries, valueUnit);
     }
-    const cols: Record<string, string> = { date: 'date', memo: 'memo', reference: 'reference' };
+    const cols: Record<string, string> = { date: 'date', memo: 'memo', reference: 'reference', valueUnit: 'value_unit' };
     const sets: string[] = [];
     const vals: SqlValue[] = [];
     for (const [key, col] of Object.entries(cols)) {
@@ -491,8 +494,8 @@ class QuereusDataService implements DataService {
         const txnRow = await get<{ entity_id: string; date: string }>(db, 'SELECT entity_id, date FROM txn WHERE id = ?', [id]);
         const ed = txnRow?.entity_id ?? null, dt = txnRow?.date ?? null;
         for (const e of entries) {
-          await run(db, 'INSERT INTO entry (id, txn_id, account_id, amount, entity_id, date, period, note, tag_id, reconciliation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [uuid(), id, e.accountId, e.amount, ed, dt, dt ? dt.slice(0, 7) : null, e.note ?? null, e.tagId ?? null, e.reconciliationId ?? null]);
+          await run(db, 'INSERT INTO entry (id, txn_id, account_id, amount, value, entity_id, date, period, note, tag_id, reconciliation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [uuid(), id, e.accountId, e.amount, e.value ?? null, ed, dt, dt ? dt.slice(0, 7) : null, e.note ?? null, e.tagId ?? null, e.reconciliationId ?? null]);
         }
       }
       await run(db, 'COMMIT');
@@ -557,7 +560,7 @@ class QuereusDataService implements DataService {
   }
 
   // Aggregation done in JS (avoids Quereus GROUP BY quirks).
-  async getBalanceSheet(entityId: string, endDate?: string, startDate?: string): Promise<BalanceSheetData> {
+  async getBalanceSheet(entityId: string, endDate?: string, startDate?: string, displayUnit?: string): Promise<BalanceSheetData> {
     const end = endDate || new Date().toISOString().split('T')[0];
     const db = this.getDb();
     const accts = await all<Row>(db,
@@ -668,40 +671,40 @@ class QuereusDataService implements DataService {
     }
     log.data.info(`[BalanceSheet] ${startDate ? 'income-stmt' : 'balance-sheet'} end=${end} regime=${regime.trim()} ${Math.round(performance.now() - t0)}ms`);
 
-    const accountBalances: AccountBalance[] = [];
-    const groupTotals = new Map<string, GroupBalance>();
-    let totalAssets = 0, totalLiabilities = 0, totalEquity = 0, totalIncome = 0, totalExpense = 0;
-    for (const a of accts) {
-      const balance = balByAccount.get(a.id) ?? 0;
-      accountBalances.push({
-        accountId: a.id, accountName: a.name, accountCode: a.code ?? undefined,
-        groupId: a.group_id, groupName: a.group_name, accountType: a.account_type, balance, unit: a.unit,
-      });
-      if (!groupTotals.has(a.group_id)) {
-        groupTotals.set(a.group_id, { groupId: a.group_id, groupName: a.group_name, accountType: a.account_type, balance: 0 });
-      }
-      groupTotals.get(a.group_id)!.balance += balance;
-      switch (a.account_type) {
-        case 'ASSET': totalAssets += balance; break;
-        case 'LIABILITY': totalLiabilities += balance; break;
-        case 'EQUITY': totalEquity += balance; break;
-        case 'INCOME': totalIncome += balance; break;
-        case 'EXPENSE': totalExpense += balance; break;
-      }
-    }
+    // Value the native balances in the chosen display unit. For a single-unit entity every account
+    // already holds the display unit, so this is an identity pass — no estimates, no gain/loss line.
+    const entity = await this.getEntity(entityId);
+    const display = displayUnit ?? entity?.baseUnit ?? 'USD';
+    const nativeBalances: NativeAccountBalance[] = accts.map((a) => ({
+      accountId: a.id, accountName: a.name, accountCode: a.code ?? undefined,
+      groupId: a.group_id, groupName: a.group_name, accountType: a.account_type,
+      balance: balByAccount.get(a.id) ?? 0, unit: a.unit,
+    }));
+    const needsRates = nativeBalances.some((b) => b.unit !== display);
+    const [units, rates] = needsRates
+      ? await Promise.all([this.getUnits(), this.getExchangeRates({ asOf: end })])
+      : [[], []];
+    const valued = valueReport(nativeBalances, display, rates, units, end);
+    const { accountBalances, groupBalances } = valued;
+    const { assets: totalAssets, liabilities: totalLiabilities, equity: totalEquity,
+      income: totalIncome, expense: totalExpense } = valued.totals;
     // Present credit-normal totals by NEGATING the signed sum (not Math.abs): abs is only correct when
     // a total has its usual sign, but equity/liabilities/income can legitimately be net-debit (e.g. a
     // debit-heavy equity account or an accumulated deficit). Negation keeps the balance-sheet identity
     // Assets = -(Liabilities + Equity + Income + Expense_signed) exact in every case.
     return {
       entityId, endDate: end, startDate: startDate || undefined,
+      displayUnit: display,
+      unrecognizedGainLoss: valued.unrecognizedGainLoss,
+      unvaluedUnits: valued.unvaluedUnits,
+      totalsArePartial: valued.totalsArePartial,
       netWorth: totalAssets + totalLiabilities,
       totalAssets,
       totalLiabilities: -totalLiabilities,
       totalEquity: -totalEquity,
       totalIncome: -totalIncome,
       totalExpense,
-      groupBalances: Array.from(groupTotals.values()),
+      groupBalances,
       accountBalances,
     };
   }

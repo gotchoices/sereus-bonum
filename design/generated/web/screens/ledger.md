@@ -1,5 +1,6 @@
 ---
 dependsOn:
+  - design/specs/domain/units.md
   - design/specs/web/screens/ledger.md
   - design/stories/web/03-entries.md
   - design/stories/web/02-gnucash.md
@@ -218,3 +219,24 @@ save/cancel shortcuts are not yet (see gaps). See
   unchanged. See docs/STATUS.md and the Quereus store-join-perf memo.
 </content>
 </invoke>
+
+## Multi-Unit Entry (built 2026-08-11)
+
+Spec: [ledger.md](../../../specs/web/screens/ledger.md) · [transaction-edit.md](../../../specs/web/components/transaction-edit.md#multi-unit-entries) · [domain/units.md](../../../specs/domain/units.md)
+
+- **Header** shows the balance in the account's OWN unit via `formatAmount(balance, unit)` from
+  `$lib/report/format` — decimals come from `Unit.displayDivisor` (4 for a security, 0 for yen), and a
+  namespaced code (`NYSE:VPER`) is never passed to `Intl` as a currency. When the account's unit differs
+  from the entity's base unit, `baseUnitEstimate` renders a marked `≈` estimate beside it (title carries
+  the rate path + as-of date).
+- **`reckoningUnit`** (`$derived`) picks the entity `baseUnit` when the legs touch it, else the leg with
+  the finest divisor. `isMultiUnitEdit` gates all multi-unit chrome — a single-unit ledger sees none.
+- **`unitByAccount`** maps accountId → unit code so a split row knows whether it needs a value.
+- **`getEditBalance` / `getEditTotals`** work on VALUES in the reckoning unit (`legValue`). A leg in a
+  non-reckoning unit with no value yields `NaN`, which blocks the save rather than counting as zero.
+- **Simple mode mirrors the VALUE, not the quantity** (`isSimpleEntry`): the implied offset is
+  `-(value)` in its own unit, so a 2-leg stock buy balances.
+- **`saveEdit`** writes `Entry.value` only where the row's unit ≠ reckoning unit, and `Transaction.valueUnit`
+  only for genuinely multi-unit transactions.
+- `TransactionEditor` receives `reckoningUnit`, `reckoningUnitObj`, `unitForAccount`, `referenceRate`,
+  `acknowledgedRates`, `onAcknowledgeRate` — **all three instances** on this screen.

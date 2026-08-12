@@ -1,5 +1,6 @@
 ---
 dependsOn:
+  - design/specs/domain/units.md
   - design/specs/web/screens/accounts-view.md
   - design/specs/web/screens/saved-reports-ux.md
   - design/stories/web/01-firstlook.md
@@ -147,3 +148,20 @@ the shared group taxonomy in the **Catalog** (`catalog.md`). See
 - **Saved-reports polish** — Manage Reports modal, rename/duplicate (today: save under a new name).
 - **Sticky top header row** on vertical scroll (only the name column sticks horizontally today).
 - **Future (spec):** graphs/charts, drill-down on variance, report sharing / scheduling / templates.
+
+## Multi-Unit Reporting (built 2026-08-11)
+
+Spec: [accounts-view.md](../../../specs/web/screens/accounts-view.md#display-unit) · [domain/units.md](../../../specs/domain/units.md)
+
+- **Display unit** (`displayUnit` state, persisted per entity) is passed as the 4th argument to
+  `getBalanceSheet`. `''` means "follow the entity base unit"; the service resolves it and the page
+  adopts the result so the `<select>` has a concrete bound value. `unitOptionLabel` falls back to the
+  full code when two markets share a ticker.
+- **Roll-ups use `convertedBalance`, never the native amount** — quantities in different units cannot be
+  summed. An account with `convertedBalance === null` is omitted from `rawByCol` entirely so it can
+  never contribute a bogus zero.
+- **Facts vs estimates:** account rows show the native quantity (`nativeLabelFor`) as plain text; the
+  amount column carries the `≈` marker (`.gamount.rr-est`). Unvalued rows render `—`, never `$0.00`.
+- **Unrecognized Gain/Loss** is a derived equity row (`key: 'ugl'`, `derived: true`) emitted only when
+  `isMultiUnit` and non-zero. `liabPlusEquityOf` includes it, so the Verification line reads Balanced.
+- **`unvalued-banner`** lists units with no rate path and links to Settings.

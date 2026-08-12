@@ -45,8 +45,12 @@ Home Finance > Assets : Current Assets : Checking 1010
 - **Account code** (1010)
 
 ### Account Units/Total Context (Line 2 right)
-- Unit symbol: `USD`, `$`
-- Account balance: Updates in real-time
+- **Unit**: the account's own unit — `USD` / `$` for a cash account, `VPER` for a stock account,
+  `CHIP` for a CHIP account. This is the unit every amount in this ledger is expressed in.
+- Account balance: Updates in real-time, in that unit (`2,000,000.0000 VPER`, not a dollar figure)
+- When the account's unit is **not** the entity's base unit, an estimated base-unit value may be shown
+  alongside the balance, visibly marked as an estimate (`≈ $27,000`) with the rate's date inspectable.
+  It is never shown as though it were the balance. See [domain/units.md](../../domain/units.md).
 
 ### Transaction Header
 Header contains the column headers for transactions/splits as shown below.
@@ -248,12 +252,31 @@ It is also distinguished by a blue border while in editing mode.
 └──────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
+**Multi-unit split edit** — rows whose account holds a different unit than the transaction reckons in
+gain Quantity / Price / Value fields; the user fills any two. Reckoning unit is shown and editable.
+Full behavior in [Transaction Editor → Multi-Unit Entries](../components/transaction-edit.md#multi-unit-entries).
+```
+┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│   | [Date▼] | [Ref_] | [Memo: Sell VPER] |            Reckoned in: [USD ▼]                       │
+│   |         |        |                   | [Schwab_______▼]    |  4,200.19 |           | [×]     │
+│   |         |        | Note: [Broker___] | [Fees_________▼]    |     30.01 |           | [×]     │
+│   |         |        |                   | [Stock: VPER__▼]  qty [12,800.0000] × [0.013500]      │
+│   |         |        |                   |                   = value |           |    172.80 | [×]│
+│   |         |        |                   |          ⓘ implied 1 VPER = $0.013500   [ Confirm ]   │
+│   ───────────────────────────────────────────────────────────────────────────────────────────────│
+│   | [Save] [+ Split] [Cancel] [Delete]            Totals:      | $4,230.20 | $4,230.20 | $0.00 ✓ │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
 **Actions Footer:**
 - **Left side:** Action buttons in order: [Save] [+ Split] [Cancel] [Delete]
 - **Right side:** Running totals and balance indicator
-  - Debits total: Sum of all debit amounts
-  - Credits total: Sum of all credit amounts
-  - Balance: Difference (green ✓ when $0.00, red ⚠ when imbalanced)
+  - Debits total: Sum of all debit **values**, in the reckoning unit
+  - Credits total: Sum of all credit **values**, in the reckoning unit
+  - Balance: Difference (green ✓ when zero, red ⚠ when imbalanced), labelled with the reckoning
+    unit's symbol — `$0.00 ✓` for a USD transaction, `0.0000 VPER ✓` for one reckoned in shares
+  - Totals are in the reckoning unit because quantities in different units cannot be summed. For a
+    single-unit transaction (the common case) value = amount and this is the familiar dollar total.
 
 **Editing behavior:**
 - Colored border indicates edit mode

@@ -1,5 +1,6 @@
 ---
 dependsOn:
+  - design/specs/domain/units.md
   - design/specs/web/screens/import.md
   - design/specs/domain/import.md
   - design/stories/web/02-gnucash.md
@@ -158,3 +159,19 @@ from the same `ImportService.buildMergePlan` result that `executeMerge` consumes
 - `apps/web/scripts/test-hierarchy.mjs` — end-to-end via the preview flow: `Assets:Fixed Assets:Jeppson:AOF Loan`
   → group Fixed Assets, account Jeppson with child AOF Loan (assertions pass).
 - Real `Kyle.gnucash` (161 accounts / 17,756 txns) imports cleanly on quereus-local.
+
+## Multi-Unit Import (built 2026-08-11)
+
+Spec: [import.md](../../../specs/domain/import.md#books-units--multi-unit-transactions) · [domain/units.md](../../../specs/domain/units.md)
+
+- `gnucash-parser.ts` maps commodities → units (namespaced for securities, `cmdty:fraction` →
+  `displayDivisor`), reads BOTH `split:value` and `split:quantity`, carries `trn:currency` as the
+  reckoning unit, and imports the price database as reference rates.
+- `rationalToSmallestUnit` rescales through the TARGET unit's divisor. The previous fixed `/100`
+  corrupted 10000-SCU share counts.
+- DOM lookups resolve by **direct-child localName** (`child()`), not descendant CSS: a namespaced
+  document makes `querySelector('id')` inside a transaction match `cmdty:id` as readily as `trn:id`.
+- `pickBaseUnit` chooses the currency most accounts are denominated in — never a ticker.
+- `bulkImport` writes units first, then accounts/txns/entries (with `value`), then rates.
+- Verified on `tmp/Loan_Investments.gnucash`: 11,011/11,011 transactions, 0 incomplete, 0 errors,
+  0 unbalanced; share balances match the source exactly.

@@ -115,6 +115,15 @@ export default {
     total_income: 'Total Income',
     total_expenses: 'Total Expenses',
     retained_earnings: 'Retained Earnings',
+    // Multi-unit reporting (design/specs/web/screens/accounts-view.md § Display Unit)
+    display_in: 'Display in',
+    unrecognized_gain_loss: 'Unrecognized Gain/Loss',
+    derived: 'derived',
+    derived_hint: 'Computed for this report at these rates — not posted to your books. It makes the converted statement balance.',
+    estimate_via: 'Estimated via {{path}}, rate as of {{date}}',
+    no_rate_path: 'No rate path from {{unit}} to the display unit — excluded from totals',
+    unvalued_warning: 'Totals are partial — no rate to {{display}} for: {{units}}. Shown in native units, excluded from totals.',
+    add_rate: 'Add a rate',
     verification: 'Verification',
     balanced: 'Balanced',
     imbalance: 'Imbalance',
@@ -203,6 +212,16 @@ export default {
   },
 
   ledger: {
+    // Multi-unit entry (design/specs/web/components/transaction-edit.md § Multi-Unit Entries)
+    quantity_in: 'Quantity in {{unit}}',
+    price: 'Price',
+    value: 'Value',
+    confirm_rate: 'Confirm rate',
+    confirm_rate_first: 'Confirm the implied exchange rate before saving',
+    rate_deviates: 'differs from known {{reference}}',
+    rate_deviates_hint: 'This implied rate is far from the most recent reference rate. A forgotten entry (a fee, a commission) still balances — it just hides inside a distorted rate. Check the transaction is complete.',
+    needs_value: 'Needs a value',
+    needs_value_alert: 'An entry is in a different unit and has no value yet. Enter its value (or a price) so the transaction can balance.',
     title: 'Ledger',
     back_to_accounts: 'Back to Accounts View',
     running_balance: 'Balance',

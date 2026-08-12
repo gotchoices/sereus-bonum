@@ -178,14 +178,37 @@ export interface AccountBalance {
   groupId: string;
   groupName: string;
   accountType: AccountType;
-  balance: number;             // In smallest unit
+  /** THE FACT: balance in the account's own unit, smallest increment. Never converted. */
+  balance: number;
   unit: string;
+  /**
+   * THE ESTIMATE: `balance` expressed in the report's display unit, smallest increment.
+   * `null` means no rate path existed — show it as unvalued and exclude it from totals.
+   * Never coerce this to 0; that silently understates the books.
+   */
+  convertedBalance?: number | null;
+  /** True when `convertedBalance` came from a rate. False when the account already holds the display unit. */
+  isEstimate?: boolean;
+  /** Date of the stalest quote behind the estimate, and the units traversed — for the UI to expose. */
+  rateAsOf?: string;
+  ratePath?: string[];
 }
 
 export interface BalanceSheetData {
   entityId: string;
   endDate: string;            // End date (renamed from asOf for clarity)
   startDate?: string;         // Optional start date for period-based reports
+  /** Unit every total below is expressed in. Defaults to the entity's baseUnit. */
+  displayUnit: string;
+  /**
+   * Derived equity plug that makes a converted statement balance, credit-normal like `totalEquity`.
+   * Computed at render, NEVER posted. Zero for single-unit books.
+   */
+  unrecognizedGainLoss: number;
+  /** Units held that couldn't reach `displayUnit` — flagged for the user, excluded from totals. */
+  unvaluedUnits: string[];
+  /** True when some account was excluded from the totals for want of a rate. */
+  totalsArePartial: boolean;
   netWorth: number;
   totalAssets: number;
   totalLiabilities: number;
@@ -200,7 +223,12 @@ export interface GroupBalance {
   groupId: string;
   groupName: string;
   accountType: AccountType;
+  /** In the display unit, excluding any descendant with no rate path. */
   balance: number;
+  /** At least one descendant was converted, so this subtotal is an estimate. */
+  hasEstimate?: boolean;
+  /** At least one descendant had no rate path and is missing from this subtotal. */
+  hasUnvalued?: boolean;
 }
 
 // =============================================================================
@@ -309,7 +337,8 @@ export interface DataService {
   getBalanceSheet(
     entityId: string, 
     endDate?: string,      // End date (formerly 'asOf')
-    startDate?: string     // Optional start date for period-based filtering
+    startDate?: string,    // Optional start date for period-based filtering
+    displayUnit?: string   // Unit to render in; defaults to the entity's baseUnit
   ): Promise<BalanceSheetData>;
   
   // Ledger view

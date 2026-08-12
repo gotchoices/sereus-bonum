@@ -108,6 +108,72 @@ always resolves to the current year's end, not a frozen date. The stored value i
 - Date fields (basis + fixed date) persist per entity in local storage
 - Changing the basis reloads immediately; editing a fixed date reloads on blur (not per keystroke)
 
+## Display Unit
+
+Reports are rendered **in a unit of the user's choosing**. A set of books is never bound to one unit —
+`Entity.baseUnit` is only the default selection. The rules are in
+[domain/units.md](../../domain/units.md#rendering-reports-in-a-chosen-unit).
+
+**Selector:** a unit picker sits on the toolbar beside the date inputs, defaulting to the entity's base
+unit and persisting per entity (local storage). It offers every unit the entity actually holds, plus any
+unit with a reference rate reaching one of them.
+
+```
+┌─────────────────┐  ┌─────────────────┐
+│ As of:          │  │ Display in:     │
+│ [2026-08-11 ▼] │  │ [USD ▼]         │
+└─────────────────┘  └─────────────────┘
+```
+
+**Facts first, estimates second.** An account's balance in its own unit is a recorded fact. A figure
+converted into a different display unit is an estimate. Both appear, and they are never confusable:
+
+```
+  Investments                                         310,400
+    Prospect Capital        2,500.0000 PSEC    ≈       18,750
+    Viper Networks      2,000,000.0000 VPER    ≈        2,400
+    iShares Silver          1,200.0000 SLV     ≈       35,600
+    Cash — Schwab                                     102,500
+```
+
+- Accounts whose unit **is** the display unit show a single plain figure — no marker, nothing changes
+  for single-unit books.
+- Accounts in another unit show the **native quantity** with its unit, then the converted estimate
+  marked with `≈`.
+- The rate behind any estimate is inspectable (hover/expand): its value, date, and source.
+- Rolled-up subtotals and group totals are in the display unit and are estimates whenever any
+  descendant was converted; they carry the same marker.
+
+**Rates are as of the report date, not today.** A balance sheet as of last December values holdings at
+December rates. Changing the "As of" date re-selects rates as well as re-summing entries.
+
+**Missing rates are flagged, never silently dropped.** If an account's unit has no path to the display
+unit as of the report date, its native balance still shows, it is marked (⚠), it is **excluded** from
+converted totals, and the report states that totals are partial. It is never treated as zero.
+
+## Unrecognized Gain/Loss
+
+Converted balance sheets do not balance on their own: holdings are revalued at report-date rates while
+the equity that funded them was recorded at historical cost. Bonum closes the difference with a derived
+equity line.
+
+```
+  Equity
+    Owner's Equity                                    280,300
+    Retained Earnings                                  41,300
+    Unrecognized Gain/Loss  (derived, estimate)        51,300
+```
+
+- **Computed at render, never posted.** No transaction is written; it recomputes whenever the display
+  unit or report date changes.
+- Labelled as both **derived** and an **estimate**, and not clickable — it has no ledger.
+- **Absent (not zero-rendered) when every account's unit is the display unit** — single-unit books never
+  see this line.
+- It appears on Balance Sheet and Trial Balance. The Income Statement, whose accounts are almost always
+  already in the display unit, shows it only if income/expense accounts were themselves converted.
+- A user who wants a valuation locked into the books posts an ordinary revaluation transaction instead;
+  this line then measures only movement since that posting.
+
 ## Account Display
 
 **Hierarchy — one logical path:** Type → Account Group (nested to any depth) → Account (nested by parent
@@ -155,7 +221,7 @@ A **⚙ View** menu on the toolbar holds display filters and the variance-column
 entity (local storage). (Relative dates live on each date field's basis selector — see § Date Inputs — not
 here.)
 
-**Hide zero-balance accounts:** when on, accounts and groups whose rolled-up total is $0 are suppressed
+**Hide zero-balance accounts:** when on, accounts and groups whose rolled-up total is zero are suppressed
 (a group is kept if any descendant survives). Account-type sections (Assets/Liabilities/…) always remain as
 the report skeleton. Off by default.
 

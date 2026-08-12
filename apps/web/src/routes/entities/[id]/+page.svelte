@@ -12,7 +12,9 @@
     loadAccounts
   } from '$lib/stores/accounts';
   import { getDataService, type AccountType, type BalanceSheetData } from '$lib/data';
+  import { units, loadUnits } from '$lib/stores/units';
   import { presentBalance, formatVariance } from '$lib/report/present';
+  import { formatAmount, formatRate, unitLookup } from '$lib/report/format';
   import { isoOf, endTokens, startTokens, migrateField, resolveColumnChain } from '$lib/report/dates';
   import { loadViewState, saveViewState } from '$lib/stores/viewState';
   import { savedReports, upsertReport, deleteReport, touchReport, type SavedReport, type DateFieldValue } from '$lib/stores/savedReports';
@@ -53,11 +55,17 @@
   let reportMode = $state<ReportMode>('balance_sheet');
   let columns = $state<ReportColumn[]>([makeColumn('')]);
   let varianceFormat = $state<VarianceFormat>('both');
+  // Display unit for the whole report. Books are never bound to one unit — the entity's baseUnit is
+  // just the default. See design/specs/web/screens/accounts-view.md § Display Unit.
+  let displayUnit = $state<string>('');
   let retainedEarningsExpanded = $state(false);
 
   // Per-column balance data (index-aligned with `columns`).
   let balanceByColumn = $state<(BalanceSheetData | null)[]>([]);
   let balanceLoading = $state(true);
+  /** What the report is actually rendered in: the user's pick, else whatever the data came back as. */
+  let effectiveUnit = $derived(
+    displayUnit || balanceByColumn.find((b) => b)?.displayUnit || entity?.baseUnit || 'USD');
 
   // Display filters (persisted per entity) — surfaced via the ⚙ View menu.
   let hideZeroBalance = $state(false);   // suppress accounts/groups whose total is $0
@@ -83,6 +91,9 @@
       hideZeroBalance = loadViewState(`accounts-hidezero-${entityId}`, false);
       showClosedAccounts = loadViewState(`accounts-showclosed-${entityId}`, false);
       varianceFormat = loadViewState<VarianceFormat>(`accounts-varfmt-${entityId}`, 'both');
+      // '' means "follow the entity's base unit" — the entity may not be loaded yet, and the data
+      // service already applies that default, so don't freeze a guess here.
+      displayUnit = loadViewState(`accounts-displayunit-${entityId}`, '');
 
       // Restore columns, migrating older persisted shapes: {columns} → {endField,startField} → {endDate,startDate}.
       const saved = loadViewState<any>(`accounts-dates-${entityId}`, null);
@@ -123,8 +134,10 @@
     const rc = resolvedColumns;
     balanceByColumn = await Promise.all(columns.map((_, i) => {
       const start = rc[i].start && rc[i].start! <= rc[i].end ? rc[i].start : undefined;
-      return ds.getBalanceSheet(entityId, rc[i].end, start);
+      return ds.getBalanceSheet(entityId, rc[i].end, start, displayUnit || undefined);
     }));
+    // Adopt whatever the service resolved (the entity's baseUnit) so the selector has a concrete value.
+    if (!displayUnit) displayUnit = balanceByColumn.find((b) => b)?.displayUnit ?? '';
   }
 
   async function loadEntityData() {
@@ -133,6 +146,7 @@
     try {
       const ds = await getDataService();
       await loadAccounts(entityId);
+      await loadUnits();
       await loadColumns(ds);
       log.ui.debug('[Accounts] Balance data loaded for', columns.length, 'column(s)');
     } catch (e) {
@@ -383,7 +397,7 @@
   // Per-column arrays for the type header + verification (index-aligned with `columns`).
   const typeTotals = (type: AccountType): number[] => balanceByColumn.map((bd) => typeTotalOf(bd, type));
   const liabPlusEquityOf = (bd: BalanceSheetData | null): number =>
-    bd ? bd.totalLiabilities + bd.totalEquity + netIncomeOf(bd) : 0;
+    bd ? bd.totalLiabilities + bd.totalEquity + netIncomeOf(bd) + (bd.unrecognizedGainLoss ?? 0) : 0;
   const isBalancedOf = (bd: BalanceSheetData | null): boolean =>
     !bd || Math.abs(bd.totalAssets - liabPlusEquityOf(bd)) < 0.01;
   const imbalanceOf = (bd: BalanceSheetData | null): number =>
@@ -404,6 +418,9 @@
     toggleId?: string;      // set → row is expand/collapse-able (group id, parent-account id, or 're')
     expanded?: boolean;
     direct?: boolean;       // synthetic "(direct)" row: a parent account's own postings
+    derived?: boolean;      // computed at render (Unrecognized Gain/Loss) — not a ledger, not clickable
+    estimate?: boolean;     // this figure came from a rate — render it marked, never as a bare fact
+    unvalued?: boolean;     // no rate path: there is NO figure. Render a dash, never 0.
   }
 
   const byDisplay = (a: { displayOrder?: number; name: string }, b: { displayOrder?: number; name: string }) =>
@@ -420,9 +437,15 @@
     // just two flavours of node on the same path — emitGroup/emitAccount are parallel and each handle
     // collapse, rolled-up subtotal, and the expand toggle identically (differ only by kind + children).
     // Every amount is an array with one entry per report column.
+    // Roll-ups use the CONVERTED balance: quantities in different units cannot be summed. An account
+    // with no rate path has convertedBalance null and is left OUT of the map entirely, so it never
+    // contributes a bogus zero to a subtotal (it is surfaced separately — see unvaluedUnits).
     const rawByCol = balanceByColumn.map((bd) => {
       const m = new Map<string, number>();
-      if (bd) for (const ab of bd.accountBalances) m.set(ab.accountId, ab.balance);
+      if (bd) for (const ab of bd.accountBalances) {
+        const v = ab.convertedBalance ?? (ab.unit === (bd.displayUnit ?? '') ? ab.balance : null);
+        if (v !== null) m.set(ab.accountId, v);
+      }
       return m;
     });
     const cols = rawByCol.map((_, i) => i);
@@ -439,6 +462,23 @@
     }
     const acctVisible = (a: (typeof $accounts)[number]) => showClosedAccounts || a.isActive;
     const allZero = (arr: number[]) => arr.every((v) => v === 0);
+
+    // Which accounts were converted, and which have no rate at all. An unvalued account has NO figure
+    // in the display unit — rendering its row as 0.00 would read as "this holding is worthless".
+    const estimatedIds = new Set<string>();
+    const unvaluedIds = new Set<string>();
+    for (const bd of balanceByColumn) for (const ab of bd?.accountBalances ?? []) {
+      if (ab.isEstimate) estimatedIds.add(ab.accountId);
+      if (ab.convertedBalance === null && ab.unit !== bd?.displayUnit) unvaluedIds.add(ab.accountId);
+    }
+    // A subtotal is an estimate if anything under it was converted, and is short if anything under it
+    // couldn't be valued at all.
+    const acctSubtree = (a: (typeof $accounts)[number]): string[] =>
+      [a.id, ...(childAccts.get(a.id) ?? []).flatMap(acctSubtree)];
+    const groupSubtree = (gid: string): string[] => [
+      ...(rootAccts.get(gid) ?? []).flatMap(acctSubtree),
+      ...(childGroups.get(gid) ?? []).flatMap((c) => groupSubtree(c.id)),
+    ];
 
     const acctRawCol = (a: (typeof $accounts)[number], ci: number): number =>
       (rawByCol[ci].get(a.id) ?? 0) + (childAccts.get(a.id) ?? []).reduce((s, k) => s + acctRawCol(k, ci), 0);
@@ -464,7 +504,14 @@
         }
         const rolled = cols.map((ci) => presentBalance(acctRawCol(a, ci), type));
         if (hideZeroBalance && allZero(rolled) && childRows.length === 0) return [];
-        return [{ key: `a-${a.id}`, depth, label: a.name, code: a.code || undefined, kind: 'account', accountId: a.id, amounts: rolled, toggleId: kids.length > 0 ? a.id : undefined, expanded }, ...childRows];
+        const sub = acctSubtree(a);
+        return [{
+          key: `a-${a.id}`, depth, label: a.name, code: a.code || undefined, kind: 'account',
+          accountId: a.id, amounts: rolled, toggleId: kids.length > 0 ? a.id : undefined, expanded,
+          estimate: sub.some((id) => estimatedIds.has(id)),
+          // Only a LEAF with no rate is truly figure-less; a parent still has valued children to total.
+          unvalued: unvaluedIds.has(a.id) && sub.every((id) => unvaluedIds.has(id) || !rawByCol.some((m) => m.has(id))),
+        }, ...childRows];
       };
       const emitGroup = (group: (typeof $accountGroups)[number], depth: number): ReportRow[] => {
         if (!groupHasContent(group.id)) return [];
@@ -476,9 +523,23 @@
         }
         const total = cols.map((ci) => presentBalance(groupRawCol(group.id, ci), type));
         if (hideZeroBalance && allZero(total) && childRows.length === 0) return [];
-        return [{ key: `g-${group.id}`, depth, label: group.name, kind: 'group', toggleId: group.id, expanded, amounts: total }, ...childRows];
+        const sub = groupSubtree(group.id);
+        return [{
+          key: `g-${group.id}`, depth, label: group.name, kind: 'group', toggleId: group.id, expanded,
+          amounts: total, estimate: sub.some((id) => estimatedIds.has(id)),
+        }, ...childRows];
       };
       for (const g of ($topLevelGroupsByType.get(type) ?? []).slice().sort(byDisplay)) rows.push(...emitGroup(g, 1));
+      // Unrecognized Gain/Loss — the derived plug that makes a CONVERTED statement balance. Holdings
+      // are revalued at report-date rates while the equity that funded them sits at historical cost;
+      // this line is that difference. Computed at render, never posted, and absent entirely for
+      // single-unit books. See design/specs/domain/units.md § Unrecognized Gain/Loss.
+      if (type === 'EQUITY' && isMultiUnit && showRetainedEarningsInEquity) {
+        const amounts = balanceByColumn.map((bd) => bd?.unrecognizedGainLoss ?? 0);
+        if (!allZero(amounts)) {
+          rows.push({ key: 'ugl', depth: 1, label: $t('accounts.unrecognized_gain_loss'), kind: 'group', amounts, derived: true });
+        }
+      }
       // Retained Earnings pseudo-node under Equity.
       if (type === 'EQUITY' && showRetainedEarningsInEquity) {
         rows.push({ key: 're', depth: 1, label: $t('accounts.retained_earnings'), kind: 'group', amounts: balanceByColumn.map(netIncomeOf), toggleId: retainedEarningsExpandable ? 're' : undefined, expanded: retainedEarningsExpanded });
@@ -529,13 +590,76 @@
     }
   }
 
+  // Unit-aware: `displayDivisor` decides what a stored integer means (100 for dollars, 10000 for a
+  // security), and a namespaced code like "NYSE:VPER" must never reach Intl as a currency.
+  let unitAt = $derived(unitLookup($units));
   function formatCurrency(amount: number, unit: string = 'USD'): string {
-    const value = amount / 100 || 0; // normalize -0 → 0 (avoids "-$0.00")
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: unit,
-      minimumFractionDigits: 2,
-    }).format(value);
+    return formatAmount(amount, unitAt(unit));
+  }
+
+  // --- Multi-unit report context -------------------------------------------
+  // Units this entity actually holds, plus anything reachable by a rate — the display-unit choices.
+  let heldUnits = $derived.by(() => {
+    const held = new Set($accounts.map((a) => a.unit));
+    if (entity) held.add(entity.baseUnit);
+    if (effectiveUnit) held.add(effectiveUnit);
+    return [...held].sort();
+  });
+  let unitOptions = $derived.by(() => {
+    const codes = new Set(heldUnits);
+    // Any unit that appears as a conversion target in a loaded column is also selectable.
+    for (const bd of balanceByColumn) for (const ab of bd?.accountBalances ?? []) {
+      for (const u of ab.ratePath ?? []) codes.add(u);
+    }
+    return [...codes].sort();
+  });
+  // Two markets can list the same ticker (NYSE:VPER and NASDAQ:VPER are both here), so a symbol-only
+  // label would render two indistinguishable options. Fall back to the full code when it collides.
+  let unitOptionLabel = $derived.by(() => {
+    const counts = new Map<string, number>();
+    for (const code of unitOptions) {
+      const sym = unitAt(code)?.symbol || code;
+      counts.set(sym, (counts.get(sym) ?? 0) + 1);
+    }
+    return (code: string) => {
+      const sym = unitAt(code)?.symbol || code;
+      return (counts.get(sym) ?? 0) > 1 ? code : sym;
+    };
+  });
+  // Is any account in a unit other than the display unit? Drives whether multi-unit chrome shows at all.
+  let isMultiUnit = $derived(balanceByColumn.some((bd) =>
+    (bd?.accountBalances ?? []).some((ab) => ab.unit !== bd?.displayUnit)));
+
+  const unvaluedOf = (bd: BalanceSheetData | null): string[] => bd?.unvaluedUnits ?? [];
+  let anyUnvalued = $derived([...new Set(balanceByColumn.flatMap(unvaluedOf))]);
+
+  // Native (recorded) balance of an account in a column, as a string — the FACT beside the estimate.
+  function nativeLabelFor(accountId: string): string | undefined {
+    for (const bd of balanceByColumn) {
+      const ab = bd?.accountBalances.find((x) => x.accountId === accountId);
+      if (ab && ab.unit !== bd?.displayUnit) return formatAmount(ab.balance, unitAt(ab.unit));
+    }
+    return undefined;
+  }
+  function rateTitleFor(accountId: string): string | undefined {
+    for (const bd of balanceByColumn) {
+      const ab = bd?.accountBalances.find((x) => x.accountId === accountId);
+      if (!ab || ab.unit === bd?.displayUnit) continue;
+      if (ab.convertedBalance === null) return $t('accounts.no_rate_path', { unit: ab.unit });
+      if (ab.isEstimate) {
+        return $t('accounts.estimate_via', {
+          path: (ab.ratePath ?? []).join(' → '),
+          date: ab.rateAsOf ?? '',
+        });
+      }
+    }
+    return undefined;
+  }
+
+  async function setDisplayUnit(code: string) {
+    displayUnit = code;
+    saveViewState(`accounts-displayunit-${entityId}`, code);
+    await reloadBalance();
   }
 </script>
 
@@ -565,7 +689,20 @@
           <!-- 'custom' mode deferred (pending scope — see accounts-view.md / saved-reports-ux.md) -->
         </select>
       </div>
-      
+
+      <!-- Display unit. Only shown when the entity actually holds more than one unit — a single-unit
+           book should see no multi-unit chrome at all. -->
+      {#if unitOptions.length > 1}
+        <div class="mode-selector">
+          <label for="display-unit-select">{$t('accounts.display_in')}:</label>
+          <select id="display-unit-select" value={displayUnit} onchange={(e) => setDisplayUnit(e.currentTarget.value)}>
+            {#each unitOptions as code (code)}
+              <option value={code}>{unitOptionLabel(code)}</option>
+            {/each}
+          </select>
+        </div>
+      {/if}
+
       <!-- Saved Reports dropdown -->
       <div class="menu-wrap">
         <button
@@ -746,6 +883,14 @@
       <p class="text-muted">{$t('accounts.create_prompt')}</p>
     </div>
   {:else}
+    <!-- A held unit with no rate path to the display unit is EXCLUDED from the totals rather than
+         counted as zero, so the user has to be told the totals are partial and offered the fix. -->
+    {#if anyUnvalued.length > 0}
+      <div class="unvalued-banner">
+        ⚠ {$t('accounts.unvalued_warning', { units: anyUnvalued.join(', '), display: effectiveUnit })}
+        <a href="/settings" class="link">{$t('accounts.add_rate')}</a>
+      </div>
+    {/if}
     <!-- Report as one aligned grid: name column + one number column per report column. Columns size to
          content and the whole grid scrolls horizontally if it exceeds the viewport. Date selectors sit in
          the header row directly above their number column. -->
@@ -791,14 +936,27 @@
                 {#if row.accountId}
                   <a href="/ledger/{row.accountId}" class="rr-label link" title={row.label}>{row.label}</a>
                 {:else}
-                  <span class="rr-label">{row.label}</span>
+                  <span class="rr-label" class:rr-derived={row.derived}>{row.label}</span>
+                {/if}
+                {#if row.derived}
+                  <span class="rr-tag" title={$t('accounts.derived_hint')}>{$t('accounts.derived')}</span>
+                {/if}
+                {#if row.accountId && nativeLabelFor(row.accountId)}
+                  <!-- The recorded FACT, in the account's own unit — shown plainly and exactly. The
+                       number column carries the ≈ because that is the estimate, not this. -->
+                  <span class="rr-native" title={rateTitleFor(row.accountId)}>{nativeLabelFor(row.accountId)}</span>
                 {/if}
               </div>
               {#each columnSlots as slot (slot.kind === 'data' ? `d${slot.ci}` : `v${slot.a}`)}
                 {#if slot.kind === 'data'}
-                  <div class="gcell gamount">{formatCurrency(row.amounts[slot.ci], entity.baseUnit)}</div>
+                  <div class="gcell gamount" class:rr-est={row.estimate && !row.unvalued}>
+                    {#if row.unvalued}
+                      <!-- No rate path: there is no figure to show. A dash, never 0.00. -->
+                      <span class="rr-unvalued" title={row.accountId ? rateTitleFor(row.accountId) : undefined}>—</span>
+                    {:else}{formatCurrency(row.amounts[slot.ci], effectiveUnit)}{/if}
+                  </div>
                 {:else}
-                  <div class="gcell gamount gv" class:up={row.amounts[slot.b] > row.amounts[slot.a]} class:down={row.amounts[slot.b] < row.amounts[slot.a]}>{formatVariance(row.amounts[slot.a], row.amounts[slot.b], entity.baseUnit, varianceFormat, formatCurrency)}</div>
+                  <div class="gcell gamount gv" class:up={row.amounts[slot.b] > row.amounts[slot.a]} class:down={row.amounts[slot.b] < row.amounts[slot.a]}>{formatVariance(row.amounts[slot.a], row.amounts[slot.b], effectiveUnit, varianceFormat, formatCurrency)}</div>
                 {/if}
               {/each}
             </div>
@@ -812,7 +970,7 @@
             {#each columnSlots as slot (slot.kind === 'data' ? `d${slot.ci}` : `v${slot.a}`)}
               {#if slot.kind === 'data'}
                 {@const bd = balanceByColumn[slot.ci]}
-                <div class="gcell gamount foot-cell" class:imbalanced={!isBalancedOf(bd)}>{#if isBalancedOf(bd)}✓ {$t('accounts.balanced')}{:else}⚠ {formatCurrency(imbalanceOf(bd), entity.baseUnit)}{/if}</div>
+                <div class="gcell gamount foot-cell" class:imbalanced={!isBalancedOf(bd)}>{#if isBalancedOf(bd)}✓ {$t('accounts.balanced')}{:else}⚠ {formatCurrency(imbalanceOf(bd), effectiveUnit)}{/if}</div>
               {:else}
                 <div class="gcell gamount"></div>
               {/if}
@@ -824,9 +982,9 @@
             <div class="gcell gname foot-label">{$t('accounts.net_income')}</div>
             {#each columnSlots as slot (slot.kind === 'data' ? `d${slot.ci}` : `v${slot.a}`)}
               {#if slot.kind === 'data'}
-                <div class="gcell gamount foot-cell" class:negative={netIncomeOf(balanceByColumn[slot.ci]) < 0}>{formatCurrency(netIncomeOf(balanceByColumn[slot.ci]), entity.baseUnit)}</div>
+                <div class="gcell gamount foot-cell" class:negative={netIncomeOf(balanceByColumn[slot.ci]) < 0}>{formatCurrency(netIncomeOf(balanceByColumn[slot.ci]), effectiveUnit)}</div>
               {:else}
-                <div class="gcell gamount gv" class:up={netIncomeOf(balanceByColumn[slot.b]) > netIncomeOf(balanceByColumn[slot.a])} class:down={netIncomeOf(balanceByColumn[slot.b]) < netIncomeOf(balanceByColumn[slot.a])}>{formatVariance(netIncomeOf(balanceByColumn[slot.a]), netIncomeOf(balanceByColumn[slot.b]), entity.baseUnit, varianceFormat, formatCurrency)}</div>
+                <div class="gcell gamount gv" class:up={netIncomeOf(balanceByColumn[slot.b]) > netIncomeOf(balanceByColumn[slot.a])} class:down={netIncomeOf(balanceByColumn[slot.b]) < netIncomeOf(balanceByColumn[slot.a])}>{formatVariance(netIncomeOf(balanceByColumn[slot.a]), netIncomeOf(balanceByColumn[slot.b]), effectiveUnit, varianceFormat, formatCurrency)}</div>
               {/if}
             {/each}
           </div>
@@ -908,6 +1066,39 @@
   .grid-foot .foot-label { color: var(--text-muted); font-weight: 500; }
   .foot-cell { padding-right: var(--space-md); color: var(--success, #22a06b); white-space: nowrap; }
   .foot-cell.imbalanced, .foot-cell.negative { color: var(--danger, #f87171); }
+
+  /* Multi-unit: the native quantity is the FACT; the number column beside it is an estimate. Keeping
+     the fact visually secondary but always present is the whole point — never one without the other. */
+  .rr-native {
+    margin-left: 0.6rem;
+    font-size: 0.8em;
+    color: var(--text-muted, #9ca3af);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  /* The ≈ belongs to the CONVERTED figure, not to the recorded quantity: the quantity is exact. */
+  .gamount.rr-est::before { content: '≈ '; opacity: 0.6; font-weight: 400; }
+  .rr-unvalued { color: var(--text-muted, #9ca3af); cursor: help; }
+  .rr-derived { font-style: italic; }
+  .rr-tag {
+    margin-left: 0.4rem;
+    font-size: 0.7em;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted, #9ca3af);
+    border: 1px solid currentColor;
+    border-radius: 3px;
+    padding: 0 0.25em;
+  }
+  .unvalued-banner {
+    margin: 0.5rem 0;
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    background: var(--warning-bg, rgba(250, 204, 21, 0.12));
+    color: var(--warning-fg, #b45309);
+    font-size: 0.875rem;
+  }
+  .unvalued-banner .link { margin-left: 0.5rem; }
 
   .page-header {
     display: flex;

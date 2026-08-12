@@ -23,6 +23,10 @@ Radial chart showing entity's financial position at a glance.
 **Visual Feedback:**
 - Color-coded by category (Assets = blue, Liabilities = red, Equity = purple)
 - Darker shades indicate larger amounts
+- Areas are proportional, so every account must be in **one** unit to be comparable: the VBS renders in
+  the report's display unit, and a holding with no rate path to it is omitted from the proportions and
+  listed separately as unvalued (never sized as zero). See
+  [accounts-view.md](../screens/accounts-view.md#display-unit).
 - Labels show name + balance (hide on small slices to avoid clutter)
 
 **Interactions:**

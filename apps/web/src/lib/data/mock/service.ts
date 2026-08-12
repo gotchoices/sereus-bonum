@@ -17,6 +17,8 @@ import type {
 import { NORMAL_BALANCE } from '../types';
 import { getDb, saveDb, closeDb, uuid, now } from './sqlite';
 import type { Database } from 'sql.js';
+import { valueReport, assertBalanced } from '$lib/report/convert';
+import type { NativeAccountBalance } from '$lib/report/convert';
 import { log } from '$lib/logger';
 
 class SqliteDataService implements DataService {
@@ -310,7 +312,7 @@ class SqliteDataService implements DataService {
     limit?: number;
   }): Promise<Transaction[]> {
     let sql = `
-      SELECT DISTINCT t.id, t.entity_id, t.date, t.memo, t.reference, t.created_at, t.updated_at, t.source_id
+      SELECT DISTINCT t.id, t.entity_id, t.date, t.memo, t.reference, t.created_at, t.updated_at, t.source_id, t.value_unit
       FROM txn t
     `;
     const params: (string | number)[] = [];
@@ -358,24 +360,22 @@ class SqliteDataService implements DataService {
     const id = uuid();
     const ts = now();
     
-    // Validate entries balance
-    const total = entries.reduce((sum, e) => sum + e.amount, 0);
-    if (Math.abs(total) > 0.001) {
-      throw new Error(`Transaction entries do not balance: ${total}`);
-    }
+    // Validate entries balance IN THE RECKONING UNIT (see domain/units.md).
+    assertBalanced(entries, data.valueUnit);
     
     this.getDb().run(`
-      INSERT INTO txn (id, entity_id, date, memo, reference, source_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `, [id, data.entityId, data.date, data.memo ?? null, data.reference ?? null, data.sourceId ?? null, ts, ts]);
+      INSERT INTO txn (id, entity_id, date, memo, reference, value_unit, source_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [id, data.entityId, data.date, data.memo ?? null, data.reference ?? null, data.valueUnit ?? null,
+        data.sourceId ?? null, ts, ts]);
     
     // Insert entries
     for (const entry of entries) {
       const entryId = uuid();
       this.getDb().run(`
-        INSERT INTO entry (id, txn_id, account_id, amount, note, tag_id, reconciliation_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `, [entryId, id, entry.accountId, entry.amount, entry.note ?? null,
+        INSERT INTO entry (id, txn_id, account_id, amount, value, note, tag_id, reconciliation_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [entryId, id, entry.accountId, entry.amount, entry.value ?? null, entry.note ?? null,
           entry.tagId ?? null, entry.reconciliationId ?? null]);
     }
     
@@ -385,8 +385,8 @@ class SqliteDataService implements DataService {
   
   async updateTransaction(id: string, data: Partial<TransactionInput>, entries?: EntryInput[]): Promise<Transaction> {
     if (entries) {
-      const total = entries.reduce((sum, e) => sum + e.amount, 0);
-      if (Math.abs(total) > 0.001) throw new Error(`Transaction entries do not balance: ${total}`);
+      const valueUnit = 'valueUnit' in data ? data.valueUnit : (await this.getTransaction(id))?.valueUnit;
+      assertBalanced(entries, valueUnit);
     }
     const updates: string[] = [];
     const values: (string | null)[] = [];
@@ -394,6 +394,7 @@ class SqliteDataService implements DataService {
     if (data.date !== undefined) { updates.push('date = ?'); values.push(data.date); }
     if (data.memo !== undefined) { updates.push('memo = ?'); values.push(data.memo ?? null); }
     if (data.reference !== undefined) { updates.push('reference = ?'); values.push(data.reference ?? null); }
+    if (data.valueUnit !== undefined) { updates.push('value_unit = ?'); values.push(data.valueUnit ?? null); }
 
     updates.push('updated_at = ?');
     values.push(now());
@@ -406,8 +407,8 @@ class SqliteDataService implements DataService {
         // Replace the transaction's entries wholesale (simplest correct edit).
         db.run('DELETE FROM entry WHERE txn_id = ?', [id]);
         for (const e of entries) {
-          db.run('INSERT INTO entry (id, txn_id, account_id, amount, note, tag_id, reconciliation_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [uuid(), id, e.accountId, e.amount, e.note ?? null, e.tagId ?? null, e.reconciliationId ?? null]);
+          db.run('INSERT INTO entry (id, txn_id, account_id, amount, value, note, tag_id, reconciliation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [uuid(), id, e.accountId, e.amount, e.value ?? null, e.note ?? null, e.tagId ?? null, e.reconciliationId ?? null]);
         }
       }
       db.run('COMMIT');
@@ -615,7 +616,8 @@ class SqliteDataService implements DataService {
   async getBalanceSheet(
     entityId: string, 
     endDate?: string,
-    startDate?: string
+    startDate?: string,
+    displayUnit?: string
   ): Promise<BalanceSheetData> {
     const end = endDate || new Date().toISOString().split('T')[0];
     
@@ -636,6 +638,7 @@ class SqliteDataService implements DataService {
           g.id as group_id,
           g.name as group_name,
           g.account_type,
+          a.unit,
           COALESCE(SUM(
             CASE 
               WHEN g.account_type IN ('ASSET', 'LIABILITY', 'EQUITY') THEN e.amount
@@ -648,7 +651,7 @@ class SqliteDataService implements DataService {
         LEFT JOIN entry e ON e.account_id = a.id
         LEFT JOIN txn t ON t.id = e.txn_id AND t.date <= ?
         WHERE a.entity_id = ? AND a.is_active = 1
-        GROUP BY a.id, a.name, a.code, g.id, g.name, g.account_type
+        GROUP BY a.id, a.name, a.code, g.id, g.name, g.account_type, a.unit
         ORDER BY g.display_order, a.code
       `;
       params = [startDate, end, end, entityId];
@@ -663,13 +666,14 @@ class SqliteDataService implements DataService {
           g.id as group_id,
           g.name as group_name,
           g.account_type,
+          a.unit,
           COALESCE(SUM(e.amount), 0) as balance
         FROM account a
         JOIN account_group g ON g.id = a.account_group_id
         LEFT JOIN entry e ON e.account_id = a.id
         LEFT JOIN txn t ON t.id = e.txn_id AND t.date <= ?
         WHERE a.entity_id = ? AND a.is_active = 1
-        GROUP BY a.id, a.name, a.code, g.id, g.name, g.account_type
+        GROUP BY a.id, a.name, a.code, g.id, g.name, g.account_type, a.unit
         ORDER BY g.display_order, a.code
       `;
       params = [end, entityId];
@@ -678,63 +682,34 @@ class SqliteDataService implements DataService {
     
     const rows = this.getDb().exec(sql, params);
     
-    const accountBalances: AccountBalance[] = [];
-    const groupTotals = new Map<string, GroupBalance>();
-    let totalAssets = 0;
-    let totalLiabilities = 0;
-    let totalEquity = 0;
-    let totalIncome = 0;
-    let totalExpense = 0;
-    
+    // Collect native balances (each in its account's OWN unit), then value them in the display unit.
+    // Single-unit books take an identity pass through valueReport — no estimates, no gain/loss line.
+    const nativeBalances: NativeAccountBalance[] = [];
     if (rows.length && rows[0].values.length) {
       for (const row of rows[0].values) {
-        const accountType = row[5] as AccountType;
-        const balance = row[6] as number;
-        const groupId = row[3] as string;
-        
-        accountBalances.push({
+        nativeBalances.push({
           accountId: row[0] as string,
           accountName: row[1] as string,
           accountCode: row[2] as string | undefined,
-          groupId,
+          groupId: row[3] as string,
           groupName: row[4] as string,
-          accountType,
-          balance,
-          unit: 'USD', // TODO: Get from account
+          accountType: row[5] as AccountType,
+          unit: row[6] as string,
+          balance: row[7] as number,
         });
-        
-        // Aggregate by group
-        if (!groupTotals.has(groupId)) {
-          groupTotals.set(groupId, {
-            groupId,
-            groupName: row[4] as string,
-            accountType,
-            balance: 0,
-          });
-        }
-        groupTotals.get(groupId)!.balance += balance;
-        
-        // Aggregate by type
-        switch (accountType) {
-          case 'ASSET':
-            totalAssets += balance;
-            break;
-          case 'LIABILITY':
-            totalLiabilities += balance;
-            break;
-          case 'EQUITY':
-            totalEquity += balance;
-            break;
-          case 'INCOME':
-            totalIncome += balance;
-            break;
-          case 'EXPENSE':
-            totalExpense += balance;
-            break;
-        }
       }
     }
-    
+
+    const entity = await this.getEntity(entityId);
+    const display = displayUnit ?? entity?.baseUnit ?? 'USD';
+    const needsRates = nativeBalances.some((b) => b.unit !== display);
+    const units = needsRates ? await this.getUnits() : [];
+    const rates = needsRates ? await this.getExchangeRates({ asOf: end }) : [];
+    const valued = valueReport(nativeBalances, display, rates, units, end);
+    const { accountBalances, groupBalances } = valued;
+    const { assets: totalAssets, liabilities: totalLiabilities, equity: totalEquity,
+      income: totalIncome, expense: totalExpense } = valued.totals;
+
     // Calculate net income (Income - Expense)
     // Income is credit (negative), Expense is debit (positive)
     // Net Income = -totalIncome - totalExpense
@@ -753,6 +728,10 @@ class SqliteDataService implements DataService {
       entityId,
       endDate: end,
       startDate: startDate || undefined,
+      displayUnit: display,
+      unrecognizedGainLoss: valued.unrecognizedGainLoss,
+      unvaluedUnits: valued.unvaluedUnits,
+      totalsArePartial: valued.totalsArePartial,
       netWorth,
       totalAssets,
       // Present credit-normal totals by NEGATING the signed sum (not Math.abs) so a net-debit
@@ -762,7 +741,7 @@ class SqliteDataService implements DataService {
       totalEquity: -totalEquity,            // Only equity accounts, no net income
       totalIncome: -totalIncome,            // Add for frontend use
       totalExpense,                         // Add for frontend use
-      groupBalances: Array.from(groupTotals.values()),
+      groupBalances,
       accountBalances,
     };
   }
