@@ -8,7 +8,8 @@
 import { test, expect } from '@playwright/test';
 import { waitForProbe, seedBooks, fixtureExists } from '../support/harness';
 
-const FIXTURE = 'books-10000.json'; // reproducible via `node apps/web/scripts/gen-books.mjs`
+const FIXTURE = 'books-wide.json'; // wide chart (≈100 accts × ~135 months) so the MV is large enough for W4;
+                                   // reproducible via `node apps/web/scripts/gen-books.mjs wide`
 
 type Probe = { rawQuery: (sql: string, params?: unknown[]) => Promise<Record<string, unknown>[]> };
 type Win = { __bonum: Probe };

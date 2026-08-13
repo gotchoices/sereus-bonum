@@ -118,19 +118,96 @@ function generate(count) {
   };
 }
 
-function writeFile(count, outPath) {
-  const books = generate(count);
+// --- Wide chart of accounts (long history) --------------------------------------------------------------
+// The graduated set above uses 9 accounts, so its monthly MV (accounts × months) stays small — the regime
+// where the seek is fine and the MV full-scan workaround (quereus-workarounds.md W4) isn't even justified.
+// This preset spreads ≈100 accounts across the seed leaf groups over a ~20-year span, so the MV grows to
+// tens of thousands of rows and the MV-scale tripwires actually fire. Groups reference the shared seed
+// catalog (mock/seed.ts); types drive funding-vs-target selection so every txn balances.
+const WIDE_LEAF = {
+  ASSET: ['grp-bank', 'grp-cash', 'grp-receivables', 'grp-real-property', 'grp-equipment', 'grp-vehicles', 'grp-inventory', 'grp-other-assets', 'grp-private-credit'],
+  LIABILITY: ['grp-credit-cards', 'grp-accounts-payable', 'grp-loans', 'grp-mortgages', 'grp-deposits', 'grp-other-liab'],
+  EQUITY: ['grp-member-capital', 'grp-adjustments'],
+  INCOME: ['grp-sales', 'grp-employment', 'grp-reimbursements-income', 'grp-adjustments-income'],
+  EXPENSE: ['grp-fixed-expense', 'grp-variable-expense', 'grp-interest', 'grp-tax'],
+};
+const WIDE_COUNTS = { ASSET: 22, LIABILITY: 14, EQUITY: 4, INCOME: 16, EXPENSE: 44 }; // ≈100 accounts
+
+function generateWide(count) {
+  const rand = rng(0x00c0ffee ^ count);
+  const pick = (arr) => arr[Math.floor(rand() * arr.length)];
+  const amt = (min, max) => Math.floor(min + rand() * (max - min));
+  const base = Date.UTC(2005, 0, 1); // long span → many month buckets
+  const date = (day) => new Date(base + day * 86400000).toISOString().slice(0, 10);
+
+  const accounts = [];
+  const byType = { ASSET: [], LIABILITY: [], EQUITY: [], INCOME: [], EXPENSE: [] };
+  let code = 1000;
+  for (const [type, groups] of Object.entries(WIDE_LEAF)) {
+    for (let i = 0; i < WIDE_COUNTS[type]; i++) {
+      const ref = `w-${type.toLowerCase()}-${i}`;
+      accounts.push({ ref, code: String(code++), name: `${type} ${i}`, accountGroupId: pick(groups), unit: 'USD' });
+      byType[type].push(ref);
+    }
+  }
+  const funding = [...byType.ASSET.slice(0, 6), ...byType.LIABILITY.slice(0, 4)];
+
+  const transactions = [];
+  const open = { date: date(0), memo: 'Opening balances', entries: [] };
+  let openTotal = 0;
+  for (const ref of byType.ASSET.slice(0, 10)) { const v = amt(100000, 5000000); open.entries.push({ accountRef: ref, amount: v }); openTotal += v; }
+  open.entries.push({ accountRef: byType.EQUITY[0], amount: -openTotal });
+  transactions.push(open);
+
+  let day = 1;
+  for (let i = 1; i < count; i++) {
+    if (rand() < 0.12) {
+      const v = amt(200000, 800000);
+      transactions.push({ date: date(day), memo: 'Income', reference: `IN-${i}`, entries: [
+        { accountRef: pick(byType.ASSET.slice(0, 6)), amount: v },
+        { accountRef: pick(byType.INCOME), amount: -v },
+      ] });
+    } else {
+      const v = amt(1500, 60000);
+      const target = rand() < 0.85 ? pick(byType.EXPENSE) : pick(byType.ASSET);
+      transactions.push({ date: date(day), memo: 'Purchase', reference: `TX-${i}`, entries: [
+        { accountRef: target, amount: v },
+        { accountRef: pick(funding), amount: -v },
+      ] });
+    }
+    if (rand() < 0.42) day++;
+  }
+
+  return {
+    format: 'bonum-books', version: 1, exportedAt: new Date(base).toISOString(),
+    entity: { name: `Wide Chart ${count}`, description: `Wide-account long-history fixture — ${count} txns`, baseUnit: 'USD', fiscalYearEnd: '12-31', defaultCostingMethod: 'FIFO' },
+    units: [{ code: 'USD', name: 'US Dollar', symbol: '$', unitType: 'FIAT', displayDivisor: 100 }],
+    accounts, transactions,
+  };
+}
+
+function writeBooks(books, outPath) {
   mkdirSync(dirname(outPath), { recursive: true });
   writeFileSync(outPath, JSON.stringify(books));
   const bytes = JSON.stringify(books).length;
-  console.log(`  ${outPath}  (${count} txns, ${(bytes / 1024 / 1024).toFixed(2)} MB)`);
+  const months = new Set(books.transactions.map((t) => t.date.slice(0, 7))).size;
+  console.log(`  ${outPath}  (${books.transactions.length} txns, ${books.accounts.length} accts, ${months} months, ${(bytes / 1024 / 1024).toFixed(2)} MB)`);
+}
+
+function writeFile(count, outPath) {
+  writeBooks(generate(count), outPath);
 }
 
 const arg = process.argv[2];
-if (arg) {
+if (arg === 'wide') {
+  const count = process.argv[3] ? parseInt(process.argv[3], 10) : 10000;
+  const out = process.argv[4] ? resolve(process.argv[4]) : join(TMP, 'books-wide.json');
+  console.log('Generating wide fixture:');
+  writeBooks(generateWide(count), out);
+} else if (arg) {
   const count = parseInt(arg, 10);
   if (!Number.isFinite(count) || count < 1) {
-    console.error('Usage: node scripts/gen-books.mjs <count> [outfile.json]');
+    console.error('Usage: node scripts/gen-books.mjs <count|wide> [count-for-wide] [outfile.json]');
     process.exit(1);
   }
   const out = process.argv[3] ? resolve(process.argv[3]) : join(TMP, `books-${count}.json`);

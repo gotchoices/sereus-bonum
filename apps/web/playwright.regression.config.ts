@@ -11,6 +11,7 @@ const PORT = 5179;
 
 export default defineConfig({
   testDir: './test/regression',
+  globalSetup: './test/support/ensure-fixtures.ts', // generate missing tmp/ fixtures (gitignored) on demand
   workers: 1,
   reporter: [['list']],
   timeout: 120_000, // quereus-local init + fixture seed is slower than the mock e2e tier

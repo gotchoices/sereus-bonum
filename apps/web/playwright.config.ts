@@ -7,6 +7,7 @@ const PORT = 5178;
 
 export default defineConfig({
   testDir: './test/e2e',
+  globalSetup: './test/support/ensure-fixtures.ts', // generate missing tmp/ fixtures (gitignored) on demand
   workers: 1, // shared dev server; keep runs deterministic (data lives per-context, so safe to raise later)
   reporter: [['list']],
   timeout: 60_000,
