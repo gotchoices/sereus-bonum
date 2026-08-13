@@ -6,7 +6,7 @@ import { defineConfig, devices } from '@playwright/test';
 const PORT = 5178;
 
 export default defineConfig({
-  testDir: './e2e',
+  testDir: './test/e2e',
   workers: 1, // shared dev server; keep runs deterministic (data lives per-context, so safe to raise later)
   reporter: [['list']],
   timeout: 60_000,

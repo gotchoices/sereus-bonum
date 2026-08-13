@@ -4,7 +4,8 @@ import { dirname, resolve } from 'node:path';
 import type { Page } from '@playwright/test';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const repoRoot = resolve(here, '../../..');
+// here = apps/web/test/e2e → repo root is four levels up.
+const repoRoot = resolve(here, '../../../..');
 
 /** Load a native books fixture (from repo `tmp/`) as a parsed object. */
 export function fixture(name = 'books-100.json'): unknown {
