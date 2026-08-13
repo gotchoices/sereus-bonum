@@ -195,13 +195,29 @@ export async function closeQuereusDb(): Promise<void> {
 // eval() yields rows (async iterable); exec() runs statements. Both accept a
 // positional params array bound to `?` placeholders.
 
+// Query-economy instrumentation. Cheap integer counters, always maintained; read only via the dev probe
+// (window.__bonum). The quereus-local regression suite (test:regression) asserts a DataService op issues a
+// size-INDEPENDENT number of queries — a per-row query sneaking back in makes the count scale with rows and
+// trips the guard. `rows` is the total materialized across those queries (informational; our full-scan reads
+// are O(table) by design). See design/specs/web/global/testing.md (Part C).
+const _queryStats = { queries: 0, rows: 0 };
+export function getQueryStats(): { queries: number; rows: number } {
+  return { queries: _queryStats.queries, rows: _queryStats.rows };
+}
+export function resetQueryStats(): void {
+  _queryStats.queries = 0;
+  _queryStats.rows = 0;
+}
+
 export async function all<T = Record<string, unknown>>(
   database: Database,
   sql: string,
   params: SqlValue[] = [],
 ): Promise<T[]> {
+  _queryStats.queries++;
   const rows: T[] = [];
   for await (const row of database.eval(sql, params)) rows.push(row as T);
+  _queryStats.rows += rows.length;
   return rows;
 }
 
@@ -210,7 +226,8 @@ export async function get<T = Record<string, unknown>>(
   sql: string,
   params: SqlValue[] = [],
 ): Promise<T | null> {
-  for await (const row of database.eval(sql, params)) return row as T;
+  _queryStats.queries++;
+  for await (const row of database.eval(sql, params)) { _queryStats.rows++; return row as T; }
   return null;
 }
 
@@ -219,6 +236,7 @@ export async function run(
   sql: string,
   params: SqlValue[] = [],
 ): Promise<void> {
+  _queryStats.queries++;
   await database.exec(sql, params);
 }
 

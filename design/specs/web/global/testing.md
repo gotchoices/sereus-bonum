@@ -117,17 +117,46 @@ form of "design to Quereus's philosophy; file cases when it underperforms."
 
 ---
 
+---
+
+## Part C — `quereus-local` regression suite (`test:regression`)
+
+Part A runs on the `mock` backend (fast UX assertions); Part B is a wall-clock **report** (machine-sensitive,
+run on bumps). Neither *gates* on the behavior of the real production engine. Part C fills that gap:
+deterministic, assertion-based tests on the **real `quereus-local` (IndexedDB)** path — the backend whose read
+costs Bonum is shaped around (see `docs/quereus-workarounds.md`).
+
+- **Runner:** `@playwright/test`, own config (`playwright.regression.config.ts`, `VITE_BACKEND=quereus-local`,
+  port 5179), own dir `apps/web/test/regression/`. Self-launches `vite dev`; each test gets a fresh browser
+  context (empty IndexedDB → deterministic) and seeds via `window.__bonum`.
+- **What it asserts (deterministic, machine-independent — NOT wall-clock):**
+  - **Correctness on the real engine** — balance-sheet identity, `account balance == ledger sum` (Part A's
+    integrity check runs on `mock`; this re-checks the production path).
+  - **Query economy** — via `resetQueryStats()`/`getQueryStats()` on the probe (counters live in
+    `production/db.ts` `all/get/run`): a DataService op must issue a **size-INDEPENDENT** number of queries. A
+    per-row query regressing to O(rows) trips the guard, with no reliance on timing.
+- **Workaround tripwires (planned):** each entry in `docs/quereus-workarounds.md` (W1–W8) gets a same-run
+  **ratio** assertion — the workaround still beats the naive path (justifies keeping it) and flips when the
+  naive path catches up (time to revert). Ratios cancel machine drift; this automates the manual revert-tests.
+- **Cadence:** on demand and at each `@quereus/*` / `@optimystic/*` bump (`yarn test:regression`), or via
+  `yarn test:all` (fast suite + regression). Not part of the fast `yarn test`.
+
+---
+
 ## CI posture
 
-- **Every PR:** Tier 1 unit + Tier 2 E2E (against `mock`) + `svelte-check` + `build`. Fast, deterministic.
-- **On engine version bump / nightly:** the perf harness (all backends × sizes) + the `quereus-local`
-  smoke E2E; results diffed against the committed baseline.
+- **Every PR / `yarn test`:** Tier 1 unit + Tier 2 E2E (against `mock`) + `svelte-check`. Fast, deterministic.
+- **On engine version bump (or before a data-layer commit):** `yarn test:regression` (Part C, `quereus-local`)
+  + the Part B perf harness; results diffed against the committed baseline. `yarn test:all` runs the fast
+  suite + Part C together.
 
 ## Layout & commands
 
-- `apps/web/src/lib/**/**.test.ts` — Tier 1 unit tests (co-located with the pure modules).
-- `apps/web/e2e/` — Tier 2/3 `@playwright/test` specs + fixtures.
-- `apps/web/perf/` — the DB perf harness, `perf-results.jsonl`, `baseline.json`.
-- `apps/web/scripts/` — existing ad-hoc `.mjs` harnesses (migrated into the above over time).
-- npm scripts (to be added): `test:unit` (vitest), `test:e2e` (playwright), `perf` (harness). The current
-  `gen-books.mjs` continues to produce the graduated fixtures.
+- `apps/web/src/lib/**/**.test.ts` — Tier 1 unit tests (co-located with the pure modules; `vitest`).
+- `apps/web/test/e2e/` — Tier 2 `@playwright/test` specs (mock backend) + `helpers.ts`.
+- `apps/web/test/regression/` — Part C regression specs (`quereus-local`).
+- `apps/web/test/support/` — shared browser-test helpers (fixture loading + `window.__bonum` bootstrap).
+- `apps/web/perf/` — the Part B wall-clock harness, `perf-results.jsonl`, `baseline.json`.
+- `apps/web/scripts/gen-books.mjs` — graduated fixtures.
+- npm scripts: `test:unit` (vitest), `test:e2e` (playwright/mock), `test` (unit + e2e), `test:regression`
+  (playwright/quereus-local), `test:all` (test + regression), `perf` (Part B harness).

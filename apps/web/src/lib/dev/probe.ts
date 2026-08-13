@@ -18,6 +18,10 @@ export interface BonumProbe {
   importNativeBooks: (file: BonumBooksFile) => Promise<string>;
   /** Raw SQL — quereus backends only (the store is where JOIN cost lives). Lazily imports the quereus db module. */
   rawQuery: (sql: string, params?: unknown[]) => Promise<Record<string, unknown>[]>;
+  /** Reset the query-economy counters (quereus backends only). Call before a measured DataService op. */
+  resetQueryStats: () => Promise<void>;
+  /** Read the query-economy counters since the last reset (quereus backends only). */
+  getQueryStats: () => Promise<{ queries: number; rows: number }>;
 }
 
 export function installProbe(): void {
@@ -33,6 +37,14 @@ export function installProbe(): void {
       const db = await import('$lib/data/production/db');
       const conn = await db.getQuereusDb();
       return db.all(conn, sql, params as never);
+    },
+    resetQueryStats: async () => {
+      if (!USE_QUEREUS) throw new Error('resetQueryStats: quereus backends only');
+      (await import('$lib/data/production/db')).resetQueryStats();
+    },
+    getQueryStats: async () => {
+      if (!USE_QUEREUS) throw new Error('getQueryStats: quereus backends only');
+      return (await import('$lib/data/production/db')).getQueryStats();
     },
   };
   (window as unknown as { __bonum: BonumProbe }).__bonum = probe;
