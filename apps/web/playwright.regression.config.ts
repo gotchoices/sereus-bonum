@@ -14,7 +14,10 @@ export default defineConfig({
   globalSetup: './test/support/ensure-fixtures.ts', // generate missing tmp/ fixtures (gitignored) on demand
   workers: 1,
   reporter: [['list']],
-  timeout: 120_000, // quereus-local init + fixture seed is slower than the mock e2e tier
+  // quereus-local init + a wide-fixture bulk import + repeated heavy measurements (the tripwire test) can run
+  // well past a minute, and absolute times drift with machine load — so give generous headroom. Tripwires
+  // assert same-run *ratios*, which are drift-immune; the timeout just must not clip the slow seed+measure.
+  timeout: 240_000,
   expect: { timeout: 20_000 },
   use: {
     baseURL: `http://localhost:${PORT}`,
