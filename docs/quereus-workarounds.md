@@ -72,17 +72,25 @@ once joins are cheap (W1).
 **Why:** **no range seeks.** An inequality on the leading indexed column becomes a post-filter, so a
 range degrades to "seek the non-selective prefix → walk everything → filter in JS". Measured: 4,499 ms
 to return 80 rows. So a prefix sum is assembled from whole-month buckets plus a partial month.
-**Upstream:** `tmp/quereus-4.11-range-and-indexed-reads.md` Gap 2 (open).
-**Revert test:** time `SELECT … FROM entry WHERE entity_id = ? AND date <= ?` on the investment books.
-If it returns in O(result) rather than O(table), delete both regimes and the MV tier with them.
+**Upstream:** `tmp/quereus-4.11-range-and-indexed-reads.md` (Gap 2). **Update (2026-08-14, 4.12.1):** range
+seeks now EXIST — `WHERE entity_id=? AND date<=?` plans as `INDEX RANGE` (396ms) — but still lose to the full
+scan (292ms) because the range's rows are resolved scattered. The "no range seeks" reason above is superseded;
+the real blocker is resolution on large-fraction ranges.
+**Revert test:** the `tripwires.spec.ts` W3 assertion (full-scan+JS vs the `date<=?` range seek); when the
+seek wins, delete the month-bucket regimes.
 
 ### W4 — Full-scan the monthly MV instead of seeking it
 **Where:** `getBalanceSheet` forward regime (`SELECT … FROM ${MONTHLY_MV}` with no WHERE, filtered in JS).
 **Instead of:** `WHERE entity_id = ? AND period < ?`, which has a perfectly good index.
 **Why:** the index seek is ~10× *slower* than scanning the whole MV (2,375 ms vs 227 ms for the same
 rows) because seeks aren't `getAll`-batched. We disabled the index deliberately.
-**Upstream:** `tmp/quereus-4.11-range-and-indexed-reads.md` Gap 1 (open).
-**Revert test:** compare the two forms against the MV at Kyle scale; when the seek wins, use it.
+**Upstream:** `tmp/quereus-4.11-range-and-indexed-reads.md` (Gap 1, largely fixed on 4.12.x). **Update
+(2026-08-14):** the seek is now a real `INDEX RANGE` (the `tripwires.spec.ts` W4 assertion creates the index
+and tests it — full-scan 127ms vs seek 315ms, still loses, resolution-bound). **Covering tested + parked:** a
+wide-key index `(entity_id, period, account_id, balance)` gives a covered O(result) range read (76ms for an
+old/selective date) but loses for recent/large ranges (301ms) and costs a wide index on every write — not
+worth it while our balance-sheet ranges are large. See `tmp/quereus-mv-covering-feedback.md`.
+**Revert test:** the `tripwires.spec.ts` W4 assertion; when the range seek beats the full scan, use it.
 
 ### W5 — Read-side denormalizations on `entity` (`max_entry_date`, `reckoning_units`, `entry_periods`)
 **Where:** `schema.qsql`; maintained in `noteTransaction` / `bulkImport`; read via the `getEntity()` call

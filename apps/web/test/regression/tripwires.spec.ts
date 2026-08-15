@@ -13,6 +13,7 @@ const FIXTURE = 'books-wide.json'; // wide chart (≈100 accts × ~135 months) s
 
 type Probe = {
   rawQuery: (sql: string, params?: unknown[]) => Promise<Record<string, unknown>[]>;
+  run: (sql: string, params?: unknown[]) => Promise<void>;
   getDataService: () => Promise<{ getLedgerEntries: (id: string, o?: { sortOrder?: 'oldest' | 'newest' }) => Promise<unknown[]> }>;
 };
 type Win = { __bonum: Probe };
@@ -46,8 +47,13 @@ test.describe('quereus-local workaround tripwires', () => {
         [entityId],
       ));
 
-      // W4 — full-scan the monthly MV + JS filter  vs  the entity_id/period index-seek.
-      const period = '2026-01';
+      // W4 — full-scan the monthly MV + JS filter  vs  a REAL indexed range seek (`period < ?`). The MV ships
+      // without the (entity_id, period) index (we dropped it), so create it here to test the true `INDEX RANGE`
+      // seek — otherwise the "seek" degrades to a PK scan and the comparison is scan-vs-scan. On 4.12.1 the
+      // range seek exists but loses to full-scan (it still resolves the range's rows, scattered); the tripwire
+      // flips when that resolution gets cheap enough (or a covering index lands) that the seek wins.
+      const period = '2026-01'; // > the fixture's span → `period < ?` covers ~all months (the as-of-recent case)
+      await api.run('create index if not exists idx_abm_ep_tripwire on account_balance_monthly(entity_id, period)');
       const w4_scan = await med(async () => {
         const bal = new Map<string, number>();
         for (const row of await api.rawQuery(`select account_id, period, balance, entity_id from account_balance_monthly`)) {
