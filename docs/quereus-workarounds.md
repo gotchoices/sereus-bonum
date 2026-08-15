@@ -11,9 +11,9 @@ rather than carrying them forever because nobody remembers why they're there.
 - The original 4.3.2 diagnosis (historical): [quereus-perf.md](./quereus-perf.md)
 - Upstream reports we've filed: `tmp/quereus-*.md`
 
-**Currently on:** `@quereus/quereus` **4.11.0** · `@quereus/store` 4.11.0 · `@quereus/plugin-indexeddb`
-4.11.0 · `@optimystic/db-*` 0.22.0 · `@serfab/cadre-core` 0.10.0
-**Last reviewed:** 2026-08-12
+**Currently on:** `@quereus/quereus` **4.12.1** · `@quereus/store` 4.12.1 · `@quereus/plugin-indexeddb`
+4.12.1 · `@optimystic/db-*` 0.22.0 · `@serfab/cadre-core` 0.10.0
+**Last reviewed:** 2026-08-14
 
 ---
 
@@ -40,14 +40,23 @@ consequence of it.
 
 ## Register
 
-### W1 — JS-side joins instead of SQL JOINs
+### W1 — JS-side joins instead of SQL JOINs  *(PARTIALLY REVERTED on 4.12.1)*
 **Where:** `production/service.ts` (`getLedgerEntries`, `entriesByTxn`, `buildAccountDir`)
 **Instead of:** `entry ⋈ txn ⋈ account` in SQL.
 **Why:** join keys aren't pushed into the store; a correlated join re-executes the inner side per outer
 row, each an awaited IndexedDB transaction. Measured ~140× slower than joining in JS.
-**Upstream:** `tmp/quereus-join-perf.md`, `tmp/quereus-join-index-perf.md` (largely improved in 4.4).
-**Revert test:** re-run `yarn perf`; if `naive-JOIN` is at or below the shipped number for `ledger` and
-`balanceSheet` at size 5000, the JS joins can go.
+**Update (2026-08-14, 4.12.x):** 4.12.x **batched secondary-index row resolution**, so `entry WHERE
+account_id=?` is now a fast IndexSeek (~52ms, was scattered per-row cursors). `getLedgerEntries` was rewritten
+to a **targeted O(account) read** (account_id seek + a `txn_id` IN-list multi-seek), **10–21× faster** for a
+typical account, falling back to the old full-scan only past the store's ~1000-key multi-seek window. The
+`entry ⋈ txn` full-scan in the ledger is gone. The **balance-sheet** join (`getBalanceSheet`) is NOT reverted —
+its tripwire still shows the SQL join losing to full-scan+JS (~2.9× on 4.12.1). So W1 is now: *ledger reverted,
+balance-sheet join still worked around.*
+**Upstream:** `tmp/quereus-join-perf.md`, `tmp/quereus-join-index-perf.md`; the enabling fix is the store's
+batched index-seek scan (completed upstream, landed by 4.12).
+**Revert test (remaining, balance-sheet):** the `tripwires.spec.ts` W1 assertion (full-scan+JS vs SQL grouped
+join); when the SQL join wins, move the balance-sheet join back into SQL too. The ledger revert is guarded by
+the `[ledger]` targeted-vs-fallback assertion in the same spec.
 
 ### W2 — Denormalized columns on `entry` (`entity_id`, `date`, `period`)
 **Where:** `schema.qsql`, written by every entry insert.

@@ -11,7 +11,10 @@ import { waitForProbe, seedBooks, fixtureExists } from '../support/harness';
 const FIXTURE = 'books-wide.json'; // wide chart (≈100 accts × ~135 months) so the MV is large enough for W4;
                                    // reproducible via `node apps/web/scripts/gen-books.mjs wide`
 
-type Probe = { rawQuery: (sql: string, params?: unknown[]) => Promise<Record<string, unknown>[]> };
+type Probe = {
+  rawQuery: (sql: string, params?: unknown[]) => Promise<Record<string, unknown>[]>;
+  getDataService: () => Promise<{ getLedgerEntries: (id: string, o?: { sortOrder?: 'oldest' | 'newest' }) => Promise<unknown[]> }>;
+};
 type Win = { __bonum: Probe };
 
 test.describe('quereus-local workaround tripwires', () => {
@@ -78,7 +81,21 @@ test.describe('quereus-local workaround tripwires', () => {
       const mvRows = Number((await api.rawQuery(
         `select count(*) c from account_balance_monthly where entity_id = ?`, [entityId]))[0].c);
 
+      // Ledger revert guard (W1 partial): getLedgerEntries is now O(account) via targeted seeks, falling back
+      // to a full scan (O(table)) only past the store's multi-seek window. A typical account must be much
+      // faster than the busiest (fallback) one; if they converge, the targeted path regressed to a full scan.
+      const ds = await api.getDataService();
+      const counts = (await api.rawQuery(
+        `select account_id, count(*) c from entry where entity_id = ? group by account_id order by c`, [entityId]))
+        .filter((a) => Number(a.c) > 0);
+      const small = counts[Math.floor(counts.length * 0.25)] as { account_id: string; c: number };
+      const huge = counts[counts.length - 1] as { account_id: string; c: number };
+      const led_small = await med(() => ds.getLedgerEntries(small.account_id, { sortOrder: 'newest' }));
+      const led_huge = await med(() => ds.getLedgerEntries(huge.account_id, { sortOrder: 'newest' }));
+
       return {
+        led_smallEntries: Number(small.c), led_small: Math.round(led_small),
+        led_hugeEntries: Number(huge.c), led_huge: Math.round(led_huge),
         mvRows,
         w1_js: Math.round(w1_js), w1_sql: Math.round(w1_sql),
         w4_scan: Math.round(w4_scan), w4_seek: Math.round(w4_seek),
@@ -129,5 +146,15 @@ test.describe('quereus-local workaround tripwires', () => {
       `W5 tripwire: max(date) (${r.w5_naive}ms) ≤ reading entity.max_entry_date (${r.w5_denorm}ms) — max() over ` +
       `an indexed column may be O(1) now; consider dropping the denormalized columns (quereus-workarounds.md W5).`,
     ).toBeLessThan(r.w5_naive);
+
+    // Ledger revert guard: the targeted O(account) read must materially beat the full-scan fallback. Same-run
+    // ratio, drift-immune. If a typical account is no faster than the busiest (fallback) one, the targeted
+    // path regressed to a full scan (service.ts getLedgerEntries — e.g. the multi-seek window changed).
+    console.log(`  [ledger] targeted ${r.led_smallEntries}-entry acct ${r.led_small}ms  vs  fallback ${r.led_hugeEntries}-entry acct ${r.led_huge}ms`);
+    expect(
+      r.led_small,
+      `ledger targeted read (${r.led_small}ms for ${r.led_smallEntries} entries) is not beating the full-scan ` +
+      `fallback (${r.led_huge}ms for ${r.led_hugeEntries}) — the O(account) path may have regressed to O(table).`,
+    ).toBeLessThan(r.led_huge * 0.5);
   });
 });

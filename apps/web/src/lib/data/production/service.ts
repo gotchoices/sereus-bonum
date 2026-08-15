@@ -821,15 +821,36 @@ class QuereusDataService implements DataService {
     const entityId = acct.entity_id as string;
 
     const acctDir = await this.buildAccountDir(entityId);
-    // TECH DEBT (full-scan "cheat"): full-scan + JS filter, NOT `WHERE entity_id = ?`. On the store an
-    // entity_id IndexSeek returns all the entity's txns via per-row cursors (~2.9s at 18k txns) whereas a full
-    // scan is one getAll (~260ms). REPLACE with a targeted `WHERE account_id = ?` read (+ per-txn sibling
-    // seeks) once Quereus batches index-seek reads — then this is ~40ms reading only the account's rows.
-    // See docs/STATUS.md § B (tech debt) + tmp/quereus-4.11-range-and-indexed-reads.md.
-    const txnRows = (await all<Row>(db, 'SELECT id, date, reference, memo, value_unit, created_at, entity_id FROM txn'))
-      .filter((t) => t.entity_id === entityId);
-    const txnById = new Map<string, Row>(txnRows.map((t) => [t.id, t]));
-    const byTxn = await this.entriesByTxn(txnById);
+
+    // Targeted ledger read (O(account)). Quereus 4.12.x batched secondary-index row resolution, so the
+    // account_id IndexSeek + a txn_id IN-list multi-seek reads only this account's txns + their sibling legs —
+    // measured 10-21× faster than scanning every entry for a typical account. An account with more txns than
+    // the store's multi-seek window falls back to the old full-scans (O(table)) — never worse. This replaces
+    // the former unconditional full-scan "cheat" (docs/quereus-workarounds.md W1).
+    const LEDGER_TARGETED_MAX_TXNS = 1000; // the store's multi-seek key window (MAX_MULTI_SEEK_KEYS)
+    const txnIds = [...new Set(
+      (await all<Row>(db, 'SELECT txn_id FROM entry WHERE account_id = ?', [accountId])).map((r) => r.txn_id as string),
+    )];
+
+    let txnById: Map<string, Row>;
+    let byTxn: Map<string, Row[]>;
+    if (txnIds.length > 0 && txnIds.length <= LEDGER_TARGETED_MAX_TXNS) {
+      const ph = txnIds.map(() => '?').join(',');
+      const txnRows = await all<Row>(db, `SELECT id, date, reference, memo, value_unit, created_at FROM txn WHERE id IN (${ph})`, txnIds);
+      txnById = new Map<string, Row>(txnRows.map((t) => [t.id as string, t]));
+      byTxn = new Map<string, Row[]>();
+      for (const e of await all<Row>(db, `SELECT id, txn_id, account_id, amount, value, note FROM entry WHERE txn_id IN (${ph})`, txnIds)) {
+        let arr = byTxn.get(e.txn_id as string);
+        if (!arr) { arr = []; byTxn.set(e.txn_id as string, arr); }
+        arr.push(e);
+      }
+    } else {
+      // Fallback: a very large account (or none) — full-scan + JS filter (O(table)), the pre-4.12 path.
+      const txnRows = (await all<Row>(db, 'SELECT id, date, reference, memo, value_unit, created_at, entity_id FROM txn'))
+        .filter((t) => t.entity_id === entityId);
+      txnById = new Map<string, Row>(txnRows.map((t) => [t.id, t]));
+      byTxn = await this.entriesByTxn(txnById);
+    }
 
     // This account's own entries, decorated with txn fields; filter by date; sort; limit.
     let own: Array<{ e: Row; t: Row }> = [];

@@ -86,18 +86,23 @@ See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
   brute-force at Kyle scale (36k entries / 100 accts / 248 months), vs ~4–5.5s before. `getLedgerEntries` cut
   3.4s→**830ms** by replacing the `txn WHERE entity_id=?` IndexSeek with a full scan. See
   `docs/materialized-balances-design.md`. New upstream report: `tmp/quereus-4.11-range-and-indexed-reads.md`.
-- ⚠️ **TECH DEBT — full-scan "cheat" reads to be replaced with targeted indexed queries.** Two hot reads
-  *deliberately* full-scan the whole table and filter in JS, because on the current store an index seek reads
-  rows via per-row cursors (~0.14–0.18 ms/row) while a full scan is one batched `getAll` (~0.017 ms/row) —
-  so the "wrong" full scan is faster than the "right" indexed seek for large result sets:
-  - **`getLedgerEntries`** full-scans `entry` + `txn` (~800ms) instead of `WHERE account_id = ?` (307ms) +
-    per-txn sibling seeks. The natural targeted query returns only the account's ~6% of rows.
+- ✅ **Quereus 4.12.1 + first workaround revert (uncommitted, 2026-08-14).** 4.12.x **batched secondary-index
+  row resolution**, so `entry WHERE account_id=?` is now a fast IndexSeek (~52ms, was scattered per-row
+  cursors). Acting on that: **`getLedgerEntries` reverted to a targeted O(account) read** (account_id seek +
+  `txn_id` IN-list multi-seek), **10–21× faster** for a typical account (38–66ms vs ~650ms), with a full-scan
+  fallback past the store's ~1000-key multi-seek window. Guarded by a `[ledger]` targeted-vs-fallback assertion
+  in `tripwires.spec.ts`. This is the first hack retired by the "bump → suite → revert" loop. **4.12.1** also
+  fixed the `PRAGMA foreign_keys = on` parse bug (`tmp/quereus-4.12-pragma-on-parse.md`), so `deleteEntity`'s FK
+  re-enable no longer silently fails. Also spiked covering/projection MVs (`tmp/quereus-proposal-covering-indexes.md`):
+  they work (~5ms with a prefix index) but the fast base seek made them **unnecessary** for the ledger —
+  downgraded from "needed" to "future optimization for the hottest reads."
+- ⚠️ **TECH DEBT — remaining full-scan "cheat" read (one of two now retired).** On the store an index seek used
+  to read rows via per-row cursors while a full scan is one batched `getAll`, so the "wrong" full scan beat the
+  "right" seek for large result sets. **`getLedgerEntries` is FIXED** (see above). Still outstanding:
   - **`getBalanceSheet` forward path** full-scans `account_balance_monthly` instead of `WHERE entity_id=? AND
-    period < ?`.
-  Both are marked in-code with the rationale + a pointer to `tmp/quereus-4.11-range-and-indexed-reads.md`.
-  **Replace with real `WHERE key = ?` / range queries once Quereus batches index-seek reads (Gap 1) and
-  supports range seeks (Gap 2)** — then the ledger is ~40ms reading only what we ask for, and the schema/reads
-  simplify (no full-scan-vs-seek cliff to dodge). This is the highest-leverage upstream fix for read perf.
+    period < ?` — a *range* read (W3/W4), which the batched-*point*-seek fix above doesn't cover. Its tripwires
+    (`tripwires.spec.ts` W3/W4) still show the workaround winning, so it stays until range seeks land.
+  Marked in-code with the rationale + a pointer to `tmp/quereus-4.11-range-and-indexed-reads.md`.
 - ✅ **Quereus 4.11.0 (from 4.10, 2026-08-09) — shipped our P0 + P1 in response to the feedback report;
   adopted.** Confirmed in code: **P0 `getAll`** (plugin-indexeddb batches reads via `getAllKeys`/`getAll`,
   2 requests/page vs one cursor/row) and **P1** (module-level `TextDecoder` + `reviver` only when
