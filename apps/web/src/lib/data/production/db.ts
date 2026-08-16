@@ -32,6 +32,8 @@ export async function getQuereusDb(): Promise<Database> {
 
 async function initLocal(): Promise<Database> {
   log.data.info('[Quereus] Initializing local (IndexedDB) backend...');
+  const _t0 = performance.now();
+  const _ms = () => Math.round(performance.now() - _t0);
   const { Database: DatabaseCtor } = await import('@quereus/quereus');
   const { default: indexeddbPlugin } = await import('@quereus/plugin-indexeddb/plugin');
 
@@ -46,6 +48,7 @@ async function initLocal(): Promise<Database> {
     .registerModule(storeVtab.name, storeVtab.module, storeVtab.auxData);
   // Tables bind to the registered store module.
   await database.exec("pragma default_vtab_module = 'store'");
+  log.data.info(`[Quereus] store opened + registered (${_ms()}ms)`);
 
   // Rehydrate the persisted schema from the store's __catalog__ (tables + indexes ADOPTED, not rebuilt) —
   // the recommended reopen pattern (quereus docs/store.md § Schema Discovery). Without this we re-ran the
@@ -59,7 +62,7 @@ async function initLocal(): Promise<Database> {
     typeof sm.rehydrateCatalog === 'function' ? sm
       : typeof sm.underlying?.rehydrateCatalog === 'function' ? sm.underlying : undefined;
   try {
-    if (rehydrator) { await rehydrator.rehydrateCatalog!(database); log.data.info('[Quereus] Rehydrated persisted catalog'); }
+    if (rehydrator) { await rehydrator.rehydrateCatalog!(database); log.data.info(`[Quereus] Rehydrated persisted catalog (${_ms()}ms total)`); }
     else log.data.warn('[Quereus] rehydrateCatalog not found on store module — will re-apply schema');
   } catch (e) {
     log.data.warn('[Quereus] rehydrateCatalog failed; falling back to re-applying schema', e);
@@ -90,7 +93,7 @@ async function initLocal(): Promise<Database> {
   await ensureBalanceMV(database);
   try { await ensureMonthlyMV(database); } catch (e) { log.data.warn('[Quereus] ensureMonthlyMV failed', e); }
 
-  log.data.info('[Quereus] Local backend ready');
+  log.data.info(`[Quereus] Local backend ready (${_ms()}ms)`);
   return database;
 }
 
