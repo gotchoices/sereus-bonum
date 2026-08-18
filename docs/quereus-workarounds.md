@@ -11,9 +11,9 @@ rather than carrying them forever because nobody remembers why they're there.
 - The original 4.3.2 diagnosis (historical): [quereus-perf.md](./quereus-perf.md)
 - Upstream reports we've filed: `tmp/quereus-*.md`
 
-**Currently on:** `@quereus/quereus` **4.12.1** · `@quereus/store` 4.12.1 · `@quereus/plugin-indexeddb`
-4.12.1 · `@optimystic/db-*` 0.22.0 · `@serfab/cadre-core` 0.10.0
-**Last reviewed:** 2026-08-14
+**Currently on:** `@quereus/quereus` **4.14.0** · `@quereus/store` 4.14.0 · `@quereus/plugin-indexeddb`
+4.14.0 · `@optimystic/db-*` 0.22.0 · `@serfab/cadre-core` 0.10.0
+**Last reviewed:** 2026-08-17
 
 ---
 
@@ -141,11 +141,14 @@ is ~39 ms). Verified directly: a plain anchor navigates client-side; the same an
 `stopPropagation` reloads the page. Fixed in `EntityList.svelte` by having the row/menu handlers ignore
 clicks that originated on an anchor. **If a navigation ever feels slow, check this before profiling SQL.**
 
-### N2 — `IndexedDB upgrade … is blocked, waiting for other connections to close`
-Seen on full page loads, costing several seconds. It blocks on `schema_meta` (plain table) as well as on
-MVs, so it is a connection-lifecycle issue rather than anything MV-specific; a schema-version bump forces
-it once. Largely masked once navigation is genuinely client-side (N1). **Not yet characterized** — worth
-measuring before treating it as a real-world cost.
+### N2 — slow reopen (reload / new tab / first load) — CHARACTERIZED, then FIXED upstream in 4.14.0
+Full page loads (reload, open-in-new-tab, cold start) cost 6–14s at real scale while in-app navigation stayed
+fast. **Characterized (2026-08-17):** it was **not** connection lifecycle, MVs, indexes, or queries — it was
+`rehydrateCatalog` (the store's reopen "adopt catalog" step) reading **base table row data**, i.e. O(total
+rows). Phase split at 36k entries: IndexedDB open ~40ms, `rehydrateCatalog` **~10–14s**, everything else ms.
+Filed as `tmp/quereus-4.13-rehydrate-catalog-perf.md`. **FIXED in `@quereus/store` 4.14.0** — `rehydrateCatalog`
+now ~50–100ms (reopen ~0.6s). Boot-phase timing added in `production/db.ts` (`store opened + registered` /
+`Rehydrated persisted catalog` / `Local backend ready` logs) confirms it and guards against a regression.
 
 ---
 
