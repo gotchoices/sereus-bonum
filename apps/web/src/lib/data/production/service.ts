@@ -29,6 +29,23 @@ import { log } from '$lib/logger';
 
 const NOT_IMPLEMENTED = 'Quereus backend: method not yet implemented (Track C2)';
 
+// --- Quereus-workaround revert switches ------------------------------------
+// Quereus ≥4.16 + ANALYZE (run after bulkImport) plans an *explicit join* off a selective seek as an
+// index-nested-loop, so the ledger read CAN now be natural SQL: a CTE of the account's txn ids JOINed to every
+// leg + txn ('sql-join' below). The JOIN form is load-bearing — the SAME set via `WHERE txn_id IN (SELECT ...)`
+// (inline OR from the CTE) plans as a semi hash-join that full-scans entry+txn (~20× slower; quereus issue).
+// BUT the INL seeks per txn with no batched fallback, so for the busiest account (1176 txns) it runs ~670ms vs
+// the targeted path's full-scan fallback ~490ms, and for a typical account it only ties (~49 vs ~43ms). Not a
+// net efficiency win, so the workaround stays the default; 'sql-join' is kept switchable (and is now the best
+// natural form) to re-adopt if the store batches INL seeks. See docs/quereus-workarounds.md W1.
+const LEDGER_STRATEGY: 'sql-join' | 'targeted-workaround' = 'targeted-workaround';
+// Balance-sheet forward regime reads the monthly MV for whole months before D. Tested on 4.16: a natural
+// `WHERE entity_id = ? AND period < ?` full-scans the MV in production (which carries no (entity_id,period)
+// index) at ~138ms — equivalent to, NOT faster than, the explicit full-scan workaround, and less robust
+// (adding that index would tempt the planner into a losing range seek). So the workaround stays the default;
+// the natural path is kept switchable to re-test when covered/range reads improve. See workarounds W4.
+const BALANCE_MV_RANGE: 'sql-range' | 'full-scan-workaround' = 'full-scan-workaround';
+
 // --- Row mappers (snake_case columns → camelCase domain types) ------------
 type Row = Record<string, any>;
 
@@ -696,13 +713,19 @@ class QuereusDataService implements DataService {
         }
         return bal;
       }
-      // forward: whole months before D from the monthly MV (full scan) + the partial current month.
+      // forward: whole months before D from the monthly MV + the partial current month.
       regime += ' forward';
       const bal = new Map<string, Pair>();
       const period = monthKey(d);
-      for (const r of await all<{ account_id: string; period: string; balance: number; cost: number; entity_id: string }>(db,
-        `SELECT account_id, period, balance, cost, entity_id FROM ${MONTHLY_MV}`))
-        if (r.entity_id === entityId && r.period < period) bump(bal, r.account_id, Number(r.balance), Number(r.cost));
+      if (BALANCE_MV_RANGE === 'sql-range') {
+        for (const r of await all<{ account_id: string; balance: number; cost: number }>(db,
+          `SELECT account_id, balance, cost FROM ${MONTHLY_MV} WHERE entity_id = ? AND period < ?`, [entityId, period]))
+          bump(bal, r.account_id, Number(r.balance), Number(r.cost));
+      } else {
+        for (const r of await all<{ account_id: string; period: string; balance: number; cost: number; entity_id: string }>(db,
+          `SELECT account_id, period, balance, cost, entity_id FROM ${MONTHLY_MV}`))
+          if (r.entity_id === entityId && r.period < period) bump(bal, r.account_id, Number(r.balance), Number(r.cost));
+      }
       for (const r of await entriesInPeriod(period))
         if (r.entity_id === entityId && r.date <= d)
           bump(bal, r.account_id, Number(r.amount), Number(r.value ?? r.amount));
@@ -822,34 +845,57 @@ class QuereusDataService implements DataService {
 
     const acctDir = await this.buildAccountDir(entityId);
 
-    // Targeted ledger read (O(account)). Quereus 4.12.x batched secondary-index row resolution, so the
-    // account_id IndexSeek + a txn_id IN-list multi-seek reads only this account's txns + their sibling legs —
-    // measured 10-21× faster than scanning every entry for a typical account. An account with more txns than
-    // the store's multi-seek window falls back to the old full-scans (O(table)) — never worse. This replaces
-    // the former unconditional full-scan "cheat" (docs/quereus-workarounds.md W1).
-    const LEDGER_TARGETED_MAX_TXNS = 1000; // the store's multi-seek key window (MAX_MULTI_SEEK_KEYS)
-    const txnIds = [...new Set(
-      (await all<Row>(db, 'SELECT txn_id FROM entry WHERE account_id = ?', [accountId])).map((r) => r.txn_id as string),
-    )];
-
     let txnById: Map<string, Row>;
     let byTxn: Map<string, Row[]>;
-    if (txnIds.length > 0 && txnIds.length <= LEDGER_TARGETED_MAX_TXNS) {
-      const ph = txnIds.map(() => '?').join(',');
-      const txnRows = await all<Row>(db, `SELECT id, date, reference, memo, value_unit, created_at FROM txn WHERE id IN (${ph})`, txnIds);
-      txnById = new Map<string, Row>(txnRows.map((t) => [t.id as string, t]));
+
+    if (LEDGER_STRATEGY === 'sql-join') {
+      // Natural SQL (W1 revert). A CTE of this account's distinct txn ids, JOINed to every leg of those txns
+      // and to txn for decoration — fetches its own entries plus their sibling legs in one query. Post-ANALYZE
+      // (Quereus ≥4.16) the planner runs it as an index-nested-loop: seek entry by account_id → seek entry by
+      // txn_id (idx_entry_txn) → seek txn by PK, so it's O(account), not O(table). The JOIN form is essential:
+      // the same set via `WHERE txn_id IN (SELECT ...)` plans as a semi hash-join that full-scans entry+txn
+      // (~20× slower). Downstream grouping is identical to the targeted path below.
+      const rows = await all<Row>(db, `
+        WITH ids AS (SELECT DISTINCT txn_id FROM entry WHERE account_id = ?)
+        SELECT e.id, e.txn_id, e.account_id, e.amount, e.value, e.note,
+               t.date, t.reference, t.memo, t.value_unit, t.created_at
+        FROM ids JOIN entry e ON e.txn_id = ids.txn_id JOIN txn t ON t.id = e.txn_id`, [accountId]);
+      txnById = new Map<string, Row>();
       byTxn = new Map<string, Row[]>();
-      for (const e of await all<Row>(db, `SELECT id, txn_id, account_id, amount, value, note FROM entry WHERE txn_id IN (${ph})`, txnIds)) {
-        let arr = byTxn.get(e.txn_id as string);
-        if (!arr) { arr = []; byTxn.set(e.txn_id as string, arr); }
-        arr.push(e);
+      for (const r of rows) {
+        const tid = r.txn_id as string;
+        if (!txnById.has(tid)) {
+          txnById.set(tid, { id: tid, date: r.date, reference: r.reference, memo: r.memo, value_unit: r.value_unit, created_at: r.created_at });
+        }
+        let arr = byTxn.get(tid);
+        if (!arr) { arr = []; byTxn.set(tid, arr); }
+        arr.push({ id: r.id, txn_id: tid, account_id: r.account_id, amount: r.amount, value: r.value, note: r.note });
       }
     } else {
-      // Fallback: a very large account (or none) — full-scan + JS filter (O(table)), the pre-4.12 path.
-      const txnRows = (await all<Row>(db, 'SELECT id, date, reference, memo, value_unit, created_at, entity_id FROM txn'))
-        .filter((t) => t.entity_id === entityId);
-      txnById = new Map<string, Row>(txnRows.map((t) => [t.id, t]));
-      byTxn = await this.entriesByTxn(txnById);
+      // Targeted ledger read (O(account)) — the hand-rolled index-nested-loop workaround, kept switchable.
+      // account_id IndexSeek + a txn_id IN-list multi-seek reads only this account's txns + their sibling legs.
+      // An account with more txns than the store's multi-seek window falls back to full-scans (O(table)).
+      const LEDGER_TARGETED_MAX_TXNS = 1000; // the store's multi-seek key window (MAX_MULTI_SEEK_KEYS)
+      const txnIds = [...new Set(
+        (await all<Row>(db, 'SELECT txn_id FROM entry WHERE account_id = ?', [accountId])).map((r) => r.txn_id as string),
+      )];
+      if (txnIds.length > 0 && txnIds.length <= LEDGER_TARGETED_MAX_TXNS) {
+        const ph = txnIds.map(() => '?').join(',');
+        const txnRows = await all<Row>(db, `SELECT id, date, reference, memo, value_unit, created_at FROM txn WHERE id IN (${ph})`, txnIds);
+        txnById = new Map<string, Row>(txnRows.map((t) => [t.id as string, t]));
+        byTxn = new Map<string, Row[]>();
+        for (const e of await all<Row>(db, `SELECT id, txn_id, account_id, amount, value, note FROM entry WHERE txn_id IN (${ph})`, txnIds)) {
+          let arr = byTxn.get(e.txn_id as string);
+          if (!arr) { arr = []; byTxn.set(e.txn_id as string, arr); }
+          arr.push(e);
+        }
+      } else {
+        // Fallback: a very large account (or none) — full-scan + JS filter (O(table)), the pre-4.12 path.
+        const txnRows = (await all<Row>(db, 'SELECT id, date, reference, memo, value_unit, created_at, entity_id FROM txn'))
+          .filter((t) => t.entity_id === entityId);
+        txnById = new Map<string, Row>(txnRows.map((t) => [t.id, t]));
+        byTxn = await this.entriesByTxn(txnById);
+      }
     }
 
     // This account's own entries, decorated with txn fields; filter by date; sort; limit.
@@ -1124,6 +1170,12 @@ class QuereusDataService implements DataService {
     } finally {
       try { await ensureBalanceMV(db); } catch { /* ignore */ } // rebuild once over the loaded data
       try { await ensureMonthlyMV(db); } catch { /* ignore */ }
+      // Populate planner statistics over the freshly-loaded data. Without stats the planner falls back to
+      // heuristics and, e.g., hash-joins + full-scans the unfiltered side of a selective join (~60× slower);
+      // with stats it chooses an index-nested-loop. Stats persist in the store across reopens, so this one
+      // pass after bulk load covers every later read — no per-open cost. Incremental writes drift the stats
+      // slowly; a periodic re-ANALYZE strategy is TODO (tracked separately). See docs/quereus-workarounds.md.
+      try { await run(db, 'ANALYZE'); } catch { /* ignore — stats are an optimization, not correctness */ }
     }
   }
 }
