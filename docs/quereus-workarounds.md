@@ -11,9 +11,9 @@ rather than carrying them forever because nobody remembers why they're there.
 - The original 4.3.2 diagnosis (historical): [quereus-perf.md](./quereus-perf.md)
 - Upstream reports we've filed: `tmp/quereus-*.md`
 
-**Currently on:** `@quereus/quereus` **4.14.0** · `@quereus/store` 4.14.0 · `@quereus/plugin-indexeddb`
-4.14.0 · `@optimystic/db-*` 0.22.0 · `@serfab/cadre-core` 0.10.0
-**Last reviewed:** 2026-08-17
+**Currently on:** `@quereus/quereus` **4.16.0** · `@quereus/store` 4.16.0 · `@quereus/plugin-indexeddb`
+4.16.0 · `@optimystic/db-*` 0.22.0 · `@serfab/cadre-core` 0.10.0
+**Last reviewed:** 2026-08-21
 
 ---
 
@@ -38,6 +38,24 @@ consequence of it.
 
 ---
 
+## When to revert (the bar, refined 2026-08-21)
+
+Originally each revert test read "when the naive path *wins*." That bar is too strict: a workaround also
+costs maintenance and correctness risk (the denormalized columns can go stale into a *wrong balance*), so it
+should be dropped as soon as natural SQL is *fast enough and stays that way* — not only when it's faster.
+
+1. **Asymptotic test (decisive):** revert if natural SQL scales with what's *viewed* (O(result)/O(account));
+   keep the workaround if it's O(table), even when it's fast today — the books only grow.
+2. **Perceptibility floor (tiebreak):** once scaling is safe, revert if the natural path stays imperceptible
+   (well under a felt pause) even at a modest slowdown; keep it only where natural SQL crosses into a
+   noticeable pause for a *common* interaction. Reverting the common path while keeping a fallback for the
+   tail is allowed — it's not all-or-nothing.
+
+File an upstream issue when a *same-result* formulation is dramatically faster (a real planner gap); accept
+the cost when it's inherent to the data volume (a whole-entity aggregate must read every row — use an MV).
+
+---
+
 ## Register
 
 ### W1 — JS-side joins instead of SQL JOINs  *(PARTIALLY REVERTED on 4.12.1)*
@@ -57,6 +75,14 @@ batched index-seek scan (completed upstream, landed by 4.12).
 **Revert test (remaining, balance-sheet):** the `tripwires.spec.ts` W1 assertion (full-scan+JS vs SQL grouped
 join); when the SQL join wins, move the balance-sheet join back into SQL too. The ledger revert is guarded by
 the `[ledger]` targeted-vs-fallback assertion in the same spec.
+**Update (2026-08-21, 4.16.0 + ANALYZE):** `bulkImport` now runs `ANALYZE`; with stats an *explicit-join* off
+a selective seek plans as an index-nested-loop. The ledger read was re-expressed as a CTE of the account's txn
+ids JOINed to every leg + txn (`LEDGER_STRATEGY = 'sql-join'`, switchable) — ~23ms raw for a 70-entry account.
+NOT the default: it seeks per txn with no batched fallback, so the busiest account (1176 txns) runs ~670ms vs
+the targeted path's ~490ms. The CTE-join is the best natural form to re-adopt (as a hybrid keeping the
+full-scan fallback for the tail) once the store batches INL seeks. Load-bearing detail: the same set via
+`WHERE txn_id IN (SELECT …)` plans as a semi hash-join that full-scans entry+txn (~20× slower) —
+filed **[quereus#30](https://github.com/gotchoices/quereus/issues/30)** (JOIN, don't `IN`).
 
 ### W2 — Denormalized columns on `entry` (`entity_id`, `date`, `period`)
 **Where:** `schema.qsql`, written by every entry insert.
@@ -99,8 +125,11 @@ worth it while our balance-sheet ranges are large. See `tmp/quereus-mv-covering-
 **Why:** those two queries cost 4,186 ms and 1,471 ms respectively (table above) to return one row each.
 All three are **raised only** — an over-stated value costs a few wasted probes, an under-stated one would
 be a wrong balance.
-**Upstream:** same as W3/W4 — they're aggregates over a range.
-**Revert test:** when `max(col)` over an indexed column is O(1)-ish, drop the columns and query directly.
+**Upstream:** `max(col)`/`min(col)` over an indexed column scans the table — filed
+**[quereus#31](https://github.com/gotchoices/quereus/issues/31)** (index-boundary read). `entry_periods` /
+`reckoning_units` are the same aggregate-over-a-range shape.
+**Revert test:** when `max(col)` over an indexed column is O(1)-ish (quereus#31 closed), drop the columns and
+query directly. Fails the asymptotic test today — `max(date)` is O(table) — so this one *stays* until #31.
 
 ### W6 — Cost basis as a second MV measure
 **Where:** `db.ts` — `SUM(COALESCE(value, amount)) AS cost` on both MVs.
@@ -111,14 +140,19 @@ be a wrong balance.
 an insert of amount 100 / value 7777 moved the two measures by exactly that). Listed so the write-side
 cost is attributable.
 
-### W7 — FK enforcement disabled during bulk cascade deletes
+### W7 — FK enforcement disabled during bulk cascade deletes  *(REVERTED on 4.16.0)*
 **Where:** `deleteEntity`.
-**Why:** the referential check costs ~35 ms per deleted parent row on the store *even with the child FK
-column indexed* — a 1,000-txn entity delete took ~49 s. We cascade manually in child→parent order, so the
-checks are redundant.
-**Upstream:** `tmp/quereus-fk-delete-perf.md` (open).
-**Revert test:** delete a 1k-transaction entity with FK enforcement on; if it's seconds not minutes, stop
-disabling it.
+**Why (historical):** the referential check cost ~35 ms per deleted parent row on the store *even with the
+child FK column indexed* — a 1,000-txn entity delete took ~49 s. We cascaded manually in child→parent order
+and disabled the (redundant) checks for the batch.
+**Update (2026-08-21, 4.16.0):** re-measured — the RESTRICT probe is now ~2 ms/row and the FK-on cascade is on
+par with FK-off (books-100: 458 ms vs 325 ms; books-1000: 6.1 s vs 8.0 s). The ~30× penalty is gone, so we
+**stopped disabling FK**: `deleteEntity` now cascades with enforcement ON, restoring the referential safety net
+(a cascade-order bug errors instead of silently orphaning rows). The `DELETE … WHERE txn_id IN (SELECT …)`
+subquery workaround (materialized account_id IN list) stays — same semi-join gap as
+[quereus#30](https://github.com/gotchoices/quereus/issues/30).
+**Guarded by:** `fk-delete.spec.ts` now asserts the FK-on cascade stays cheap per row (regression signal to
+re-disable if it climbs back toward ~35 ms/row).
 
 ### W8 — `splitStatements` splits `.qsql` on `;` and strips only whole-line comments
 **Where:** `production/db.ts`.

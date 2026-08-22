@@ -217,17 +217,14 @@ class QuereusDataService implements DataService {
   async deleteEntity(id: string): Promise<void> {
     // Manual cascade (Quereus has no ON DELETE CASCADE): entries → txns → accounts → entity.
     //
-    // Two Quereus/store perf gaps shape this (both filed under tmp/):
-    //  1. FK RESTRICT enforcement on DELETE costs ~35ms per deleted parent row on the IndexedDB store —
-    //     even with the child FK column indexed (idx_entry_txn etc.) and the check matching nothing.
-    //     (The same schema in-memory is ~0.5ms/row: the index IS used; the store's per-row referential
-    //     probe just isn't batched.) Deleting a 1k-txn entity took ~49s. Since we cascade manually in
-    //     child→parent order, FK checks are redundant here — disable them for the batch (standard SQL
-    //     idiom for bulk cascade). This is the ~30x win. See tmp/quereus-fk-delete-perf.md.
-    //  2. `DELETE … WHERE txn_id IN (SELECT …)` re-executes the subquery per row. We delete entries via a
-    //     materialized account_id IN list instead. See tmp/quereus-delete-subquery-perf.md.
+    // W7 REVERTED (2026-08-21, 4.16.0): we used to disable FK enforcement here because the store's FK RESTRICT
+    // probe cost ~35ms per deleted parent row (a 1k-txn entity took ~49s). Re-measured on 4.16 it's ~2ms/row
+    // and on par with FK-off (books-100: FK-on 458ms vs off 325ms; books-1000: 6.1s vs 8.0s) — the ~30× penalty
+    // is gone. So enforcement stays ON: the child→parent order below satisfies RESTRICT, and keeping FK on
+    // restores the referential safety net (a cascade-order bug now errors instead of silently orphaning rows).
+    // One workaround remains: `DELETE … WHERE txn_id IN (SELECT …)` re-executes the subquery per row (the same
+    // semi-join gap as quereus#30), so entries are deleted via a materialized account_id IN list.
     const db = this.getDb();
-    await run(db, 'PRAGMA foreign_keys = off');
     const acctIds = (await all<{ id: string }>(db, 'SELECT id FROM account WHERE entity_id = ?', [id])).map((r) => r.id);
     await run(db, 'BEGIN');
     try {
@@ -242,8 +239,6 @@ class QuereusDataService implements DataService {
     } catch (e) {
       try { await run(db, 'ROLLBACK'); } catch { /* ignore */ }
       throw e;
-    } finally {
-      try { await run(db, 'PRAGMA foreign_keys = on'); } catch { /* ignore */ }
     }
   }
 
