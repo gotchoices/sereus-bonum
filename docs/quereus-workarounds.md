@@ -1,15 +1,19 @@
-# Quereus Workarounds Register
+# Quereus Data-Layer Register
 
-**A list of things we do the "wrong" way on purpose, and the test that tells us we can stop.**
+**Where our data layer diverges from textbook SQL, why, and the terminal state each divergence is driving toward.**
 
-Bonum's data layer is shaped around gaps in the Quereus store vtab, not around what good SQL looks
-like. Those gaps are being fixed upstream. This file exists so that when a Quereus release lands we can
-walk the table, run each **revert test**, and delete the hacks that are no longer earning their keep —
-rather than carrying them forever because nobody remembers why they're there.
+Not everything here is a hack. Some entries are **kludges** — done the wrong way only because the Quereus store
+is slow at them *today*, to be deleted the moment it catches up. Others are **architecture** — designs (a
+materialized balance, a tenant-id denormalization) we would keep even if Quereus were infinitely fast, because
+they're what any serious ledger does. This file keeps the two straight, so we neither carry kludges forever nor
+apologize for good design. Every entry is driving toward one of two **terminal states** — *reverted* (upstream
+fixed it, kludge deleted) or *principled-and-kept* (architecture we're done second-guessing); when all of them
+are in one of those, we've given the feedback that helps and we stop poking.
 
 - The *why* behind the balance machinery: [materialized-balances-design.md](./materialized-balances-design.md)
 - The original 4.3.2 diagnosis (historical): [quereus-perf.md](./quereus-perf.md)
-- Upstream reports we've filed: `tmp/quereus-*.md`
+- Upstream issues: [quereus#30](https://github.com/gotchoices/quereus/issues/30),
+  [quereus#31](https://github.com/gotchoices/quereus/issues/31); earlier reports `tmp/quereus-*.md`
 
 **Currently on:** `@quereus/quereus` **4.16.0** · `@quereus/store` 4.16.0 · `@quereus/plugin-indexeddb`
 4.16.0 · `@optimystic/db-*` 0.22.0 · `@serfab/cadre-core` 0.10.0
@@ -38,21 +42,46 @@ consequence of it.
 
 ---
 
-## When to revert (the bar, refined 2026-08-21)
+## How to read this register
 
-Originally each revert test read "when the naive path *wins*." That bar is too strict: a workaround also
-costs maintenance and correctness risk (the denormalized columns can go stale into a *wrong balance*), so it
-should be dropped as soon as natural SQL is *fast enough and stays that way* — not only when it's faster.
+Two independent questions place every entry:
 
-1. **Asymptotic test (decisive):** revert if natural SQL scales with what's *viewed* (O(result)/O(account));
-   keep the workaround if it's O(table), even when it's fast today — the books only grow.
-2. **Perceptibility floor (tiebreak):** once scaling is safe, revert if the natural path stays imperceptible
-   (well under a felt pause) even at a modest slowdown; keep it only where natural SQL crosses into a
-   noticeable pause for a *common* interaction. Reverting the common path while keeping a fallback for the
-   tail is allowed — it's not all-or-nothing.
+1. **Would we keep it if Quereus were infinitely fast?**
+   - **No → kludge.** Delete it when upstream catches up.
+   - **Yes → architecture.** Keep it; it is not debt.
+2. **Is there reasonable hope Quereus gets faster here?**
+   - **Yes →** keep testing and filing issues. Bonum is a real-world Quereus test-bed; using it cleanly is what
+     generates the good bug reports, so "keep filing" and "keep the code clean" reinforce each other.
+   - **Near a real limit** (integrity checks, scattered row resolution — costs a row-store must pay) → stop
+     expecting more; decide if it is *fast enough* and, if so, prefer clean SQL / data integrity / readable code.
 
-File an upstream issue when a *same-result* formulation is dramatically faster (a real planner gap); accept
-the cost when it's inherent to the data volume (a whole-entity aggregate must read every row — use an MV).
+**Two tests gate a revert** (a kludge costs maintenance and correctness risk — denormalized columns can go
+stale into a *wrong balance* — so "fast enough" beats "faster"):
+- **Asymptotic (decisive):** natural SQL must scale with what's *viewed* (O(result)), not O(table), or it is a
+  time bomb as the books grow.
+- **Perceptibility (tiebreak):** once scaling is safe, revert if the natural path stays imperceptible even at a
+  modest slowdown — judged against the interaction (an awaited click wants < ~100 ms; a rare / destructive /
+  bulk op may take seconds) — keeping a fallback only for the tail.
+
+File an upstream issue when a *same-result* formulation is dramatically faster (a real planner gap); accept the
+cost when it's inherent to the data volume (a whole-entity aggregate must read every row — use an MV).
+
+## Status at a glance
+
+| entry | classification | state | on watch for |
+|---|---|---|---|
+| **W1** ledger read | kludge (hand-rolled INL) | active | store batching INL multi-seeks — the CTE-join switch is ready |
+| **W2** `entity_id` / `period` on `entry` | **architecture** (locality denorm; `period` also feeds the MV) | principled-and-kept | — |
+| **W3 / W4** monthly balance MV | **architecture** (materialized period balances) | principled-and-kept | read detail only — the planner full-scans it fine now |
+| **W5** `entity` rollups (`max_entry_date`, `entry_periods`, `reckoning_units`) | kludge (denormalized aggregate) | active | [quereus#31](https://github.com/gotchoices/quereus/issues/31) — index-boundary min/max |
+| **W6** cost basis as an MV measure | not a hack (incremental MV maintenance) | principled-and-kept | — |
+| **W7** FK-disable on cascade delete | kludge | **reverted** (4.16.0) | — |
+| **W8** `splitStatements` | not a hack (app expedience) | — | — |
+
+Only **W1** and **W5** remain active kludges — both with a live upstream path
+([quereus#30](https://github.com/gotchoices/quereus/issues/30) / #31). Everything else is reverted, or
+principled architecture we're no longer second-guessing. The `Wn` numbering is kept because code comments and
+issues reference it; treat the classification above as authoritative, not the "workaround" label on each entry.
 
 ---
 
@@ -189,6 +218,9 @@ now ~50–100ms (reopen ~0.6s). Boot-phase timing added in `production/db.ts` (`
 ## Reviewing this file on a Quereus upgrade
 
 1. Bump the version line above and the date.
-2. Walk W1–W7 and run each **revert test**.
-3. Delete what's earned it; record what changed in `docs/STATUS.md`.
+2. Walk only the **active kludges** in the status table (currently W1, W5) — the principled-and-kept entries
+   don't need re-litigating. For each, run its revert test against the two gates (asymptotic, then
+   perceptibility).
+3. Delete what's earned it and move it to *reverted*; if an issue closed, note it. Record changes in
+   `docs/STATUS.md`.
 4. Re-run `yarn perf` and, if the wins are real, `yarn perf --update-baseline`.
