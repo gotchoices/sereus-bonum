@@ -469,6 +469,25 @@ See `docs/quereus-perf.md` (design) + filed upstream reports in `tmp/`.
 - ⬜ On building period-close, sync app code to the domain contract: `closed_date`→`closed_through` in
   `types.ts` + both schemas + service mappers (+ `SCHEMA_VERSION` bump). Contract is updated; code lags
   intentionally to avoid a data-wipe rebuild for a rename alone.
+- ⬜ **Tighten the always-populated denorm columns to `NOT NULL`** (bundle with the next `SCHEMA_VERSION`
+  bump — it's a data-wipe reimport, not worth one on its own). Surveyed `schema.qsql`: exactly three columns
+  are declared `text null` but are **never** actually null — **`entry.entity_id`, `entry.date`, `entry.period`**
+  — each denormalized from a non-null `txn` source on every insert (`noteTransaction(date: string)` is required;
+  both entry-insert paths in `service.ts:506,538` always set all three). `NOT NULL` is the correct declaration
+  and adds an integrity guard (a dateless / entity-less entry is a bug, not a state — same spirit as the W7 FK
+  re-enable). It also opts our `date` column into Quereus's `MIN`/`MAX` **index-boundary** fast path: the
+  "covered case" is a `NOT NULL` column ([quereus#31](https://github.com/gotchoices/quereus/issues/31), lands
+  next release); a nullable column's boundary read otherwise waits on the store's `IS NOT NULL` seek-vocabulary
+  follow-up. **Not urgent / does NOT retire a workaround:** W5's `max_entry_date` is kept as a *deliberate cost
+  choice*, not an upstream blocker (correction 2026-09-03, maintainer-measured): `max(date)` becomes an
+  index-boundary read once `date` is `NOT NULL` **and** a *descending* `(entity_id, date)` index exists — no
+  backward-walk needed, since a desc index emits max-first — but that second index costs more per write than the
+  raised-only scalar, and we still need the *ascending* `(entity_id, date)` index for our ordered readers
+  (`getTransactions` / ledger / balance-sheet `date <= ?`). So the denorm stays regardless of nullability; this
+  `NOT NULL` change is for correctness, not speed. Leave the legitimately-optional nullables alone:
+  `entry.value` ("same as amount"),
+  `entity.max_entry_date` / `reckoning_units` / `entry_periods` (raised-only), `account.closed_date`,
+  `txn.value_unit` (single-unit), and the free-text `description`/`notes`/`memo`/etc.
 - ✅ **Consolidation staleness + refresh policy — DONE (this pass).** All **9 screens are now fresh**
   (`status.json` staleCount 0; `outputs.json` deps/hashes rewritten from each consolidation's front-matter,
   dropping the old over-broad + phantom-`PascalCase.md` dep lists). Each screen was reviewed per-screen

@@ -1244,34 +1244,34 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@quereus/isolation@npm:^4.16.0":
-  version: 4.16.0
-  resolution: "@quereus/isolation@npm:4.16.0"
+"@quereus/isolation@npm:^4.18.0":
+  version: 4.18.0
+  resolution: "@quereus/isolation@npm:4.18.0"
   dependencies:
-    "@quereus/quereus": "npm:^4.16.0"
+    "@quereus/quereus": "npm:^4.18.0"
   peerDependencies:
-    "@quereus/quereus": ^4.16.0
-  checksum: 10c0/955db83999cd19a515ce9295f636d0584aaf0c25b55ffa9aa4ed85eb71f3b4ebd16a60c303eadf868ea846ef2632932f0bfc9459e309853fc2a54a334b5dd0e2
+    "@quereus/quereus": ^4.18.0
+  checksum: 10c0/525203ce5f1aedebe46de025c72ee596f4fb68d6e422662f359cfd21a7f282b1b97b3b69979c6f4ff5927f5968ed1ade94becdc277e06f77d84c07083494ac54
   languageName: node
   linkType: hard
 
-"@quereus/plugin-indexeddb@npm:^4.16.0":
-  version: 4.16.0
-  resolution: "@quereus/plugin-indexeddb@npm:4.16.0"
+"@quereus/plugin-indexeddb@npm:^4.18.0":
+  version: 4.18.0
+  resolution: "@quereus/plugin-indexeddb@npm:4.18.0"
   dependencies:
-    "@quereus/quereus": "npm:^4.16.0"
-    "@quereus/store": "npm:^4.16.0"
+    "@quereus/quereus": "npm:^4.18.0"
+    "@quereus/store": "npm:^4.18.0"
   peerDependencies:
-    "@quereus/isolation": ^4.16.0
-    "@quereus/quereus": ^4.16.0
-    "@quereus/store": ^4.16.0
-  checksum: 10c0/99101ffb926ae99ce8113d5e56cc5ddd9458ba2de4e9d1721a6e2c7465437979607707a2cab6e777cc637760a6b65febb0d6ac916c53066d6dbd01754fda34eb
+    "@quereus/isolation": ^4.18.0
+    "@quereus/quereus": ^4.18.0
+    "@quereus/store": ^4.18.0
+  checksum: 10c0/269a9289015a056bf6b9522261ca070e2e381b8ee0e115a712fd57a3fe40a80ad3f9cdbccdc88bb59bb6b4713caea7c7ea97ad2a754b986186dfe120da737930
   languageName: node
   linkType: hard
 
-"@quereus/quereus@npm:^4.16.0":
-  version: 4.16.0
-  resolution: "@quereus/quereus@npm:4.16.0"
+"@quereus/quereus@npm:^4.18.0":
+  version: 4.18.0
+  resolution: "@quereus/quereus@npm:4.18.0"
   dependencies:
     debug: "npm:^4.4.3"
     fast-json-patch: "npm:^3.1.1"
@@ -1279,20 +1279,20 @@ __metadata:
     moat-maker: "npm:^2.2.0"
     temporal-polyfill: "npm:^0.3.0"
     uint8arrays: "npm:^6.1.1"
-  checksum: 10c0/e692bc3a2d9fd17fe02bbebba295fc657b9ff9d0827899f618a7dfc4aee5fbdd413d5c2d4b2e0042ced65a65fe59679d85c898a887d3b2bd3afd2015e428926b
+  checksum: 10c0/f54d1e6c65c11be4579f52b0ab703816d8e2b5c638697191f3847a5e67f679846c2fcb02e2ef7ccad79e0416c1031bc88073cb5d4556ccf01813dbf9d1a1b50a
   languageName: node
   linkType: hard
 
-"@quereus/store@npm:^4.16.0":
-  version: 4.16.0
-  resolution: "@quereus/store@npm:4.16.0"
+"@quereus/store@npm:^4.18.0":
+  version: 4.18.0
+  resolution: "@quereus/store@npm:4.18.0"
   dependencies:
-    "@quereus/isolation": "npm:^4.16.0"
-    "@quereus/quereus": "npm:^4.16.0"
+    "@quereus/isolation": "npm:^4.18.0"
+    "@quereus/quereus": "npm:^4.18.0"
   peerDependencies:
-    "@quereus/isolation": ^4.16.0
-    "@quereus/quereus": ^4.16.0
-  checksum: 10c0/38762c441b8354e9e045b12dbe1300009aee85f2ffaa20f581df2812f6cd34773226750b7077f2e09b1d5e8ce1eacec0342e5cad8381143498974ff14b25a0b4
+    "@quereus/isolation": ^4.18.0
+    "@quereus/quereus": ^4.18.0
+  checksum: 10c0/48d49ccdc6625b380c05915450228f2ca4a9f0101abdfc04559bdb015f7cc289bda36bcce0b89da96b2a4aa705e35712ed3760dc7cfbea945ef0a157bca25aa6
   languageName: node
   linkType: hard
 
@@ -4364,10 +4364,10 @@ __metadata:
     "@optimystic/quereus-plugin-crypto": "npm:^0.22.0"
     "@optimystic/quereus-plugin-optimystic": "npm:^0.22.0"
     "@playwright/test": "npm:1.61.1"
-    "@quereus/isolation": "npm:4.16.0"
-    "@quereus/plugin-indexeddb": "npm:4.16.0"
-    "@quereus/quereus": "npm:4.16.0"
-    "@quereus/store": "npm:4.16.0"
+    "@quereus/isolation": "npm:4.18.0"
+    "@quereus/plugin-indexeddb": "npm:4.18.0"
+    "@quereus/quereus": "npm:4.18.0"
+    "@quereus/store": "npm:4.18.0"
     "@serfab/cadre-core": "npm:^0.10.0"
     "@sveltejs/adapter-auto": "npm:^3.0.0"
     "@sveltejs/kit": "npm:^2.0.0"
